@@ -1,0 +1,83 @@
+.screen {
+  min-height: 100svh;
+  padding: 24px 16px;
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.phone-shell {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border: 1px solid #dde4ef;
+  border-radius: 20px;
+  padding: 16px;
+  box-sizing: border-box;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 22px;
+  color: #112240;
+}
+
+.header p {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: #5b6470;
+}
+
+.tabs {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tab {
+  border: 1px solid #d3dce8;
+  background: #f8fafc;
+  border-radius: 999px;
+  padding: 8px 4px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.tab.is-active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+.content {
+  margin-top: 16px;
+  min-height: 140px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.content p {
+  margin: 0;
+  color: #1e293b;
+  line-height: 1.45;
+}
+
+.today-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.send-button {
+  align-self: flex-start;
+  border: 0;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 14px;
+  padding: 10px 14px;
+}
