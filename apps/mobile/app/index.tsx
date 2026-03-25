@@ -1,12 +1,40 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, SafeAreaView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import { embeddedWebUiFiles } from './embeddedWebUiBundle';
+
+const BASE_WIDTH = 390;
+const MIN_SCALE = 0.9;
+const MAX_SCALE = 1.08;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 export default function WebViewScreen() {
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
+  const webViewRef = useRef<WebView>(null);
+  const { width } = useWindowDimensions();
+
+  const uiScale = useMemo(() => {
+    const rawScale = width / BASE_WIDTH;
+    return clamp(rawScale, MIN_SCALE, MAX_SCALE);
+  }, [width]);
+
+  const applyScaleScript = useMemo(
+    () =>
+      `(() => { document.documentElement.style.setProperty('--ui-scale', '${uiScale.toFixed(3)}'); })(); true;`,
+    [uiScale]
+  );
 
   useEffect(() => {
     const prepareLocalHtmlFile = async () => {
@@ -54,6 +82,14 @@ export default function WebViewScreen() {
     prepareLocalHtmlFile();
   }, []);
 
+  useEffect(() => {
+    if (!localFileUri || !webViewRef.current) {
+      return;
+    }
+
+    webViewRef.current.injectJavaScript(applyScaleScript);
+  }, [localFileUri, applyScaleScript]);
+
   const source = localFileUri ? { uri: localFileUri } : null;
 
   const handleMessage = (event: WebViewMessageEvent) => {
@@ -70,7 +106,7 @@ export default function WebViewScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {isPreparingLocalFile ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" />
@@ -78,14 +114,23 @@ export default function WebViewScreen() {
       ) : null}
       {source ? (
         <WebView
+          ref={webViewRef}
           source={source}
           originWhitelist={['*']}
           javaScriptEnabled
           domStorageEnabled
+          bounces={false}
+          overScrollMode="never"
+          injectedJavaScriptBeforeContentLoaded={applyScaleScript}
           allowingReadAccessToURL={`${FileSystem.cacheDirectory}web-ui/`}
           allowFileAccess
           allowFileAccessFromFileURLs
           allowUniversalAccessFromFileURLs
+          onLoadEnd={() => {
+            if (webViewRef.current) {
+              webViewRef.current.injectJavaScript(applyScaleScript);
+            }
+          }}
           onMessage={handleMessage}
           onError={(event) => {
             const msg = event.nativeEvent.description || 'Unknown WebView error';

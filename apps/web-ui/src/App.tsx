@@ -1,78 +1,161 @@
-import { useState } from 'react'
-import './App.css'
+import { useEffect, useRef, useState } from "react";
+import { CalendarPage } from "./pages/CalendarPage";
+import { SimpleRoutePage } from "./pages/SimpleRoutePage";
+import { DrawerMenu } from "./components/DrawerMenu";
+import { PageHeader } from "./components/PageHeader";
+import { FooterBar } from "./components/FooterBar";
+import { MAIN_ROUTE, ROUTE_LABEL } from "./routes/route-config";
+import type { RouteKey } from "./routes/types";
+import { shiftMonth } from "./utils/calendar";
+import { fetchKoreanHolidays, type HolidaysByDate } from "./utils/holidays";
 
-declare global {
-  interface Window {
-    ReactNativeWebView?: {
-      postMessage: (message: string) => void
-    }
-  }
-}
-
-const TABS = ['Home', 'Today', 'Stats', 'Settings'] as const
-type Tab = (typeof TABS)[number]
+type OverlayMotion = "enter" | "leave" | "idle";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('Home')
+  const now = new Date();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [viewMonth, setViewMonth] = useState(
+    new Date(now.getFullYear(), now.getMonth(), 1)
+  );
+  const [holidaysByDate, setHolidaysByDate] = useState<HolidaysByDate>({});
+  const [overlayRoute, setOverlayRoute] = useState<RouteKey | null>(null);
+  const [overlayMotion, setOverlayMotion] = useState<OverlayMotion>("idle");
+  const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const sendPingToNative = () => {
-    const payload = {
-      type: 'PING',
-      source: 'web-ui',
-      timestamp: Date.now(),
+  useEffect(() => {
+    const prevMonth = shiftMonth(viewMonth, -1);
+    const nextMonth = shiftMonth(viewMonth, 1);
+    const targetYears = Array.from(
+      new Set([viewMonth.getFullYear(), prevMonth.getFullYear(), nextMonth.getFullYear()])
+    );
+
+    let cancelled = false;
+
+    const loadHolidays = async () => {
+      try {
+        const holidayMaps = await Promise.all(
+          targetYears.map(async (year) => fetchKoreanHolidays(year))
+        );
+        if (cancelled) {
+          return;
+        }
+
+        const merged = holidayMaps.reduce(
+          (acc, holidayMap) => ({ ...acc, ...holidayMap }),
+          {} as HolidaysByDate
+        );
+        setHolidaysByDate(merged);
+      } catch (error) {
+        console.warn("Failed to load KR holidays", error);
+      }
+    };
+
+    loadHolidays();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMonth]);
+
+  const navigateTo = (nextRoute: RouteKey) => {
+    if (nextRoute === MAIN_ROUTE) {
+      if (overlayRoute) {
+        setOverlayMotion("leave");
+      }
+      setIsDrawerOpen(false);
+      return;
     }
 
-    if (!window.ReactNativeWebView) {
-      console.warn('ReactNativeWebView is not available in this environment.', payload)
-      return
+    if (overlayRoute === nextRoute) {
+      setIsDrawerOpen(false);
+      return;
     }
 
-    window.ReactNativeWebView.postMessage(JSON.stringify(payload))
-  }
+    setOverlayRoute(nextRoute);
+    setOverlayMotion("enter");
+    setIsDrawerOpen(false);
+  };
+
+  const currentRoute = overlayRoute ?? MAIN_ROUTE;
+  const goToday = () => {
+    const nowDate = new Date();
+    setViewMonth(new Date(nowDate.getFullYear(), nowDate.getMonth(), 1));
+  };
 
   return (
-    <main className="screen">
-      <div className="phone-shell">
-        <header className="header">
-          <h1>Focus Hybrid</h1>
-          <p>WebView test UI</p>
-        </header>
+    <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
+      <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
+        <PageHeader
+          route={MAIN_ROUTE}
+          month={viewMonth}
+          onMonthChange={setViewMonth}
+          onOpenMenu={() => setIsDrawerOpen(true)}
+          onGoMain={() => navigateTo(MAIN_ROUTE)}
+          onGoSettings={() => navigateTo("settings")}
+        />
 
-        <nav className="tabs" aria-label="Dummy tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`tab ${activeTab === tab ? 'is-active' : ''}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
+        <CalendarPage
+          month={viewMonth}
+          onMonthChange={setViewMonth}
+          holidaysByDate={holidaysByDate}
+        />
+        <FooterBar onGoToday={goToday} />
 
-        <section className="content">
-          {activeTab === 'Home' && (
-            <p>Home tab dummy content. 모바일 웹뷰 레이아웃 테스트 중입니다.</p>
-          )}
-          {activeTab === 'Today' && (
-            <div className="today-panel">
-              <p>Today tab dummy content.</p>
-              <button type="button" className="send-button" onClick={sendPingToNative}>
-                RN으로 메시지 보내기
-              </button>
-            </div>
-          )}
-          {activeTab === 'Stats' && (
-            <p>Stats tab dummy content. 실제 통계 로직은 아직 없습니다.</p>
-          )}
-          {activeTab === 'Settings' && (
-            <p>Settings tab dummy content. 설정 기능은 추후 구현 예정입니다.</p>
-          )}
-        </section>
-      </div>
+        {overlayRoute ? (
+          <div
+            className={[
+              "absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm",
+              overlayMotion === "enter"
+                ? "overlay-enter"
+                : overlayMotion === "leave"
+                  ? "overlay-leave"
+                  : "",
+            ].join(" ")}
+            onTouchStart={(event) => {
+              const touch = event.touches[0];
+              overlayTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+            }}
+            onTouchEnd={(event) => {
+              const start = overlayTouchStartRef.current;
+              if (!start) {
+                return;
+              }
+              const touch = event.changedTouches[0];
+              const deltaX = touch.clientX - start.x;
+              const deltaY = touch.clientY - start.y;
+              if (deltaX > 72 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                navigateTo(MAIN_ROUTE);
+              }
+              overlayTouchStartRef.current = null;
+            }}
+            onAnimationEnd={() => {
+              if (overlayMotion === "leave") {
+                setOverlayRoute(null);
+              }
+              setOverlayMotion("idle");
+            }}
+          >
+            <PageHeader
+              route={overlayRoute}
+              month={viewMonth}
+              onMonthChange={setViewMonth}
+              onOpenMenu={() => {}}
+              onGoMain={() => navigateTo(MAIN_ROUTE)}
+              onGoSettings={() => navigateTo("settings")}
+            />
+            <SimpleRoutePage title={ROUTE_LABEL[overlayRoute]} />
+          </div>
+        ) : null}
+      </section>
+
+      <DrawerMenu
+        isOpen={isDrawerOpen}
+        activeRoute={currentRoute}
+        onClose={() => setIsDrawerOpen(false)}
+        onSelectRoute={navigateTo}
+      />
     </main>
-  )
+  );
 }
 
-export default App
+export default App;

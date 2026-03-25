@@ -1,0 +1,81 @@
+import { useMemo, useRef } from "react";
+
+type MonthDropdownProps = {
+  month: Date;
+  onChange: (nextMonth: Date) => void;
+};
+
+function createYearRange(centerYear: number, range = 6) {
+  const years: number[] = [];
+  for (let year = centerYear - range; year <= centerYear + range; year += 1) {
+    years.push(year);
+  }
+  return years;
+}
+
+export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+
+  const years = useMemo(() => createYearRange(month.getFullYear()), [month]);
+  const monthLabel = `${month.getFullYear()}.${String(month.getMonth() + 1).padStart(2, "0")}`;
+
+  const closeDropdown = () => {
+    if (detailsRef.current) {
+      detailsRef.current.removeAttribute("open");
+    }
+  };
+
+  const handleYearChange = (year: number) => {
+    onChange(new Date(year, month.getMonth(), 1));
+  };
+
+  const handleMonthClick = (monthIndex: number) => {
+    onChange(new Date(month.getFullYear(), monthIndex, 1));
+    closeDropdown();
+  };
+
+  return (
+    <details ref={detailsRef} className="dropdown dropdown-bottom flex w-full justify-center">
+      <summary className="btn btn-sm btn-ghost rounded-xl px-2 text-base font-semibold normal-case">
+        {monthLabel} <span className="text-xs">▼</span>
+      </summary>
+
+      <div
+        className="dropdown-content left-1/2 z-30 mt-2 max-h-[58svh] -translate-x-1/2 overflow-auto rounded-2xl border border-base-300 bg-base-100 p-3 shadow-xl"
+        style={{
+          width: "calc(100vw - 1.25rem)",
+          maxWidth: "calc(460px * var(--ui-scale) - 0.7rem)",
+        }}
+      >
+        <label className="mb-2 block text-xs font-medium text-base-content/70">연도</label>
+        <select
+          className="select select-sm select-bordered mb-3 h-10 w-full"
+          value={month.getFullYear()}
+          onChange={(event) => handleYearChange(Number(event.target.value))}
+        >
+          {years.map((year) => (
+            <option key={year} value={year}>
+              {year}년
+            </option>
+          ))}
+        </select>
+
+        <div className="grid grid-cols-4 gap-2">
+          {Array.from({ length: 12 }, (_, monthIndex) => (
+            <button
+              key={monthIndex}
+              type="button"
+              className={[
+                "btn h-8 min-h-8",
+                month.getMonth() === monthIndex ? "btn-primary" : "btn-ghost",
+              ].join(" ")}
+              onClick={() => handleMonthClick(monthIndex)}
+            >
+              {monthIndex + 1}월
+            </button>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
