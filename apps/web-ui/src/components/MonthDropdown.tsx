@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 type MonthDropdownProps = {
   month: Date;
@@ -33,6 +33,23 @@ export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
     onChange(new Date(month.getFullYear(), monthIndex, 1));
     closeDropdown();
   };
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const detailsElement = detailsRef.current;
+      if (!detailsElement || !detailsElement.hasAttribute("open")) {
+        return;
+      }
+      if (!detailsElement.contains(event.target as Node)) {
+        closeDropdown();
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, []);
 
   return (
     <details ref={detailsRef} className="dropdown dropdown-bottom flex w-full justify-center">

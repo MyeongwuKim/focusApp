@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { buildCalendarCells, isSameDate, shiftMonth } from "../utils/calendar";
+import { FiChevronUp } from "react-icons/fi";
+import { buildCalendarCells, shiftMonth } from "../utils/calendar";
 import { formatDateKey, type HolidaysByDate } from "../utils/holidays";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -21,6 +22,9 @@ type PreviewBar = {
   id: string;
   label: string;
 };
+
+type DateSheetMotion = "enter" | "leave";
+type DateSheetSwipeAxis = "horizontal" | "vertical" | null;
 
 const MOCK_TASKS = [
   "리액트공부",
@@ -58,15 +62,50 @@ function getDateTextClass(date: Date, isCurrentMonth: boolean, isHoliday: boolea
   return isCurrentMonth ? "text-base-content" : "text-base-content/35";
 }
 
+function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDateLabel(dateKey: string): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  }).format(parseDateKey(dateKey));
+}
+
+function getTasksForDateKey(dateKey: string): string[] {
+  const date = parseDateKey(dateKey);
+  return getPreviewBars(date).map((bar) => bar.label);
+}
+
+function shiftDateKey(dateKey: string, days: number): string {
+  const nextDate = parseDateKey(dateKey);
+  nextDate.setDate(nextDate.getDate() + days);
+  return formatDateKey(nextDate);
+}
+
 export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarPageProps) {
-  const today = new Date();
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const touchStartRef = useRef<TouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
+  const dateSheetTouchStartRef = useRef<TouchPoint | null>(null);
+  const dateSheetSwipeAxisRef = useRef<DateSheetSwipeAxis>(null);
 
   const [dragX, setDragX] = useState(0);
   const [settleDirection, setSettleDirection] = useState<-1 | 0 | 1>(0);
   const [isReleasing, setIsReleasing] = useState(false);
+  const [isDateSheetOpen, setIsDateSheetOpen] = useState(false);
+  const [dateSheetMotion, setDateSheetMotion] = useState<DateSheetMotion>("enter");
+  const [dateSheetDragY, setDateSheetDragY] = useState(0);
+  const [dateSheetDragX, setDateSheetDragX] = useState(0);
+  const [isDateSheetDragging, setIsDateSheetDragging] = useState(false);
+  const selectedTasks = useMemo(
+    () => (selectedDateKey ? getTasksForDateKey(selectedDateKey) : []),
+    [selectedDateKey]
+  );
 
   const prevMonth = useMemo(() => shiftMonth(month, -1), [month]);
   const nextMonth = useMemo(() => shiftMonth(month, 1), [month]);
@@ -153,8 +192,103 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
     setDragX(0);
   };
 
+  const closeDateSheet = () => {
+    if (!isDateSheetOpen) {
+      return;
+    }
+    setIsDateSheetDragging(false);
+    setDateSheetMotion("leave");
+    setDateSheetDragY(0);
+    setDateSheetDragX(0);
+  };
+
+  const handleDateSheetTransitionEnd = () => {
+    if (dateSheetMotion === "leave") {
+      setIsDateSheetOpen(false);
+      setDateSheetMotion("enter");
+      setDateSheetDragY(0);
+      setDateSheetDragX(0);
+    }
+  };
+
+  const handleDateSheetTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    const touch = event.touches[0];
+    dateSheetTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    dateSheetSwipeAxisRef.current = null;
+    setIsDateSheetDragging(true);
+  };
+
+  const handleDateSheetTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    const start = dateSheetTouchStartRef.current;
+    if (!start) {
+      return;
+    }
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+
+    if (!dateSheetSwipeAxisRef.current) {
+      const axisThreshold = 8;
+      if (Math.abs(deltaX) < axisThreshold && Math.abs(deltaY) < axisThreshold) {
+        return;
+      }
+      dateSheetSwipeAxisRef.current =
+        Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+    }
+
+    if (dateSheetSwipeAxisRef.current === "horizontal") {
+      event.preventDefault();
+      setDateSheetDragX(deltaX);
+      setDateSheetDragY(0);
+      return;
+    }
+
+    if (deltaY <= 0) {
+      setDateSheetDragY(0);
+      setDateSheetDragX(0);
+      return;
+    }
+    event.preventDefault();
+    setDateSheetDragY(deltaY);
+    setDateSheetDragX(0);
+  };
+
+  const handleDateSheetTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
+    const closeThreshold = 84;
+    const swipeThreshold = 52;
+    setIsDateSheetDragging(false);
+    if (dateSheetSwipeAxisRef.current === "horizontal") {
+      if (Math.abs(dateSheetDragX) > swipeThreshold && selectedDateKey) {
+        const nextDateKey = shiftDateKey(selectedDateKey, dateSheetDragX < 0 ? 1 : -1);
+        setSelectedDateKey(nextDateKey);
+
+        const nextDate = parseDateKey(nextDateKey);
+        if (
+          nextDate.getFullYear() !== month.getFullYear() ||
+          nextDate.getMonth() !== month.getMonth()
+        ) {
+          onMonthChange(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+        }
+      }
+      setDateSheetDragX(0);
+      setDateSheetDragY(0);
+      dateSheetTouchStartRef.current = null;
+      dateSheetSwipeAxisRef.current = null;
+      return;
+    }
+
+    if (dateSheetDragY > closeThreshold) {
+      closeDateSheet();
+    } else {
+      setDateSheetDragY(0);
+      setDateSheetDragX(0);
+    }
+    dateSheetTouchStartRef.current = null;
+    dateSheetSwipeAxisRef.current = null;
+  };
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    <section className="relative flex min-h-0 flex-1 flex-col">
       <div
         className="flex min-h-0 flex-1 select-none flex-col"
         onTouchStart={handleTouchStart}
@@ -181,11 +315,10 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
               <div key={monthIndex} className="h-full w-1/3 shrink-0">
                 <div className="grid h-full grid-cols-7 grid-rows-6 gap-1">
                   {cells.map((cell) => {
-                    const isToday = isSameDate(cell.date, today);
                     const previewBars = cell.inCurrentMonth ? getPreviewBars(cell.date) : [];
                     const dateKey = formatDateKey(cell.date);
                     const isSelected = selectedDateKey === dateKey;
-                    const isActive = isSelected || (selectedDateKey === null && isToday);
+                    const isActive = isSelected;
                     const holidayName = holidaysByDate[formatDateKey(cell.date)];
                     const dateTextClass = getDateTextClass(
                       cell.date,
@@ -199,7 +332,12 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
                         key={cell.date.toISOString()}
                         type="button"
                         onClick={() => {
-                          setSelectedDateKey((prev) => (prev === dateKey ? null : dateKey));
+                          setSelectedDateKey(dateKey);
+                          if (!isDateSheetOpen) {
+                            setDateSheetMotion("enter");
+                            setDateSheetDragY(0);
+                            setIsDateSheetOpen(true);
+                          }
                         }}
                         className={[
                           "flex h-full min-h-[5.15rem] flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition",
@@ -208,9 +346,6 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
                             : "bg-base-200/65",
                           isActive
                             ? "border-primary/90 bg-primary/14 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]"
-                            : "",
-                          isToday
-                            ? "font-semibold"
                             : "",
                         ].join(" ")}
                       >
@@ -252,7 +387,50 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
           </div>
         </div>
       </div>
-
+      {isDateSheetOpen && selectedDateKey ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
+          <div
+            className="pointer-events-auto flex h-72 flex-col rounded-t-2xl border border-base-300 bg-base-100 p-4 shadow-[0_-18px_45px_rgba(15,23,42,0.28)]"
+            style={{
+              transform:
+                dateSheetMotion === "leave"
+                  ? "translateY(112%)"
+                  : `translate(${dateSheetDragX}px, ${dateSheetDragY}px)`,
+              opacity: dateSheetMotion === "leave" ? 0 : 1,
+              transition: isDateSheetDragging
+                ? "none"
+                : "transform 220ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
+            }}
+            onTransitionEnd={handleDateSheetTransitionEnd}
+            onTouchStart={handleDateSheetTouchStart}
+            onTouchMove={handleDateSheetTouchMove}
+            onTouchEnd={handleDateSheetTouchEnd}
+          >
+            <div className="mb-1 flex items-center justify-center text-base-content/45">
+              <FiChevronUp size={18} />
+            </div>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="m-0 text-[0.95rem] font-semibold text-base-content">
+                {formatDateLabel(selectedDateKey)}
+              </p>
+            </div>
+            <div className="mt-2 flex-1 space-y-2 overflow-y-auto">
+              {selectedTasks.length > 0 ? (
+                selectedTasks.map((task, index) => (
+                  <div
+                    key={`${selectedDateKey}-${task}-${index}`}
+                    className="truncate rounded-lg border border-base-300/80 bg-base-200/50 px-2.5 py-2 text-sm text-base-content/85"
+                  >
+                    {task}
+                  </div>
+                ))
+              ) : (
+                <p className="m-0 text-sm text-base-content/60">이 날짜에는 할 일이 없어요.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

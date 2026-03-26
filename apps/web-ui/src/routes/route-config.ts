@@ -15,12 +15,9 @@ export const ROUTES: RouteConfig[] = [
   { key: "settings", label: "설정", inDrawer: true },
 ];
 
-export const ROUTE_LABEL: Record<RouteKey, string> = ROUTES.reduce(
-  (acc, route) => {
-    acc[route.key] = route.label;
-    return acc;
-  },
-  {} as Record<RouteKey, string>
-);
+export const ROUTE_LABEL: Record<RouteKey, string> = ROUTES.reduce((acc, route) => {
+  acc[route.key] = route.label;
+  return acc;
+}, {} as Record<RouteKey, string>);
 
 export const DRAWER_ROUTES = ROUTES.filter((route) => route.inDrawer);

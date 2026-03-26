@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: light --default, retro, fantasy, nord, autumn, cupcake, dracula, coffee, lofi, silk, sunset;
+  themes: light --default, cupcake, lofi, retro, nord, autumn, synthwave, coffee, dracula, night, black, sunset;
 }
 
 @layer base {
@@ -61,6 +61,174 @@
   .overlay-leave {
     animation: overlay-leave 240ms cubic-bezier(0.4, 0, 1, 1) both;
   }
+
+  .settings-view-forward {
+    animation: settings-slide-forward 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .settings-view-backward {
+    animation: settings-slide-backward 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .date-sheet-enter {
+    animation: date-sheet-enter 230ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .date-sheet-leave {
+    animation: date-sheet-leave 180ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  .toast-layer {
+    pointer-events: none;
+    position: fixed;
+    inset: auto 0 max(1rem, env(safe-area-inset-bottom)) 0;
+    z-index: 60;
+    display: flex;
+    justify-content: center;
+    padding-inline: 0.75rem;
+  }
+
+  .toast-stack {
+    width: min(30rem, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .toast-card {
+    pointer-events: auto;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.7rem;
+    border-radius: 18px;
+    border: 1px solid transparent;
+    padding: 0.78rem 0.82rem;
+    overflow: hidden;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
+    animation: toast-rise-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .toast-card--positive {
+    border-color: #b8f2cf;
+    background: linear-gradient(138deg, rgba(230, 253, 240, 0.98), rgba(244, 255, 245, 0.93));
+    color: #0f5132;
+  }
+
+  .toast-card--error {
+    border-color: #ffc8d4;
+    background: linear-gradient(140deg, rgba(255, 239, 243, 0.98), rgba(255, 247, 249, 0.93));
+    color: #7a1834;
+  }
+
+  .toast-card--leaving {
+    animation: toast-fade-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  .toast-card__icon-wrap {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.66);
+  }
+
+  .toast-card__text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+  }
+
+  .toast-card__title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+
+  .toast-card__message {
+    margin: 0;
+    font-size: 0.84rem;
+    line-height: 1.35;
+    opacity: 0.95;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toast-card__close {
+    border: 0;
+    width: 1.9rem;
+    height: 1.9rem;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    color: currentColor;
+    opacity: 0.7;
+    background: transparent;
+    transition: background-color 180ms ease, opacity 180ms ease;
+  }
+
+  .toast-card__close:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.5);
+  }
+
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.24);
+    animation: confirm-overlay-in 220ms ease both;
+  }
+
+  .confirm-overlay--leaving {
+    animation: confirm-overlay-out 200ms ease both;
+  }
+
+  .confirm-modal {
+    width: min(23rem, 100%);
+    border-radius: 20px;
+    border: 1px solid #dbe6f7;
+    background: linear-gradient(155deg, #fffdf8, #f9fbff);
+    padding: 1rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+    animation: toast-rise-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .confirm-modal--leaving {
+    animation: toast-fade-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  .confirm-modal__title {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #1f2a44;
+  }
+
+  .confirm-modal__message {
+    margin: 0.5rem 0 0;
+    color: #4a5572;
+    line-height: 1.45;
+    font-size: 0.92rem;
+  }
+
+  .confirm-modal__actions {
+    margin-top: 0.95rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
 }
 
 @keyframes overlay-enter {
@@ -81,6 +249,106 @@
   }
   to {
     transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes settings-slide-forward {
+  from {
+    opacity: 0.7;
+    transform: translateX(8%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0%);
+  }
+}
+
+@keyframes settings-slide-backward {
+  from {
+    opacity: 0.72;
+    transform: translateX(-6%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0%);
+  }
+}
+
+@keyframes date-sheet-enter {
+  from {
+    opacity: 0.76;
+    transform: translateY(14%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0%);
+  }
+}
+
+@keyframes date-sheet-leave {
+  from {
+    opacity: 1;
+    transform: translateY(0%);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-view-forward,
+  .settings-view-backward,
+  .date-sheet-enter,
+  .date-sheet-leave {
+    animation: none;
+  }
+}
+
+@keyframes toast-rise-in {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.975);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-fade-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    max-height: 6rem;
+    margin: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+    max-height: 0;
+    margin: 0;
+  }
+}
+
+@keyframes confirm-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes confirm-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
     opacity: 0;
   }
 }
