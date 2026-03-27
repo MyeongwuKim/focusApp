@@ -21,7 +21,10 @@ export function ConfirmModal() {
 
   return (
     <div
-      className={["confirm-overlay", active.closing ? "confirm-overlay--leaving" : ""].join(" ")}
+      className={[
+        "confirm-overlay bg-base-300/35 backdrop-blur-[1px]",
+        active.closing ? "confirm-overlay--leaving" : "",
+      ].join(" ")}
       onPointerDown={(event) => {
         if (!active.closeOnBackdrop) {
           return;
@@ -33,7 +36,10 @@ export function ConfirmModal() {
       aria-hidden="true"
     >
       <section
-        className={["confirm-modal", active.closing ? "confirm-modal--leaving" : ""].join(" ")}
+        className={[
+          "confirm-modal border border-base-300 bg-base-100 text-base-content shadow-2xl",
+          active.closing ? "confirm-modal--leaving" : "",
+        ].join(" ")}
         role="dialog"
         aria-modal="true"
         aria-label={active.title}
@@ -46,8 +52,10 @@ export function ConfirmModal() {
           }
         }}
       >
-        <h2 className="confirm-modal__title">{active.title}</h2>
-        {active.message ? <p className="confirm-modal__message">{active.message}</p> : null}
+        <h2 className="confirm-modal__title text-base-content">{active.title}</h2>
+        {active.message ? (
+          <p className="confirm-modal__message text-base-content/75">{active.message}</p>
+        ) : null}
         <div className="confirm-modal__actions">
           {active.buttons.map((button, index) => (
             <button

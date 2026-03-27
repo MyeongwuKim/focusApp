@@ -17,6 +17,7 @@ import { useWeatherStore } from "../stores";
 
 type PageHeaderProps = {
   route: RouteKey;
+  routeTitleOverride?: string;
   month: Date;
   onMonthChange: (nextMonth: Date) => void;
   onOpenMenu: () => void;
@@ -45,6 +46,7 @@ function WeatherIcon({ code, isDay }: { code: number; isDay: number }) {
 
 export function PageHeader({
   route,
+  routeTitleOverride,
   month,
   onMonthChange,
   onOpenMenu,
@@ -108,7 +110,7 @@ export function PageHeader({
         <FiChevronLeft size={18} />
       </button>
       <h1 className="m-0 text-center text-lg font-semibold text-base-content">
-        {ROUTE_LABEL[route]}
+        {routeTitleOverride ?? ROUTE_LABEL[route]}
       </h1>
       <div aria-hidden="true" className="h-9 w-9" />
     </header>

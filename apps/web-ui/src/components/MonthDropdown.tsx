@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { FiChevronDown } from "react-icons/fi";
 
 type MonthDropdownProps = {
   month: Date;
@@ -53,8 +54,11 @@ export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
 
   return (
     <details ref={detailsRef} className="dropdown dropdown-bottom flex w-full justify-center">
-      <summary className="btn btn-sm btn-ghost rounded-xl px-2 text-base font-semibold normal-case">
-        {monthLabel} <span className="text-xs">▼</span>
+      <summary className="btn btn-sm btn-ghost rounded-xl px-3.5 text-base font-semibold normal-case">
+        <span className="inline-flex items-center gap-2.5">
+          <span>{monthLabel}</span>
+          <FiChevronDown size={14} className="text-base-content/65" />
+        </span>
       </summary>
 
       <div

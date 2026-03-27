@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarPage } from "./pages/CalendarPage";
 import { SimpleRoutePage } from "./pages/SimpleRoutePage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TodoRoutePage } from "./pages/TodoRoutePage";
+import { MemoPage } from "./pages/MemoPage";
 import { DrawerMenu } from "./components/DrawerMenu";
 import { PageHeader } from "./components/PageHeader";
 import { FooterBar } from "./components/FooterBar";
 import { Toast } from "./components/Toast";
 import { ConfirmModal } from "./components/ConfirmModal";
+import type { TaskItem } from "./features/todo/types";
 import { MAIN_ROUTE, ROUTE_LABEL } from "./routes/route-config";
 import { toast, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
@@ -20,6 +23,7 @@ import {
 
 type OverlayMotion = "enter" | "leave" | "idle";
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
+type SessionMode = "focus" | "rest" | null;
 
 type LocationResolveResult = {
   coordinates: Coordinates;
@@ -97,7 +101,36 @@ function App() {
   );
   const [holidaysByDate, setHolidaysByDate] = useState<HolidaysByDate>({});
   const [overlayRoute, setOverlayRoute] = useState<RouteKey | null>(null);
+  const [previousOverlayRoute, setPreviousOverlayRoute] = useState<RouteKey | null>(null);
   const [overlayMotion, setOverlayMotion] = useState<OverlayMotion>("idle");
+  const [tasksRouteTitle, setTasksRouteTitle] = useState(ROUTE_LABEL.tasks);
+  const [tasksRouteDateKey, setTasksRouteDateKey] = useState<string | null>(null);
+  const [tasksRouteItems, setTasksRouteItems] = useState<TaskItem[]>([]);
+  const [completedTaskLabelsByDate, setCompletedTaskLabelsByDate] = useState<
+    Record<string, string[]>
+  >({
+    "2026-03-26": [
+      "알고리즘 문제풀기",
+      "영어 단어 암기",
+      "프로젝트 문서정리",
+      "타입스크립트 복습",
+      "블로그 글 작성",
+    ],
+  });
+  const [celebratedDates, setCelebratedDates] = useState<Record<string, boolean>>({});
+  const [showClearStamp, setShowClearStamp] = useState(false);
+  const [sessionState, setSessionState] = useState<{
+    focusMs: number;
+    restMs: number;
+    active: SessionMode;
+    startedAt: number | null;
+  }>({
+    focusMs: 0,
+    restMs: 0,
+    active: null,
+    startedAt: null,
+  });
+  const [sessionTick, setSessionTick] = useState(0);
   const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const weatherFallbackNotifiedRef = useRef(false);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
@@ -177,6 +210,229 @@ function App() {
     };
   }, [weatherEnabled]);
 
+  useEffect(() => {
+    if (!sessionState.active || !sessionState.startedAt) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setSessionTick(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [sessionState.active, sessionState.startedAt]);
+
+  const startSession = (nextMode: Exclude<SessionMode, null>) => {
+    setSessionState((prev) => {
+      const nowMs = Date.now();
+      let nextFocusMs = prev.focusMs;
+      let nextRestMs = prev.restMs;
+      if (prev.active && prev.startedAt) {
+        const elapsed = nowMs - prev.startedAt;
+        if (prev.active === "focus") {
+          nextFocusMs += elapsed;
+        } else {
+          nextRestMs += elapsed;
+        }
+      }
+      return {
+        focusMs: nextFocusMs,
+        restMs: nextRestMs,
+        active: nextMode,
+        startedAt: nowMs,
+      };
+    });
+  };
+
+  const stopSession = () => {
+    setSessionState((prev) => {
+      if (!prev.active || !prev.startedAt) {
+        return prev;
+      }
+      const nowMs = Date.now();
+      const elapsed = nowMs - prev.startedAt;
+      return {
+        focusMs: prev.active === "focus" ? prev.focusMs + elapsed : prev.focusMs,
+        restMs: prev.active === "rest" ? prev.restMs + elapsed : prev.restMs,
+        active: null,
+        startedAt: null,
+      };
+    });
+  };
+
+  const toggleFocusSession = () => {
+    if (sessionState.active === "focus") {
+      stopSession();
+      return;
+    }
+    startSession("focus");
+  };
+
+  const toggleRestSession = () => {
+    if (sessionState.active === "rest") {
+      stopSession();
+      return;
+    }
+    startSession("rest");
+  };
+
+  const getTasksTitleFromDateKey = (dateKey: string) => {
+    const [year, month, day] = dateKey.split("-").map(Number);
+    const target = new Date(year, month - 1, day);
+    const today = new Date();
+    const isToday =
+      target.getFullYear() === today.getFullYear() &&
+      target.getMonth() === today.getMonth() &&
+      target.getDate() === today.getDate();
+
+    if (isToday) {
+      return "오늘 할일";
+    }
+    return `${month}.${day} 할일`;
+  };
+
+  const openTasksForDate = (dateKey: string, tasks: string[]) => {
+    setTasksRouteTitle(getTasksTitleFromDateKey(dateKey));
+    setTasksRouteDateKey(dateKey);
+    const completedLabels = new Set(completedTaskLabelsByDate[dateKey] ?? []);
+    setTasksRouteItems(
+      tasks.map((task, index) => ({
+        id: `${dateKey}-${task}-${index}`,
+        label: task,
+        status: completedLabels.has(task) ? "done" : "todo",
+        accumulatedMs: 0,
+        startedAt: null,
+        completedAt: completedLabels.has(task) ? Date.now() : null,
+        completedDurationMs: completedLabels.has(task) ? 0 : null,
+      }))
+    );
+    setShowClearStamp(false);
+    setOverlayRoute("tasks");
+    setOverlayMotion("enter");
+    setIsDrawerOpen(false);
+  };
+
+  const handleTaskAction = (
+    taskId: string,
+    action: "start" | "pause" | "resume" | "complete"
+  ) => {
+    if (action === "start" || action === "resume") {
+      startSession("focus");
+    }
+    const nowMs = Date.now();
+    setTasksRouteItems((prevItems) =>
+      prevItems.map((item) => {
+        if (item.id !== taskId) {
+          return item;
+        }
+        if (item.status === "done") {
+          return item;
+        }
+        if (action === "complete") {
+          const runningMs =
+            item.status === "in_progress" && item.startedAt ? nowMs - item.startedAt : 0;
+          const completedMs = item.accumulatedMs + runningMs;
+          return {
+            ...item,
+            status: "done",
+            startedAt: null,
+            accumulatedMs: completedMs,
+            completedAt: nowMs,
+            completedDurationMs: completedMs,
+          };
+        }
+        if (action === "start" || action === "resume") {
+          return {
+            ...item,
+            status: "in_progress",
+            startedAt: nowMs,
+          };
+        }
+        if (action === "pause") {
+          const runningMs =
+            item.status === "in_progress" && item.startedAt ? nowMs - item.startedAt : 0;
+          return {
+            ...item,
+            status: "paused",
+            startedAt: null,
+            accumulatedMs: item.accumulatedMs + runningMs,
+          };
+        }
+        return item;
+      })
+    );
+
+    if (action === "complete" && tasksRouteDateKey) {
+      setCompletedTaskLabelsByDate((prev) => {
+        const current = new Set(prev[tasksRouteDateKey] ?? []);
+        const target = tasksRouteItems.find((item) => item.id === taskId);
+        if (target) {
+          current.add(target.label);
+        }
+        return {
+          ...prev,
+          [tasksRouteDateKey]: Array.from(current),
+        };
+      });
+    }
+  };
+
+  const handleReorderTasks = (orderedIds: string[]) => {
+    setTasksRouteItems((prevItems) => {
+      const itemMap = new Map(prevItems.map((item) => [item.id, item]));
+      const reordered = orderedIds
+        .map((id) => itemMap.get(id))
+        .filter((item): item is TaskItem => Boolean(item));
+      const remaining = prevItems.filter((item) => !orderedIds.includes(item.id));
+      return [...reordered, ...remaining];
+    });
+  };
+
+  const tasksSummary = useMemo(() => {
+    const totalCount = tasksRouteItems.length;
+    const completedItems = tasksRouteItems.filter((item) => item.status === "done");
+    const completedCount = completedItems.length;
+    const completedMs = completedItems.reduce(
+      (acc, item) => acc + (item.completedDurationMs ?? item.accumulatedMs),
+      0
+    );
+    const totalMinutes = Math.round(completedMs / 60000);
+    const progressPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+
+    return {
+      totalCount,
+      completedCount,
+      totalMinutes,
+      progressPercent,
+    };
+  }, [tasksRouteItems]);
+
+  const sessionSummary = useMemo(() => {
+    const nowMs = Date.now();
+    const activeElapsed =
+      sessionState.active && sessionState.startedAt ? nowMs - sessionState.startedAt : 0;
+    const focusMs =
+      sessionState.focusMs + (sessionState.active === "focus" ? activeElapsed : 0);
+    const restMs = sessionState.restMs + (sessionState.active === "rest" ? activeElapsed : 0);
+    return {
+      active: sessionState.active,
+      focusMinutes: Math.floor(focusMs / 60000),
+      restMinutes: Math.floor(restMs / 60000),
+    };
+  }, [sessionState, sessionTick]);
+
+  useEffect(() => {
+    if (overlayRoute !== "tasks" || !tasksRouteDateKey) {
+      setShowClearStamp(false);
+      return;
+    }
+    const isAllDone =
+      tasksRouteItems.length > 0 && tasksRouteItems.every((item) => item.status === "done");
+    if (!isAllDone || celebratedDates[tasksRouteDateKey]) {
+      return;
+    }
+    setCelebratedDates((prev) => ({ ...prev, [tasksRouteDateKey]: true }));
+    setShowClearStamp(true);
+  }, [overlayRoute, tasksRouteDateKey, tasksRouteItems, celebratedDates]);
+
   const navigateTo = (nextRoute: RouteKey) => {
     if (nextRoute === MAIN_ROUTE) {
       if (overlayRoute) {
@@ -191,9 +447,28 @@ function App() {
       return;
     }
 
+    setPreviousOverlayRoute(overlayRoute);
+
+    if (nextRoute === "tasks") {
+      setTasksRouteTitle(ROUTE_LABEL.tasks);
+      setTasksRouteDateKey(null);
+      setTasksRouteItems([]);
+      setShowClearStamp(false);
+    }
+
     setOverlayRoute(nextRoute);
     setOverlayMotion("enter");
     setIsDrawerOpen(false);
+  };
+
+  const handleOverlayBack = () => {
+    if (overlayRoute === "memo" && previousOverlayRoute === "tasks") {
+      setOverlayRoute("tasks");
+      setPreviousOverlayRoute(null);
+      setOverlayMotion("enter");
+      return;
+    }
+    navigateTo(MAIN_ROUTE);
   };
 
   const currentRoute = overlayRoute ?? MAIN_ROUTE;
@@ -218,6 +493,9 @@ function App() {
           month={viewMonth}
           onMonthChange={setViewMonth}
           holidaysByDate={holidaysByDate}
+          isActive={!overlayRoute}
+          onOpenTasksForDate={openTasksForDate}
+          completedTaskLabelsByDate={completedTaskLabelsByDate}
         />
         <FooterBar onGoToday={goToday} />
 
@@ -257,14 +535,31 @@ function App() {
           >
             <PageHeader
               route={overlayRoute}
+              routeTitleOverride={overlayRoute === "tasks" ? tasksRouteTitle : undefined}
               month={viewMonth}
               onMonthChange={setViewMonth}
               onOpenMenu={() => {}}
-              onGoMain={() => navigateTo(MAIN_ROUTE)}
+              onGoMain={handleOverlayBack}
               onGoSettings={() => navigateTo("settings")}
             />
             {overlayRoute === "settings" ? (
               <SettingsPage />
+            ) : overlayRoute === "tasks" ? (
+              <TodoRoutePage
+                items={tasksRouteItems}
+                emptyMessage="이 날짜에는 할 일이 없어요."
+                onTaskAction={handleTaskAction}
+                summary={tasksSummary}
+                session={sessionSummary}
+                onToggleFocus={toggleFocusSession}
+                onToggleRest={toggleRestSession}
+                onOpenMemo={() => navigateTo("memo")}
+                onReorderTasks={handleReorderTasks}
+                showClearStamp={showClearStamp}
+                onCloseClearStamp={() => setShowClearStamp(false)}
+              />
+            ) : overlayRoute === "memo" ? (
+              <MemoPage />
             ) : (
               <SimpleRoutePage title={ROUTE_LABEL[overlayRoute]} />
             )}

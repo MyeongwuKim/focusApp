@@ -1,7 +1,18 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export const THEME_STYLES = ["dreamy", "cinematic", "neon", "paper", "nordic", "sunset"] as const;
+export const THEME_STYLES = [
+  "dreamy",
+  "cinematic",
+  "neon",
+  "paper",
+  "nordic",
+  "sunset",
+  "slate",
+  "mono",
+  "frost",
+  "ink",
+] as const;
 export type ThemeStyle = (typeof THEME_STYLES)[number];
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -12,6 +23,10 @@ export const THEME_STYLE_LABEL: Record<ThemeStyle, string> = {
   paper: "Paper",
   nordic: "Nordic",
   sunset: "Sunset",
+  slate: "Slate",
+  mono: "Mono",
+  frost: "Frost",
+  ink: "Ink",
 };
 
 const themeNameMap: Record<ThemeStyle, { light: string; dark: string }> = {
@@ -21,6 +36,10 @@ const themeNameMap: Record<ThemeStyle, { light: string; dark: string }> = {
   paper: { light: "retro", dark: "night" },
   nordic: { light: "nord", dark: "black" },
   sunset: { light: "autumn", dark: "sunset" },
+  slate: { light: "corporate", dark: "business" },
+  mono: { light: "wireframe", dark: "dim" },
+  frost: { light: "winter", dark: "dim" },
+  ink: { light: "lofi", dark: "luxury" },
 };
 
 type ThemeStoreState = {

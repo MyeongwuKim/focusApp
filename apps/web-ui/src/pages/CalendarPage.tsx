@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { FiChevronUp } from "react-icons/fi";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FiCheckCircle, FiChevronUp } from "react-icons/fi";
 import { buildCalendarCells, shiftMonth } from "../utils/calendar";
 import { formatDateKey, type HolidaysByDate } from "../utils/holidays";
 
@@ -16,6 +16,9 @@ type CalendarPageProps = {
   month: Date;
   onMonthChange: (nextMonth: Date) => void;
   holidaysByDate: HolidaysByDate;
+  isActive: boolean;
+  onOpenTasksForDate: (dateKey: string, tasks: string[]) => void;
+  completedTaskLabelsByDate: Record<string, string[]>;
 };
 
 type PreviewBar = {
@@ -78,6 +81,25 @@ function formatDateLabel(dateKey: string): string {
 
 function getTasksForDateKey(dateKey: string): string[] {
   const date = parseDateKey(dateKey);
+  const today = new Date();
+  const isToday =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+
+  if (isToday) {
+    return [
+      "리액트공부",
+      "운동하기",
+      "알고리즘 문제풀기",
+      "영어 단어 암기",
+      "프로젝트 문서정리",
+      "타입스크립트 복습",
+      "블로그 글 작성",
+      "독서 30분",
+    ];
+  }
+
   return getPreviewBars(date).map((bar) => bar.label);
 }
 
@@ -87,7 +109,14 @@ function shiftDateKey(dateKey: string, days: number): string {
   return formatDateKey(nextDate);
 }
 
-export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarPageProps) {
+export function CalendarPage({
+  month,
+  onMonthChange,
+  holidaysByDate,
+  isActive,
+  onOpenTasksForDate,
+  completedTaskLabelsByDate,
+}: CalendarPageProps) {
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const touchStartRef = useRef<TouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
@@ -102,10 +131,16 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
   const [dateSheetDragY, setDateSheetDragY] = useState(0);
   const [dateSheetDragX, setDateSheetDragX] = useState(0);
   const [isDateSheetDragging, setIsDateSheetDragging] = useState(false);
-  const selectedTasks = useMemo(
-    () => (selectedDateKey ? getTasksForDateKey(selectedDateKey) : []),
-    [selectedDateKey]
-  );
+  const selectedTasks = useMemo(() => {
+    if (!selectedDateKey) {
+      return [];
+    }
+    const completedSet = new Set(completedTaskLabelsByDate[selectedDateKey] ?? []);
+    return getTasksForDateKey(selectedDateKey).map((label) => ({
+      label,
+      done: completedSet.has(label),
+    }));
+  }, [selectedDateKey, completedTaskLabelsByDate]);
 
   const prevMonth = useMemo(() => shiftMonth(month, -1), [month]);
   const nextMonth = useMemo(() => shiftMonth(month, 1), [month]);
@@ -202,6 +237,12 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
     setDateSheetDragX(0);
   };
 
+  useEffect(() => {
+    if (!isActive) {
+      closeDateSheet();
+    }
+  }, [isActive, closeDateSheet]);
+
   const handleDateSheetTransitionEnd = () => {
     if (dateSheetMotion === "leave") {
       setIsDateSheetOpen(false);
@@ -243,11 +284,6 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
       return;
     }
 
-    if (deltaY <= 0) {
-      setDateSheetDragY(0);
-      setDateSheetDragX(0);
-      return;
-    }
     event.preventDefault();
     setDateSheetDragY(deltaY);
     setDateSheetDragX(0);
@@ -255,6 +291,7 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
 
   const handleDateSheetTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
     const closeThreshold = 84;
+    const openTasksThreshold = 64;
     const swipeThreshold = 52;
     setIsDateSheetDragging(false);
     if (dateSheetSwipeAxisRef.current === "horizontal") {
@@ -272,6 +309,17 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
       }
       setDateSheetDragX(0);
       setDateSheetDragY(0);
+      dateSheetTouchStartRef.current = null;
+      dateSheetSwipeAxisRef.current = null;
+      return;
+    }
+
+    if (dateSheetDragY < -openTasksThreshold && selectedDateKey) {
+      onOpenTasksForDate(
+        selectedDateKey,
+        selectedTasks.map((task) => task.label)
+      );
+      closeDateSheet();
       dateSheetTouchStartRef.current = null;
       dateSheetSwipeAxisRef.current = null;
       return;
@@ -332,11 +380,17 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
                         key={cell.date.toISOString()}
                         type="button"
                         onClick={() => {
-                          setSelectedDateKey(dateKey);
-                          if (!isDateSheetOpen) {
+                          if (selectedDateKey === dateKey) {
                             setDateSheetMotion("enter");
                             setDateSheetDragY(0);
+                            setDateSheetDragX(0);
                             setIsDateSheetOpen(true);
+                            return;
+                          }
+
+                          setSelectedDateKey(dateKey);
+                          if (isDateSheetOpen) {
+                            closeDateSheet();
                           }
                         }}
                         className={[
@@ -390,7 +444,10 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
       {isDateSheetOpen && selectedDateKey ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
           <div
-            className="pointer-events-auto flex h-72 flex-col rounded-t-2xl border border-base-300 bg-base-100 p-4 shadow-[0_-18px_45px_rgba(15,23,42,0.28)]"
+            className={[
+              "pointer-events-auto flex h-72 flex-col rounded-t-2xl border border-base-300 bg-base-100 p-4 shadow-[0_-18px_45px_rgba(15,23,42,0.28)]",
+              dateSheetMotion === "enter" && !isDateSheetDragging ? "date-sheet-enter" : "",
+            ].join(" ")}
             style={{
               transform:
                 dateSheetMotion === "leave"
@@ -418,10 +475,13 @@ export function CalendarPage({ month, onMonthChange, holidaysByDate }: CalendarP
               {selectedTasks.length > 0 ? (
                 selectedTasks.map((task, index) => (
                   <div
-                    key={`${selectedDateKey}-${task}-${index}`}
-                    className="truncate rounded-lg border border-base-300/80 bg-base-200/50 px-2.5 py-2 text-sm text-base-content/85"
+                    key={`${selectedDateKey}-${task.label}-${index}`}
+                    className="flex items-center gap-2 rounded-lg border border-base-300/80 bg-base-200/50 px-2.5 py-2 text-sm text-base-content/85"
                   >
-                    {task}
+                    {task.done ? <FiCheckCircle size={14} className="text-success" /> : null}
+                    <span className={task.done ? "truncate text-base-content/55 line-through" : "truncate"}>
+                      {task.label}
+                    </span>
                   </div>
                 ))
               ) : (
