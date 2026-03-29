@@ -1,14 +1,29 @@
+import type { ReactNode } from "react";
 import { DRAWER_ROUTES } from "../routes/route-config";
 import type { RouteKey } from "../routes/types";
+import { FiArchive, FiBarChart2, FiLogOut, FiSettings } from "react-icons/fi";
 
 type DrawerMenuProps = {
   isOpen: boolean;
   activeRoute: RouteKey;
   onClose: () => void;
   onSelectRoute: (route: RouteKey) => void;
+  onLogout: () => void;
 };
 
-export function DrawerMenu({ isOpen, activeRoute, onClose, onSelectRoute }: DrawerMenuProps) {
+const ROUTE_ICON: Partial<Record<RouteKey, ReactNode>> = {
+  tasks: <FiArchive size={15} />,
+  stats: <FiBarChart2 size={15} />,
+  settings: <FiSettings size={15} />,
+};
+
+export function DrawerMenu({
+  isOpen,
+  activeRoute,
+  onClose,
+  onSelectRoute,
+  onLogout,
+}: DrawerMenuProps) {
   return (
     <div
       className={[
@@ -44,14 +59,30 @@ export function DrawerMenu({ isOpen, activeRoute, onClose, onSelectRoute }: Draw
               key={route.key}
               type="button"
               className={[
-                "btn justify-start",
+                "btn justify-start gap-2.5",
                 activeRoute === route.key ? "btn-soft btn-primary" : "btn-ghost",
               ].join(" ")}
               onClick={() => onSelectRoute(route.key)}
             >
+              <span className="inline-flex h-4 w-4 items-center justify-center text-base-content/75">
+                {ROUTE_ICON[route.key]}
+              </span>
               {route.label}
             </button>
           ))}
+
+          <div className="my-1 h-px w-full bg-base-300/80" />
+
+          <button
+            type="button"
+            className="btn btn-ghost justify-start gap-2.5 text-error"
+            onClick={onLogout}
+          >
+            <span className="inline-flex h-4 w-4 items-center justify-center">
+              <FiLogOut size={15} />
+            </span>
+            로그아웃
+          </button>
         </nav>
       </aside>
     </div>

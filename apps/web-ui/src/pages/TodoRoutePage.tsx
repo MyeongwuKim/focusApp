@@ -17,13 +17,16 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FiAward } from "react-icons/fi";
+import { FiAward, FiX } from "react-icons/fi";
 import { TodoItemCard } from "../features/todo/components/TodoItemCard";
 import { TodoQuickActions } from "../features/todo/components/TodoQuickActions";
 import { TodoProgressFooter } from "../features/todo/components/TodoProgressFooter";
+import { TodoTaskPickerModal } from "../features/todo/components/TodoTaskPickerModal";
+import { MemoPage } from "./MemoPage";
 import type { TaskItem } from "../features/todo/types";
 
 type TodoRoutePageProps = {
+  isBlank?: boolean;
   items: TaskItem[];
   emptyMessage?: string;
   summary: {
@@ -36,11 +39,17 @@ type TodoRoutePageProps = {
     focusMinutes: number;
     restMinutes: number;
     active: "focus" | "rest" | null;
+    restDurationPreviewMin: number | null;
+    restDurationDefaultMin: number | null;
   };
   onTaskAction: (taskId: string, action: "start" | "pause" | "resume" | "complete") => void;
+  onTaskMenuAction: (taskId: string) => void;
   onToggleFocus: () => void;
   onToggleRest: () => void;
-  onOpenMemo: () => void;
+  onApplyRestDurationOnce: (nextDurationMin: number | null) => void;
+  onSaveRestDurationDefault: (nextDurationMin: number | null) => void;
+  memoDateKey: string | null;
+  onAddTasks: (labels: string[]) => void;
   onReorderTasks: (orderedIds: string[]) => void;
   showClearStamp?: boolean;
   onCloseClearStamp?: () => void;
@@ -49,11 +58,13 @@ type TodoRoutePageProps = {
 function SortableTaskRow({
   item,
   onTaskAction,
+  onTaskMenuAction,
   disableActions,
   isLongPressActive,
 }: {
   item: TaskItem;
   onTaskAction: TodoRoutePageProps["onTaskAction"];
+  onTaskMenuAction: TodoRoutePageProps["onTaskMenuAction"];
   disableActions: boolean;
   isLongPressActive: boolean;
 }) {
@@ -71,6 +82,7 @@ function SortableTaskRow({
       <TodoItemCard
         item={item}
         onTaskAction={onTaskAction}
+        onOpenMenu={onTaskMenuAction}
         disableActions={disableActions}
         isDragging={isDragging}
         isLongPressActive={isLongPressActive}
@@ -80,21 +92,47 @@ function SortableTaskRow({
 }
 
 export function TodoRoutePage({
+  isBlank = false,
   items,
   emptyMessage = "이 날짜에는 할 일이 없어요.",
   summary,
   session,
   onTaskAction,
+  onTaskMenuAction,
   onToggleFocus,
   onToggleRest,
-  onOpenMemo,
+  onApplyRestDurationOnce,
+  onSaveRestDurationDefault,
+  memoDateKey,
+  onAddTasks,
   onReorderTasks,
   showClearStamp = false,
   onCloseClearStamp,
 }: TodoRoutePageProps) {
+  if (isBlank) {
+    return (
+      <section className="flex min-h-0 flex-1 rounded-2xl border border-base-300/80 bg-base-200/30" />
+    );
+  }
+
+  const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
+  const [restSettingsRequestId, setRestSettingsRequestId] = useState(0);
+  const [isMemoOpen, setIsMemoOpen] = useState(false);
+  const [shouldRenderMemo, setShouldRenderMemo] = useState(false);
+  const [isMemoVisible, setIsMemoVisible] = useState(false);
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [longPressActivatedId, setLongPressActivatedId] = useState<string | null>(null);
+
+  const resolvedMemoDateKey = useMemo(() => {
+    if (memoDateKey) {
+      return memoDateKey;
+    }
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+  }, [memoDateKey]);
 
   useEffect(() => {
     setOrderedIds((prev) => {
@@ -158,6 +196,32 @@ export function TodoRoutePage({
     return () => window.clearTimeout(timer);
   }, [draggingId]);
 
+  useEffect(() => {
+    let rafId: number | null = null;
+    let timeoutId: number | null = null;
+
+    if (isMemoOpen) {
+      setShouldRenderMemo(true);
+      rafId = window.requestAnimationFrame(() => {
+        setIsMemoVisible(true);
+      });
+    } else {
+      setIsMemoVisible(false);
+      timeoutId = window.setTimeout(() => {
+        setShouldRenderMemo(false);
+      }, 240);
+    }
+
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [isMemoOpen]);
+
   return (
     <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4">
       {showClearStamp ? (
@@ -196,6 +260,7 @@ export function TodoRoutePage({
                       key={item.id}
                       item={item}
                       onTaskAction={onTaskAction}
+                      onTaskMenuAction={onTaskMenuAction}
                       disableActions={Boolean(draggingId)}
                       isLongPressActive={longPressActivatedId === item.id}
                     />
@@ -210,14 +275,64 @@ export function TodoRoutePage({
       </div>
 
       <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5">
-        <TodoQuickActions onOpenMemo={onOpenMemo} />
+        <TodoQuickActions
+          onOpenMemo={() => setIsMemoOpen(true)}
+          onOpenTaskPicker={() => setIsTaskPickerOpen(true)}
+          onOpenRestSettings={() => setRestSettingsRequestId((prev) => prev + 1)}
+        />
         <TodoProgressFooter
           summary={summary}
           session={session}
           onToggleFocus={onToggleFocus}
           onToggleRest={onToggleRest}
+          onApplyRestDurationOnce={onApplyRestDurationOnce}
+          onSaveRestDurationDefault={onSaveRestDurationDefault}
+          openRestSettingsRequestId={restSettingsRequestId}
         />
       </div>
+
+      <TodoTaskPickerModal
+        isOpen={isTaskPickerOpen}
+        onClose={() => setIsTaskPickerOpen(false)}
+        onApply={onAddTasks}
+      />
+
+      {shouldRenderMemo ? (
+        <div
+          className={[
+            "absolute inset-0 z-40 transition-opacity duration-250 ease-out",
+            isMemoVisible ? "opacity-100" : "opacity-0",
+          ].join(" ")}
+        >
+          <div
+            className={[
+              "absolute inset-0 flex flex-col bg-base-100 transition-[transform,opacity] duration-250 ease-out",
+              isMemoVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-90",
+            ].join(" ")}
+          >
+            <header className="grid h-12 shrink-0 grid-cols-[44px_1fr_44px] items-center border-b border-base-300/80 px-2">
+              <button
+                type="button"
+                aria-label="메모 닫기"
+                className="btn btn-sm btn-ghost btn-circle"
+                onClick={() => setIsMemoOpen(false)}
+              >
+                <FiX size={18} />
+              </button>
+              <h2 className="m-0 text-center text-sm font-semibold text-base-content">
+                {resolvedMemoDateKey} 메모
+              </h2>
+              <div aria-hidden="true" />
+            </header>
+            <div className="min-h-0 flex-1 p-2">
+              <MemoPage
+                storageKey={`focus-hybrid:memo:${resolvedMemoDateKey}`}
+                className="h-full rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

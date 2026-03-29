@@ -2,6 +2,7 @@ import {
   FiCheck,
   FiCheckCircle,
   FiCircle,
+  FiMoreVertical,
   FiPause,
   FiPauseCircle,
   FiPlay,
@@ -12,6 +13,7 @@ import type { TaskItem } from "../types";
 type TodoItemCardProps = {
   item: TaskItem;
   onTaskAction: (taskId: string, action: "start" | "pause" | "resume" | "complete") => void;
+  onOpenMenu: (taskId: string) => void;
   disableActions?: boolean;
   isDragging?: boolean;
   isLongPressActive?: boolean;
@@ -110,6 +112,7 @@ function renderTaskActions(
 export function TodoItemCard({
   item,
   onTaskAction,
+  onOpenMenu,
   disableActions = false,
   isDragging = false,
   isLongPressActive = false,
@@ -136,6 +139,15 @@ export function TodoItemCard({
         >
           {item.label}
         </p>
+        <button
+          type="button"
+          aria-label="할일 옵션"
+          className="btn btn-ghost btn-xs btn-square h-7 min-h-7 rounded-full text-base-content/70"
+          onClick={() => onOpenMenu(item.id)}
+          disabled={disableActions}
+        >
+          <FiMoreVertical size={13} />
+        </button>
       </div>
       <div className="mt-2">{renderTaskActions(item, onTaskAction, disableActions)}</div>
     </div>

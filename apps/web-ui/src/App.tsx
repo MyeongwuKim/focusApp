@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { CalendarPage } from "./pages/CalendarPage";
 import { SimpleRoutePage } from "./pages/SimpleRoutePage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -9,10 +10,12 @@ import { PageHeader } from "./components/PageHeader";
 import { FooterBar } from "./components/FooterBar";
 import { Toast } from "./components/Toast";
 import { ConfirmModal } from "./components/ConfirmModal";
+import { ActionSheet } from "./components/ActionSheet";
 import type { TaskItem } from "./features/todo/types";
 import { MAIN_ROUTE, ROUTE_LABEL } from "./routes/route-config";
-import { toast, useWeatherStore } from "./stores";
+import { actionSheet, toast, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
+import { FiClock, FiTrash2 } from "react-icons/fi";
 import { shiftMonth } from "./utils/calendar";
 import { fetchKoreanHolidays, type HolidaysByDate } from "./utils/holidays";
 import {
@@ -21,9 +24,29 @@ import {
   type Coordinates,
 } from "./utils/weather";
 
-type OverlayMotion = "enter" | "leave" | "idle";
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 type SessionMode = "focus" | "rest" | null;
+type RestDurationMin = number | null;
+const ROUTE_PATH: Record<RouteKey, string> = {
+  calendar: "/calendar",
+  tasks: "/tasks",
+  memo: "/memo",
+  stats: "/stats",
+  settings: "/settings",
+};
+
+function getRouteFromPath(pathname: string): RouteKey {
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+  const entry = Object.entries(ROUTE_PATH).find(([, routePath]) => routePath === normalizedPath);
+  return (entry?.[0] as RouteKey | undefined) ?? MAIN_ROUTE;
+}
+
+function buildRoutePath(route: RouteKey, search?: string): string {
+  if (!search) {
+    return ROUTE_PATH[route];
+  }
+  return `${ROUTE_PATH[route]}?${search}`;
+}
 
 type LocationResolveResult = {
   coordinates: Coordinates;
@@ -94,15 +117,17 @@ function getCurrentCoordinates(timeoutMs = 5000): Promise<LocationResolveResult>
 }
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeRoute = getRouteFromPath(location.pathname);
+  const overlayRoute = activeRoute === MAIN_ROUTE ? null : activeRoute;
   const now = new Date();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(
     new Date(now.getFullYear(), now.getMonth(), 1)
   );
   const [holidaysByDate, setHolidaysByDate] = useState<HolidaysByDate>({});
-  const [overlayRoute, setOverlayRoute] = useState<RouteKey | null>(null);
   const [previousOverlayRoute, setPreviousOverlayRoute] = useState<RouteKey | null>(null);
-  const [overlayMotion, setOverlayMotion] = useState<OverlayMotion>("idle");
   const [tasksRouteTitle, setTasksRouteTitle] = useState(ROUTE_LABEL.tasks);
   const [tasksRouteDateKey, setTasksRouteDateKey] = useState<string | null>(null);
   const [tasksRouteItems, setTasksRouteItems] = useState<TaskItem[]>([]);
@@ -119,21 +144,38 @@ function App() {
   });
   const [celebratedDates, setCelebratedDates] = useState<Record<string, boolean>>({});
   const [showClearStamp, setShowClearStamp] = useState(false);
+  const [restDurationDefaultMin, setRestDurationDefaultMin] = useState<RestDurationMin>(null);
+  const [restDurationOnceMin, setRestDurationOnceMin] = useState<RestDurationMin | undefined>(
+    undefined
+  );
   const [sessionState, setSessionState] = useState<{
     focusMs: number;
     restMs: number;
     active: SessionMode;
     startedAt: number | null;
+    restDurationMin: RestDurationMin;
   }>({
     focusMs: 0,
     restMs: 0,
     active: null,
     startedAt: null,
+    restDurationMin: null,
   });
   const [sessionTick, setSessionTick] = useState(0);
   const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const weatherFallbackNotifiedRef = useRef(false);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
+
+  useEffect(() => {
+    if (location.pathname === "/") {
+      navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
+      return;
+    }
+
+    if (activeRoute === MAIN_ROUTE && location.pathname !== ROUTE_PATH[MAIN_ROUTE]) {
+      navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
+    }
+  }, [activeRoute, location.pathname, navigate]);
 
   useEffect(() => {
     const prevMonth = shiftMonth(viewMonth, -1);
@@ -220,7 +262,11 @@ function App() {
     return () => window.clearInterval(timer);
   }, [sessionState.active, sessionState.startedAt]);
 
+  const nextRestDurationMin =
+    restDurationOnceMin === undefined ? restDurationDefaultMin : restDurationOnceMin;
+
   const startSession = (nextMode: Exclude<SessionMode, null>) => {
+    const selectedRestDurationMin = nextMode === "rest" ? nextRestDurationMin : null;
     setSessionState((prev) => {
       const nowMs = Date.now();
       let nextFocusMs = prev.focusMs;
@@ -238,8 +284,12 @@ function App() {
         restMs: nextRestMs,
         active: nextMode,
         startedAt: nowMs,
+        restDurationMin: selectedRestDurationMin,
       };
     });
+    if (nextMode === "rest" && restDurationOnceMin !== undefined) {
+      setRestDurationOnceMin(undefined);
+    }
   };
 
   const stopSession = () => {
@@ -254,6 +304,7 @@ function App() {
         restMs: prev.active === "rest" ? prev.restMs + elapsed : prev.restMs,
         active: null,
         startedAt: null,
+        restDurationMin: null,
       };
     });
   };
@@ -273,6 +324,45 @@ function App() {
     }
     startSession("rest");
   };
+
+  useEffect(() => {
+    if (
+      sessionState.active !== "rest" ||
+      !sessionState.startedAt ||
+      sessionState.restDurationMin === null
+    ) {
+      return;
+    }
+
+    const restLimitMs = sessionState.restDurationMin * 60 * 1000;
+    const elapsedMs = Date.now() - sessionState.startedAt;
+    const remainingMs = restLimitMs - elapsedMs;
+
+    if (remainingMs <= 0) {
+      stopSession();
+      toast.show({
+        type: "positive",
+        title: "휴식 종료",
+        message: "설정한 휴식 시간이 끝났어요.",
+        duration: 1800,
+      });
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      stopSession();
+      toast.show({
+        type: "positive",
+        title: "휴식 종료",
+        message: "설정한 휴식 시간이 끝났어요.",
+        duration: 1800,
+      });
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [sessionState.active, sessionState.restDurationMin, sessionState.startedAt]);
 
   const getTasksTitleFromDateKey = (dateKey: string) => {
     const [year, month, day] = dateKey.split("-").map(Number);
@@ -305,8 +395,8 @@ function App() {
       }))
     );
     setShowClearStamp(false);
-    setOverlayRoute("tasks");
-    setOverlayMotion("enter");
+    setPreviousOverlayRoute(overlayRoute);
+    navigate(buildRoutePath("tasks", `date=${encodeURIComponent(dateKey)}`));
     setIsDrawerOpen(false);
   };
 
@@ -386,6 +476,83 @@ function App() {
     });
   };
 
+  const handleAddTasks = (labels: string[]) => {
+    if (labels.length === 0) {
+      return;
+    }
+
+    setTasksRouteItems((prevItems) => {
+      const existing = new Set(prevItems.map((item) => item.label));
+      const nextItems = labels
+        .filter((label) => !existing.has(label))
+        .map((label, index) => ({
+          id: `${tasksRouteDateKey ?? "today"}-${label}-${Date.now()}-${index}`,
+          label,
+          status: "todo" as const,
+          accumulatedMs: 0,
+          startedAt: null,
+          completedAt: null,
+          completedDurationMs: null,
+        }));
+      return [...prevItems, ...nextItems];
+    });
+  };
+
+  const handleTaskMenuAction = async (taskId: string) => {
+    const target = tasksRouteItems.find((item) => item.id === taskId);
+    if (!target) {
+      return;
+    }
+
+    const result = await actionSheet({
+      title: target.label,
+      message: "작업을 선택하세요",
+      items: [
+        {
+          label: "시작시간 설정",
+          value: "schedule",
+          tone: "primary",
+          icon: <FiClock size={14} />,
+          description: "알림 예정 시간을 설정합니다.",
+        },
+        {
+          label: "삭제",
+          value: "delete",
+          tone: "danger",
+          icon: <FiTrash2 size={14} />,
+          description: "이 할일을 목록에서 제거합니다.",
+        },
+      ],
+    });
+
+    if (result === "schedule") {
+      toast.show({
+        type: "positive",
+        title: "준비 중",
+        message: "시작시간 설정 기능은 다음 단계에서 연결할게요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    if (result === "delete") {
+      setTasksRouteItems((prevItems) => prevItems.filter((item) => item.id !== taskId));
+      if (tasksRouteDateKey) {
+        setCompletedTaskLabelsByDate((prev) => {
+          const labels = prev[tasksRouteDateKey] ?? [];
+          const nextLabels = labels.filter((label) => label !== target.label);
+          return { ...prev, [tasksRouteDateKey]: nextLabels };
+        });
+      }
+      toast.show({
+        type: "positive",
+        title: "삭제됨",
+        message: "할일이 삭제되었습니다.",
+        duration: 1800,
+      });
+    }
+  };
+
   const tasksSummary = useMemo(() => {
     const totalCount = tasksRouteItems.length;
     const completedItems = tasksRouteItems.filter((item) => item.status === "done");
@@ -416,8 +583,44 @@ function App() {
       active: sessionState.active,
       focusMinutes: Math.floor(focusMs / 60000),
       restMinutes: Math.floor(restMs / 60000),
+      restDurationPreviewMin:
+        sessionState.active === "rest" ? sessionState.restDurationMin : nextRestDurationMin,
+      restDurationDefaultMin,
     };
-  }, [sessionState, sessionTick]);
+  }, [nextRestDurationMin, restDurationDefaultMin, sessionState, sessionTick]);
+
+  const handleApplyRestDurationOnce = (nextDurationMin: RestDurationMin) => {
+    setRestDurationOnceMin(nextDurationMin);
+  };
+
+  const handleSaveRestDurationDefault = (nextDurationMin: RestDurationMin) => {
+    setRestDurationDefaultMin(nextDurationMin);
+    setRestDurationOnceMin(undefined);
+  };
+
+  useEffect(() => {
+    if (overlayRoute !== "tasks") {
+      return;
+    }
+
+    const dateParam = new URLSearchParams(location.search).get("date");
+    if (!dateParam) {
+      if (tasksRouteDateKey !== null) {
+        setTasksRouteDateKey(null);
+        setTasksRouteTitle(ROUTE_LABEL.tasks);
+      }
+      return;
+    }
+
+    if (dateParam === tasksRouteDateKey) {
+      return;
+    }
+
+    setTasksRouteDateKey(dateParam);
+    setTasksRouteTitle(getTasksTitleFromDateKey(dateParam));
+    setTasksRouteItems([]);
+    setShowClearStamp(false);
+  }, [location.search, overlayRoute, tasksRouteDateKey]);
 
   useEffect(() => {
     if (overlayRoute !== "tasks" || !tasksRouteDateKey) {
@@ -434,20 +637,14 @@ function App() {
   }, [overlayRoute, tasksRouteDateKey, tasksRouteItems, celebratedDates]);
 
   const navigateTo = (nextRoute: RouteKey) => {
-    if (nextRoute === MAIN_ROUTE) {
-      if (overlayRoute) {
-        setOverlayMotion("leave");
-      }
+    if (activeRoute === nextRoute) {
       setIsDrawerOpen(false);
       return;
     }
 
-    if (overlayRoute === nextRoute) {
-      setIsDrawerOpen(false);
-      return;
+    if (overlayRoute) {
+      setPreviousOverlayRoute(overlayRoute);
     }
-
-    setPreviousOverlayRoute(overlayRoute);
 
     if (nextRoute === "tasks") {
       setTasksRouteTitle(ROUTE_LABEL.tasks);
@@ -456,25 +653,38 @@ function App() {
       setShowClearStamp(false);
     }
 
-    setOverlayRoute(nextRoute);
-    setOverlayMotion("enter");
+    navigate(ROUTE_PATH[nextRoute]);
     setIsDrawerOpen(false);
   };
 
   const handleOverlayBack = () => {
     if (overlayRoute === "memo" && previousOverlayRoute === "tasks") {
-      setOverlayRoute("tasks");
       setPreviousOverlayRoute(null);
-      setOverlayMotion("enter");
+      navigate(
+        buildRoutePath(
+          "tasks",
+          tasksRouteDateKey ? `date=${encodeURIComponent(tasksRouteDateKey)}` : undefined
+        )
+      );
       return;
     }
     navigateTo(MAIN_ROUTE);
   };
 
-  const currentRoute = overlayRoute ?? MAIN_ROUTE;
+  const currentRoute = activeRoute;
   const goToday = () => {
     const nowDate = new Date();
     setViewMonth(new Date(nowDate.getFullYear(), nowDate.getMonth(), 1));
+  };
+
+  const handleLogout = () => {
+    setIsDrawerOpen(false);
+    toast.show({
+      type: "positive",
+      title: "로그아웃",
+      message: "로그아웃 기능은 곧 연결할게요.",
+      duration: 1800,
+    });
   };
 
   return (
@@ -501,14 +711,7 @@ function App() {
 
         {overlayRoute ? (
           <div
-            className={[
-              "absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm",
-              overlayMotion === "enter"
-                ? "overlay-enter"
-                : overlayMotion === "leave"
-                  ? "overlay-leave"
-                  : "",
-            ].join(" ")}
+            className="absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
             onTouchStart={(event) => {
               const touch = event.touches[0];
               overlayTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
@@ -526,12 +729,6 @@ function App() {
               }
               overlayTouchStartRef.current = null;
             }}
-            onAnimationEnd={() => {
-              if (overlayMotion === "leave") {
-                setOverlayRoute(null);
-              }
-              setOverlayMotion("idle");
-            }}
           >
             <PageHeader
               route={overlayRoute}
@@ -546,14 +743,19 @@ function App() {
               <SettingsPage />
             ) : overlayRoute === "tasks" ? (
               <TodoRoutePage
+                isBlank
                 items={tasksRouteItems}
                 emptyMessage="이 날짜에는 할 일이 없어요."
                 onTaskAction={handleTaskAction}
+                onTaskMenuAction={handleTaskMenuAction}
                 summary={tasksSummary}
                 session={sessionSummary}
                 onToggleFocus={toggleFocusSession}
                 onToggleRest={toggleRestSession}
-                onOpenMemo={() => navigateTo("memo")}
+                onApplyRestDurationOnce={handleApplyRestDurationOnce}
+                onSaveRestDurationDefault={handleSaveRestDurationDefault}
+                memoDateKey={tasksRouteDateKey}
+                onAddTasks={handleAddTasks}
                 onReorderTasks={handleReorderTasks}
                 showClearStamp={showClearStamp}
                 onCloseClearStamp={() => setShowClearStamp(false)}
@@ -572,9 +774,11 @@ function App() {
         activeRoute={currentRoute}
         onClose={() => setIsDrawerOpen(false)}
         onSelectRoute={navigateTo}
+        onLogout={handleLogout}
       />
       <Toast />
       <ConfirmModal />
+      <ActionSheet />
     </main>
   );
 }

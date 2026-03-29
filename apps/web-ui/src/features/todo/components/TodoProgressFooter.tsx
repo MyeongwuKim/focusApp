@@ -1,4 +1,6 @@
+import { useEffect, useMemo, useState } from "react";
 import { FiCoffee, FiPause, FiPlay } from "react-icons/fi";
+import { RestDurationBottomSheet } from "./RestDurationBottomSheet";
 
 type TodoProgressFooterProps = {
   summary: {
@@ -11,19 +13,59 @@ type TodoProgressFooterProps = {
     focusMinutes: number;
     restMinutes: number;
     active: "focus" | "rest" | null;
+    restDurationPreviewMin: number | null;
+    restDurationDefaultMin: number | null;
   };
   onToggleFocus: () => void;
   onToggleRest: () => void;
+  onApplyRestDurationOnce: (nextDurationMin: number | null) => void;
+  onSaveRestDurationDefault: (nextDurationMin: number | null) => void;
+  openRestSettingsRequestId: number;
 };
+
+function formatRestDurationLabel(durationMin: number | null) {
+  if (durationMin === null) {
+    return "무제한";
+  }
+  return `${durationMin}분`;
+}
 
 export function TodoProgressFooter({
   summary,
   session,
   onToggleFocus,
   onToggleRest,
+  onApplyRestDurationOnce,
+  onSaveRestDurationDefault,
+  openRestSettingsRequestId,
 }: TodoProgressFooterProps) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  useEffect(() => {
+    if (openRestSettingsRequestId <= 0) {
+      return;
+    }
+    setIsSheetOpen(true);
+  }, [openRestSettingsRequestId]);
+
+  const restDurationDescription = useMemo(() => {
+    if (session.active === "rest") {
+      return `휴식 제한: ${formatRestDurationLabel(session.restDurationPreviewMin)}`;
+    }
+    return `다음 휴식: ${formatRestDurationLabel(session.restDurationPreviewMin)}`;
+  }, [session.active, session.restDurationPreviewMin]);
+
   return (
-    <footer className="rounded-xl border border-base-300/80 bg-base-100/85 px-3 py-2.5 shadow-[0_8px_22px_rgba(15,23,42,0.08)]">
+    <footer
+      className={[
+        "session-progress-card rounded-xl border border-base-300/80 bg-base-100/85 px-3 py-2.5 shadow-[0_8px_22px_rgba(15,23,42,0.08)]",
+        session.active === "focus"
+          ? "session-progress-card--focus"
+          : session.active === "rest"
+            ? "session-progress-card--rest"
+            : "",
+      ].join(" ")}
+    >
       <div className="mb-1.5 flex items-center justify-between text-xs">
         <span className="font-semibold text-base-content/80">
           진행률 {summary.completedCount}/{summary.totalCount}
@@ -47,6 +89,9 @@ export function TodoProgressFooter({
               : session.active === "rest"
                 ? "휴식 중"
                 : "대기 중"}
+          </div>
+          <div className="mt-0.5 text-[11px] font-medium text-base-content/55">
+            {restDurationDescription}
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -78,6 +123,15 @@ export function TodoProgressFooter({
           </button>
         </div>
       </div>
+
+      <RestDurationBottomSheet
+        isOpen={isSheetOpen}
+        currentDurationMin={session.restDurationPreviewMin}
+        defaultDurationMin={session.restDurationDefaultMin}
+        onClose={() => setIsSheetOpen(false)}
+        onApplyOnce={onApplyRestDurationOnce}
+        onSaveDefault={onSaveRestDurationDefault}
+      />
     </footer>
   );
 }
