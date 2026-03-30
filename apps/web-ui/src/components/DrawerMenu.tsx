@@ -2,13 +2,11 @@ import type { ReactNode } from "react";
 import { DRAWER_ROUTES } from "../routes/route-config";
 import type { RouteKey } from "../routes/types";
 import { FiArchive, FiBarChart2, FiLogOut, FiSettings } from "react-icons/fi";
+import { useAppNavigation } from "../providers/AppNavigationProvider";
+import { toast } from "../stores";
 
 type DrawerMenuProps = {
   isOpen: boolean;
-  activeRoute: RouteKey;
-  onClose: () => void;
-  onSelectRoute: (route: RouteKey) => void;
-  onLogout: () => void;
 };
 
 const ROUTE_ICON: Partial<Record<RouteKey, ReactNode>> = {
@@ -17,13 +15,9 @@ const ROUTE_ICON: Partial<Record<RouteKey, ReactNode>> = {
   settings: <FiSettings size={15} />,
 };
 
-export function DrawerMenu({
-  isOpen,
-  activeRoute,
-  onClose,
-  onSelectRoute,
-  onLogout,
-}: DrawerMenuProps) {
+export function DrawerMenu({ isOpen }: DrawerMenuProps) {
+  const { activeRoute, closeMenu, navigateTo } = useAppNavigation();
+
   return (
     <div
       className={[
@@ -37,7 +31,7 @@ export function DrawerMenu({
           "absolute inset-0 bg-black/35 transition-opacity",
           isOpen ? "opacity-100" : "opacity-0",
         ].join(" ")}
-        onClick={onClose}
+        onClick={closeMenu}
         aria-label="메뉴 닫기"
       />
 
@@ -62,7 +56,7 @@ export function DrawerMenu({
                 "btn justify-start gap-2.5",
                 activeRoute === route.key ? "btn-soft btn-primary" : "btn-ghost",
               ].join(" ")}
-              onClick={() => onSelectRoute(route.key)}
+              onClick={() => navigateTo(route.key)}
             >
               <span className="inline-flex h-4 w-4 items-center justify-center text-base-content/75">
                 {ROUTE_ICON[route.key]}
@@ -76,7 +70,15 @@ export function DrawerMenu({
           <button
             type="button"
             className="btn btn-ghost justify-start gap-2.5 text-error"
-            onClick={onLogout}
+            onClick={() => {
+              closeMenu();
+              toast.show({
+                type: "positive",
+                title: "로그아웃",
+                message: "로그아웃 기능은 곧 연결할게요.",
+                duration: 1800,
+              });
+            }}
           >
             <span className="inline-flex h-4 w-4 items-center justify-center">
               <FiLogOut size={15} />

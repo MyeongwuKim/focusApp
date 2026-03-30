@@ -52,9 +52,9 @@ export function ConfirmModal() {
           }
         }}
       >
-        <h2 className="confirm-modal__title text-base-content">{active.title}</h2>
+        <h2 className="confirm-modal__title text-center text-base-content">{active.title}</h2>
         {active.message ? (
-          <p className="confirm-modal__message text-base-content/75">{active.message}</p>
+          <p className="confirm-modal__message text-center text-base-content/75">{active.message}</p>
         ) : null}
         <div className="confirm-modal__actions">
           {active.buttons.map((button, index) => (

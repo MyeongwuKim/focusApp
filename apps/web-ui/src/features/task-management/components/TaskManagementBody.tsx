@@ -1,0 +1,197 @@
+import { useEffect, useMemo, useState } from "react";
+import { FiEdit3, FiTrash2 } from "react-icons/fi";
+import { actionSheet } from "../../../stores";
+import { TaskManagementCollectionItem } from "./TaskManagementCollectionItem";
+import { TaskManagementTaskItem } from "./TaskManagementTaskItem";
+
+export type ManagedTaskItem = {
+  id: string;
+  label: string;
+  collectionId: string;
+};
+
+export type ManagedCollection = {
+  id: string;
+  name: string;
+};
+
+type TaskManagementBodyProps = {
+  tasks: ManagedTaskItem[];
+  collections: ManagedCollection[];
+  onRequestRenameTask: (taskId: string) => void;
+  onRequestDeleteTask: (taskId: string) => void;
+  onRequestRenameCollection: (collectionId: string) => void;
+  onRequestDeleteCollection: (collectionId: string) => void;
+};
+
+type CollectionFilter = "all" | string;
+
+export function TaskManagementBody({
+  tasks,
+  collections,
+  onRequestRenameTask,
+  onRequestDeleteTask,
+  onRequestRenameCollection,
+  onRequestDeleteCollection,
+}: TaskManagementBodyProps) {
+  const [selectedCollectionId, setSelectedCollectionId] = useState<CollectionFilter>("all");
+
+  const collectionCountMap = useMemo(() => {
+    const counts = new Map<string, number>();
+    tasks.forEach((task) => {
+      counts.set(task.collectionId, (counts.get(task.collectionId) ?? 0) + 1);
+    });
+    return counts;
+  }, [tasks]);
+
+  const visibleTasks = useMemo(() => {
+    if (selectedCollectionId === "all") {
+      return tasks;
+    }
+    return tasks.filter((task) => task.collectionId === selectedCollectionId);
+  }, [selectedCollectionId, tasks]);
+
+  const collectionNameById = useMemo(() => {
+    return new Map(collections.map((collection) => [collection.id, collection.name]));
+  }, [collections]);
+
+  const handleTaskMenu = async (taskId: string) => {
+    const target = tasks.find((task) => task.id === taskId);
+    if (!target) {
+      return;
+    }
+
+    const selected = await actionSheet({
+      title: target.label,
+      message: "작업을 선택하세요",
+      items: [
+        {
+          label: "이름 변경",
+          value: "rename",
+          tone: "primary",
+          icon: <FiEdit3 size={14} />,
+          description: "할일 이름을 변경합니다.",
+        },
+        {
+          label: "삭제",
+          value: "delete",
+          tone: "danger",
+          icon: <FiTrash2 size={14} />,
+          description: "이 할일을 삭제합니다.",
+        },
+      ],
+    });
+
+    if (selected === "rename") {
+      onRequestRenameTask(taskId);
+    }
+    if (selected === "delete") {
+      onRequestDeleteTask(taskId);
+    }
+  };
+
+  const handleCollectionMenu = async (collectionId: string) => {
+    const target = collections.find((collection) => collection.id === collectionId);
+    if (!target) {
+      return;
+    }
+
+    const selected = await actionSheet({
+      title: target.name,
+      message: "작업을 선택하세요",
+      items: [
+        {
+          label: "이름 변경",
+          value: "rename",
+          tone: "primary",
+          icon: <FiEdit3 size={14} />,
+          description: "컬렉션 이름을 변경합니다.",
+        },
+        {
+          label: "삭제",
+          value: "delete",
+          tone: "danger",
+          icon: <FiTrash2 size={14} />,
+          description:
+            collectionId === "collection-default"
+              ? "기본 컬렉션은 삭제할 수 없습니다."
+              : "컬렉션을 삭제하고 할일은 기본 컬렉션으로 이동합니다.",
+          disabled: collectionId === "collection-default",
+        },
+      ],
+    });
+
+    if (selected === "rename") {
+      onRequestRenameCollection(collectionId);
+    }
+    if (selected === "delete") {
+      onRequestDeleteCollection(collectionId);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCollectionId === "all") {
+      return;
+    }
+    if (!collections.some((collection) => collection.id === selectedCollectionId)) {
+      setSelectedCollectionId("all");
+    }
+  }, [collections, selectedCollectionId]);
+
+  return (
+    <div className="min-h-0 flex-1 select-none">
+      <div className="grid h-full min-h-0 grid-cols-[1fr_104px] gap-2">
+        <div className="min-h-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+          <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
+            {visibleTasks.length > 0 ? (
+              visibleTasks.map((task) => (
+                <TaskManagementTaskItem
+                  key={task.id}
+                  label={task.label}
+                  collectionName={collectionNameById.get(task.collectionId) ?? "미분류"}
+                  onOpenMenu={() => {
+                    void handleTaskMenu(task.id);
+                  }}
+                />
+              ))
+            ) : (
+              <p className="m-0 px-1 py-2 text-sm text-base-content/70">선택한 컬렉션의 할일이 없어요.</p>
+            )}
+          </div>
+        </div>
+
+        <aside className="rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              className={[
+                "btn btn-sm h-9 min-h-9 w-full rounded-lg border px-1.5 text-[11px]",
+                selectedCollectionId === "all"
+                  ? "border-primary/60 bg-primary/16 text-primary"
+                  : "border-base-300/70 bg-base-100/75 text-base-content/70",
+              ].join(" ")}
+              onClick={() => setSelectedCollectionId("all")}
+            >
+              <span className="truncate">{`전체 ${tasks.length}`}</span>
+            </button>
+            {collections.map((collection) => {
+              const active = selectedCollectionId === collection.id;
+              return (
+                <TaskManagementCollectionItem
+                  key={collection.id}
+                  name={collection.name}
+                  count={collectionCountMap.get(collection.id) ?? 0}
+                  active={active}
+                  onSelect={() => setSelectedCollectionId(collection.id)}
+                  onOpenMenu={() => {
+                    void handleCollectionMenu(collection.id);
+                  }}
+                />
+              );
+            })}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}

@@ -1,28 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { CalendarPage } from "./pages/CalendarPage";
 import { SimpleRoutePage } from "./pages/SimpleRoutePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TodoRoutePage } from "./pages/TodoRoutePage";
 import { MemoPage } from "./pages/MemoPage";
+import { CalendarRootPage } from "./pages/CalendarRootPage";
+import { TaskManagementRoutePage } from "./pages/TaskManagementRoutePage";
 import { DrawerMenu } from "./components/DrawerMenu";
 import { PageHeader } from "./components/PageHeader";
-import { FooterBar } from "./components/FooterBar";
 import { Toast } from "./components/Toast";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ActionSheet } from "./components/ActionSheet";
+import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { TaskItem } from "./features/todo/types";
 import { MAIN_ROUTE, ROUTE_LABEL } from "./routes/route-config";
-import { actionSheet, toast, useWeatherStore } from "./stores";
+import { actionSheet, toast, useAppStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import { FiClock, FiTrash2 } from "react-icons/fi";
-import { shiftMonth } from "./utils/calendar";
-import { fetchKoreanHolidays, type HolidaysByDate } from "./utils/holidays";
-import {
-  fetchCurrentWeather,
-  SEOUL_COORDINATES,
-  type Coordinates,
-} from "./utils/weather";
+import { fetchCurrentWeather, SEOUL_COORDINATES, type Coordinates } from "./utils/weather";
 
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 type SessionMode = "focus" | "rest" | null;
@@ -30,6 +25,7 @@ type RestDurationMin = number | null;
 const ROUTE_PATH: Record<RouteKey, string> = {
   calendar: "/calendar",
   tasks: "/tasks",
+  dateTasks: "/date-tasks",
   memo: "/memo",
   stats: "/stats",
   settings: "/settings",
@@ -37,7 +33,14 @@ const ROUTE_PATH: Record<RouteKey, string> = {
 
 function getRouteFromPath(pathname: string): RouteKey {
   const normalizedPath = pathname.replace(/\/+$/, "") || "/";
-  const entry = Object.entries(ROUTE_PATH).find(([, routePath]) => routePath === normalizedPath);
+  if (
+    normalizedPath === ROUTE_PATH.settings ||
+    normalizedPath.startsWith(`${ROUTE_PATH.settings}/`)
+  ) {
+    return "settings";
+  }
+
+  const entry = Object.entries(ROUTE_PATH).find(([, routePath]) => normalizedPath === routePath);
   return (entry?.[0] as RouteKey | undefined) ?? MAIN_ROUTE;
 }
 
@@ -105,10 +108,10 @@ function getCurrentCoordinates(timeoutMs = 5000): Promise<LocationResolveResult>
             error.code === error.PERMISSION_DENIED
               ? "denied"
               : error.code === error.POSITION_UNAVAILABLE
-                ? "unavailable"
-                : error.code === error.TIMEOUT
-                  ? "timeout"
-                  : "error",
+              ? "unavailable"
+              : error.code === error.TIMEOUT
+              ? "timeout"
+              : "error",
         });
       },
       { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 10 * 60 * 1000 }
@@ -121,33 +124,12 @@ function App() {
   const navigate = useNavigate();
   const activeRoute = getRouteFromPath(location.pathname);
   const overlayRoute = activeRoute === MAIN_ROUTE ? null : activeRoute;
-  const now = new Date();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [viewMonth, setViewMonth] = useState(
-    new Date(now.getFullYear(), now.getMonth(), 1)
-  );
-  const [holidaysByDate, setHolidaysByDate] = useState<HolidaysByDate>({});
-  const [previousOverlayRoute, setPreviousOverlayRoute] = useState<RouteKey | null>(null);
-  const [tasksRouteTitle, setTasksRouteTitle] = useState(ROUTE_LABEL.tasks);
-  const [tasksRouteDateKey, setTasksRouteDateKey] = useState<string | null>(null);
-  const [tasksRouteItems, setTasksRouteItems] = useState<TaskItem[]>([]);
-  const [completedTaskLabelsByDate, setCompletedTaskLabelsByDate] = useState<
-    Record<string, string[]>
-  >({
-    "2026-03-26": [
-      "알고리즘 문제풀기",
-      "영어 단어 암기",
-      "프로젝트 문서정리",
-      "타입스크립트 복습",
-      "블로그 글 작성",
-    ],
-  });
-  const [celebratedDates, setCelebratedDates] = useState<Record<string, boolean>>({});
-  const [showClearStamp, setShowClearStamp] = useState(false);
+  const [dateTasksRouteTitle, setDateTasksRouteTitle] = useState(ROUTE_LABEL.dateTasks);
+  const [dateTasksRouteDateKey, setDateTasksRouteDateKey] = useState<string | null>(null);
+  const [dateTasksRouteItems, setDateTasksRouteItems] = useState<TaskItem[]>([]);
   const [restDurationDefaultMin, setRestDurationDefaultMin] = useState<RestDurationMin>(null);
-  const [restDurationOnceMin, setRestDurationOnceMin] = useState<RestDurationMin | undefined>(
-    undefined
-  );
+  const [restDurationOnceMin, setRestDurationOnceMin] = useState<RestDurationMin | undefined>(undefined);
   const [sessionState, setSessionState] = useState<{
     focusMs: number;
     restMs: number;
@@ -165,6 +147,9 @@ function App() {
   const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const weatherFallbackNotifiedRef = useRef(false);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
+  const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
+  const viewMonth = useAppStore((state) => state.viewMonth);
+  const setViewMonth = useAppStore((state) => state.setViewMonth);
 
   useEffect(() => {
     if (location.pathname === "/") {
@@ -176,42 +161,6 @@ function App() {
       navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
     }
   }, [activeRoute, location.pathname, navigate]);
-
-  useEffect(() => {
-    const prevMonth = shiftMonth(viewMonth, -1);
-    const nextMonth = shiftMonth(viewMonth, 1);
-    const targetYears = Array.from(
-      new Set([viewMonth.getFullYear(), prevMonth.getFullYear(), nextMonth.getFullYear()])
-    );
-
-    let cancelled = false;
-
-    const loadHolidays = async () => {
-      try {
-        const holidayMaps = await Promise.all(
-          targetYears.map(async (year) => fetchKoreanHolidays(year))
-        );
-        if (cancelled) {
-          return;
-        }
-
-        const merged = holidayMaps.reduce(
-          (acc, holidayMap) => ({ ...acc, ...holidayMap }),
-          {} as HolidaysByDate
-        );
-        setHolidaysByDate(merged);
-      } catch (error) {
-        toast.error("공휴일 데이터를 가져오지 못했어요.", "불러오기 실패");
-        console.warn("Failed to load KR holidays", error);
-      }
-    };
-
-    loadHolidays();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [viewMonth]);
 
   useEffect(() => {
     if (!weatherEnabled) {
@@ -326,11 +275,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (
-      sessionState.active !== "rest" ||
-      !sessionState.startedAt ||
-      sessionState.restDurationMin === null
-    ) {
+    if (sessionState.active !== "rest" || !sessionState.startedAt || sessionState.restDurationMin === null) {
       return;
     }
 
@@ -380,35 +325,30 @@ function App() {
   };
 
   const openTasksForDate = (dateKey: string, tasks: string[]) => {
-    setTasksRouteTitle(getTasksTitleFromDateKey(dateKey));
-    setTasksRouteDateKey(dateKey);
-    const completedLabels = new Set(completedTaskLabelsByDate[dateKey] ?? []);
-    setTasksRouteItems(
+    setDateTasksRouteTitle(getTasksTitleFromDateKey(dateKey));
+    setDateTasksRouteDateKey(dateKey);
+    setSelectedDateKey(dateKey);
+    setDateTasksRouteItems(
       tasks.map((task, index) => ({
         id: `${dateKey}-${task}-${index}`,
         label: task,
-        status: completedLabels.has(task) ? "done" : "todo",
+        status: "todo",
         accumulatedMs: 0,
         startedAt: null,
-        completedAt: completedLabels.has(task) ? Date.now() : null,
-        completedDurationMs: completedLabels.has(task) ? 0 : null,
+        completedAt: null,
+        completedDurationMs: null,
       }))
     );
-    setShowClearStamp(false);
-    setPreviousOverlayRoute(overlayRoute);
-    navigate(buildRoutePath("tasks", `date=${encodeURIComponent(dateKey)}`));
+    navigate(buildRoutePath("dateTasks", `date=${encodeURIComponent(dateKey)}`));
     setIsDrawerOpen(false);
   };
 
-  const handleTaskAction = (
-    taskId: string,
-    action: "start" | "pause" | "resume" | "complete"
-  ) => {
+  const handleDateTaskAction = (taskId: string, action: "start" | "pause" | "resume" | "complete") => {
     if (action === "start" || action === "resume") {
       startSession("focus");
     }
     const nowMs = Date.now();
-    setTasksRouteItems((prevItems) =>
+    setDateTasksRouteItems((prevItems) =>
       prevItems.map((item) => {
         if (item.id !== taskId) {
           return item;
@@ -417,8 +357,7 @@ function App() {
           return item;
         }
         if (action === "complete") {
-          const runningMs =
-            item.status === "in_progress" && item.startedAt ? nowMs - item.startedAt : 0;
+          const runningMs = item.status === "in_progress" && item.startedAt ? nowMs - item.startedAt : 0;
           const completedMs = item.accumulatedMs + runningMs;
           return {
             ...item,
@@ -437,8 +376,7 @@ function App() {
           };
         }
         if (action === "pause") {
-          const runningMs =
-            item.status === "in_progress" && item.startedAt ? nowMs - item.startedAt : 0;
+          const runningMs = item.status === "in_progress" && item.startedAt ? nowMs - item.startedAt : 0;
           return {
             ...item,
             status: "paused",
@@ -449,24 +387,10 @@ function App() {
         return item;
       })
     );
-
-    if (action === "complete" && tasksRouteDateKey) {
-      setCompletedTaskLabelsByDate((prev) => {
-        const current = new Set(prev[tasksRouteDateKey] ?? []);
-        const target = tasksRouteItems.find((item) => item.id === taskId);
-        if (target) {
-          current.add(target.label);
-        }
-        return {
-          ...prev,
-          [tasksRouteDateKey]: Array.from(current),
-        };
-      });
-    }
   };
 
-  const handleReorderTasks = (orderedIds: string[]) => {
-    setTasksRouteItems((prevItems) => {
+  const handleDateReorderTasks = (orderedIds: string[]) => {
+    setDateTasksRouteItems((prevItems) => {
       const itemMap = new Map(prevItems.map((item) => [item.id, item]));
       const reordered = orderedIds
         .map((id) => itemMap.get(id))
@@ -476,17 +400,17 @@ function App() {
     });
   };
 
-  const handleAddTasks = (labels: string[]) => {
+  const handleDateAddTasks = (labels: string[]) => {
     if (labels.length === 0) {
       return;
     }
 
-    setTasksRouteItems((prevItems) => {
+    setDateTasksRouteItems((prevItems) => {
       const existing = new Set(prevItems.map((item) => item.label));
       const nextItems = labels
         .filter((label) => !existing.has(label))
         .map((label, index) => ({
-          id: `${tasksRouteDateKey ?? "today"}-${label}-${Date.now()}-${index}`,
+          id: `${dateTasksRouteDateKey ?? "today"}-${label}-${Date.now()}-${index}`,
           label,
           status: "todo" as const,
           accumulatedMs: 0,
@@ -498,8 +422,8 @@ function App() {
     });
   };
 
-  const handleTaskMenuAction = async (taskId: string) => {
-    const target = tasksRouteItems.find((item) => item.id === taskId);
+  const handleDateTaskMenuAction = async (taskId: string) => {
+    const target = dateTasksRouteItems.find((item) => item.id === taskId);
     if (!target) {
       return;
     }
@@ -536,14 +460,7 @@ function App() {
     }
 
     if (result === "delete") {
-      setTasksRouteItems((prevItems) => prevItems.filter((item) => item.id !== taskId));
-      if (tasksRouteDateKey) {
-        setCompletedTaskLabelsByDate((prev) => {
-          const labels = prev[tasksRouteDateKey] ?? [];
-          const nextLabels = labels.filter((label) => label !== target.label);
-          return { ...prev, [tasksRouteDateKey]: nextLabels };
-        });
-      }
+      setDateTasksRouteItems((prevItems) => prevItems.filter((item) => item.id !== taskId));
       toast.show({
         type: "positive",
         title: "삭제됨",
@@ -553,9 +470,9 @@ function App() {
     }
   };
 
-  const tasksSummary = useMemo(() => {
-    const totalCount = tasksRouteItems.length;
-    const completedItems = tasksRouteItems.filter((item) => item.status === "done");
+  const dateTasksSummary = useMemo(() => {
+    const totalCount = dateTasksRouteItems.length;
+    const completedItems = dateTasksRouteItems.filter((item) => item.status === "done");
     const completedCount = completedItems.length;
     const completedMs = completedItems.reduce(
       (acc, item) => acc + (item.completedDurationMs ?? item.accumulatedMs),
@@ -570,14 +487,12 @@ function App() {
       totalMinutes,
       progressPercent,
     };
-  }, [tasksRouteItems]);
+  }, [dateTasksRouteItems]);
 
   const sessionSummary = useMemo(() => {
     const nowMs = Date.now();
-    const activeElapsed =
-      sessionState.active && sessionState.startedAt ? nowMs - sessionState.startedAt : 0;
-    const focusMs =
-      sessionState.focusMs + (sessionState.active === "focus" ? activeElapsed : 0);
+    const activeElapsed = sessionState.active && sessionState.startedAt ? nowMs - sessionState.startedAt : 0;
+    const focusMs = sessionState.focusMs + (sessionState.active === "focus" ? activeElapsed : 0);
     const restMs = sessionState.restMs + (sessionState.active === "rest" ? activeElapsed : 0);
     return {
       active: sessionState.active,
@@ -599,42 +514,30 @@ function App() {
   };
 
   useEffect(() => {
-    if (overlayRoute !== "tasks") {
+    if (overlayRoute !== "dateTasks") {
       return;
     }
 
     const dateParam = new URLSearchParams(location.search).get("date");
     if (!dateParam) {
-      if (tasksRouteDateKey !== null) {
-        setTasksRouteDateKey(null);
-        setTasksRouteTitle(ROUTE_LABEL.tasks);
+      if (dateTasksRouteDateKey !== null) {
+        setDateTasksRouteDateKey(null);
+        setDateTasksRouteTitle(ROUTE_LABEL.dateTasks);
       }
+      setSelectedDateKey(null);
       return;
     }
 
-    if (dateParam === tasksRouteDateKey) {
+    if (dateParam === dateTasksRouteDateKey) {
+      setSelectedDateKey(dateParam);
       return;
     }
 
-    setTasksRouteDateKey(dateParam);
-    setTasksRouteTitle(getTasksTitleFromDateKey(dateParam));
-    setTasksRouteItems([]);
-    setShowClearStamp(false);
-  }, [location.search, overlayRoute, tasksRouteDateKey]);
-
-  useEffect(() => {
-    if (overlayRoute !== "tasks" || !tasksRouteDateKey) {
-      setShowClearStamp(false);
-      return;
-    }
-    const isAllDone =
-      tasksRouteItems.length > 0 && tasksRouteItems.every((item) => item.status === "done");
-    if (!isAllDone || celebratedDates[tasksRouteDateKey]) {
-      return;
-    }
-    setCelebratedDates((prev) => ({ ...prev, [tasksRouteDateKey]: true }));
-    setShowClearStamp(true);
-  }, [overlayRoute, tasksRouteDateKey, tasksRouteItems, celebratedDates]);
+    setDateTasksRouteDateKey(dateParam);
+    setDateTasksRouteTitle(getTasksTitleFromDateKey(dateParam));
+    setSelectedDateKey(dateParam);
+    setDateTasksRouteItems([]);
+  }, [dateTasksRouteDateKey, location.search, overlayRoute, setSelectedDateKey]);
 
   const navigateTo = (nextRoute: RouteKey) => {
     if (activeRoute === nextRoute) {
@@ -642,144 +545,105 @@ function App() {
       return;
     }
 
-    if (overlayRoute) {
-      setPreviousOverlayRoute(overlayRoute);
-    }
-
-    if (nextRoute === "tasks") {
-      setTasksRouteTitle(ROUTE_LABEL.tasks);
-      setTasksRouteDateKey(null);
-      setTasksRouteItems([]);
-      setShowClearStamp(false);
-    }
-
     navigate(ROUTE_PATH[nextRoute]);
     setIsDrawerOpen(false);
   };
 
   const handleOverlayBack = () => {
-    if (overlayRoute === "memo" && previousOverlayRoute === "tasks") {
-      setPreviousOverlayRoute(null);
-      navigate(
-        buildRoutePath(
-          "tasks",
-          tasksRouteDateKey ? `date=${encodeURIComponent(tasksRouteDateKey)}` : undefined
-        )
-      );
-      return;
+    navigate(-1);
+  };
+
+  const navigationActions = useMemo(
+    () => ({
+      activeRoute,
+      openMenu: () => setIsDrawerOpen(true),
+      closeMenu: () => setIsDrawerOpen(false),
+      navigateTo,
+      goMain: () => navigateTo(MAIN_ROUTE),
+      goSettings: () => navigateTo("settings"),
+      goOverlayBack: handleOverlayBack,
+      openTasksForDate,
+    }),
+    [activeRoute, handleOverlayBack, navigateTo, openTasksForDate]
+  );
+
+  const renderOverlayBody = (route: RouteKey) => {
+    switch (route) {
+      case "settings":
+        return <SettingsPage />;
+      case "dateTasks":
+        return (
+          <TodoRoutePage
+            items={dateTasksRouteItems}
+            memoDateKey={dateTasksRouteDateKey}
+            onTaskAction={handleDateTaskAction}
+            onTaskMenuAction={handleDateTaskMenuAction}
+            summary={dateTasksSummary}
+            session={sessionSummary}
+            onToggleFocus={toggleFocusSession}
+            onToggleRest={toggleRestSession}
+            onApplyRestDurationOnce={handleApplyRestDurationOnce}
+            onSaveRestDurationDefault={handleSaveRestDurationDefault}
+            onAddTasks={handleDateAddTasks}
+            onReorderTasks={handleDateReorderTasks}
+          />
+        );
+      case "tasks":
+        return <TaskManagementRoutePage />;
+      case "memo":
+        return <MemoPage />;
+      default:
+        return <SimpleRoutePage title={ROUTE_LABEL[route]} />;
     }
-    navigateTo(MAIN_ROUTE);
-  };
-
-  const currentRoute = activeRoute;
-  const goToday = () => {
-    const nowDate = new Date();
-    setViewMonth(new Date(nowDate.getFullYear(), nowDate.getMonth(), 1));
-  };
-
-  const handleLogout = () => {
-    setIsDrawerOpen(false);
-    toast.show({
-      type: "positive",
-      title: "로그아웃",
-      message: "로그아웃 기능은 곧 연결할게요.",
-      duration: 1800,
-    });
   };
 
   return (
-    <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
-      <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
-        <PageHeader
-          route={MAIN_ROUTE}
-          month={viewMonth}
-          onMonthChange={setViewMonth}
-          onOpenMenu={() => setIsDrawerOpen(true)}
-          onGoMain={() => navigateTo(MAIN_ROUTE)}
-          onGoSettings={() => navigateTo("settings")}
-        />
+    <AppNavigationProvider value={navigationActions}>
+      <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
+        <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
+          <CalendarRootPage isOverlayActive={Boolean(overlayRoute)} />
 
-        <CalendarPage
-          month={viewMonth}
-          onMonthChange={setViewMonth}
-          holidaysByDate={holidaysByDate}
-          isActive={!overlayRoute}
-          onOpenTasksForDate={openTasksForDate}
-          completedTaskLabelsByDate={completedTaskLabelsByDate}
-        />
-        <FooterBar onGoToday={goToday} />
-
-        {overlayRoute ? (
-          <div
-            className="absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
-            onTouchStart={(event) => {
-              const touch = event.touches[0];
-              overlayTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
-            }}
-            onTouchEnd={(event) => {
-              const start = overlayTouchStartRef.current;
-              if (!start) {
-                return;
-              }
-              const touch = event.changedTouches[0];
-              const deltaX = touch.clientX - start.x;
-              const deltaY = touch.clientY - start.y;
-              if (deltaX > 72 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                navigateTo(MAIN_ROUTE);
-              }
-              overlayTouchStartRef.current = null;
-            }}
-          >
-            <PageHeader
-              route={overlayRoute}
-              routeTitleOverride={overlayRoute === "tasks" ? tasksRouteTitle : undefined}
-              month={viewMonth}
-              onMonthChange={setViewMonth}
-              onOpenMenu={() => {}}
-              onGoMain={handleOverlayBack}
-              onGoSettings={() => navigateTo("settings")}
-            />
-            {overlayRoute === "settings" ? (
-              <SettingsPage />
-            ) : overlayRoute === "tasks" ? (
-              <TodoRoutePage
-                isBlank
-                items={tasksRouteItems}
-                emptyMessage="이 날짜에는 할 일이 없어요."
-                onTaskAction={handleTaskAction}
-                onTaskMenuAction={handleTaskMenuAction}
-                summary={tasksSummary}
-                session={sessionSummary}
-                onToggleFocus={toggleFocusSession}
-                onToggleRest={toggleRestSession}
-                onApplyRestDurationOnce={handleApplyRestDurationOnce}
-                onSaveRestDurationDefault={handleSaveRestDurationDefault}
-                memoDateKey={tasksRouteDateKey}
-                onAddTasks={handleAddTasks}
-                onReorderTasks={handleReorderTasks}
-                showClearStamp={showClearStamp}
-                onCloseClearStamp={() => setShowClearStamp(false)}
+          {overlayRoute ? (
+            <div
+              className="absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
+              onTouchStart={(event) => {
+                const touch = event.touches[0];
+                overlayTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+              }}
+              onTouchEnd={(event) => {
+                const start = overlayTouchStartRef.current;
+                if (!start) {
+                  return;
+                }
+                const touch = event.changedTouches[0];
+                const deltaX = touch.clientX - start.x;
+                const deltaY = touch.clientY - start.y;
+                if (deltaX > 72 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                  handleOverlayBack();
+                }
+                overlayTouchStartRef.current = null;
+              }}
+            >
+              <PageHeader
+                route={overlayRoute}
+                routeTitleOverride={overlayRoute === "dateTasks" ? dateTasksRouteTitle : undefined}
+                month={viewMonth}
+                onMonthChange={setViewMonth}
+                onOpenMenu={() => {}}
+                onGoMain={handleOverlayBack}
+                onGoSettings={() => navigateTo("settings")}
               />
-            ) : overlayRoute === "memo" ? (
-              <MemoPage />
-            ) : (
-              <SimpleRoutePage title={ROUTE_LABEL[overlayRoute]} />
-            )}
-          </div>
-        ) : null}
-      </section>
+              {renderOverlayBody(overlayRoute)}
+            </div>
+          ) : null}
+        </section>
 
-      <DrawerMenu
-        isOpen={isDrawerOpen}
-        activeRoute={currentRoute}
-        onClose={() => setIsDrawerOpen(false)}
-        onSelectRoute={navigateTo}
-        onLogout={handleLogout}
-      />
-      <Toast />
-      <ConfirmModal />
-      <ActionSheet />
-    </main>
+        <DrawerMenu isOpen={isDrawerOpen} />
+        <Toast />
+        <ConfirmModal />
+        <ActionSheet />
+      </main>
+    </AppNavigationProvider>
   );
 }
 

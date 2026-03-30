@@ -69,10 +69,10 @@ export function ActionSheet() {
       >
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-base-300/80" />
         {active.title ? (
-          <h2 className="m-0 text-sm font-semibold text-base-content">{active.title}</h2>
+          <h2 className="m-0 text-center text-sm font-semibold text-base-content">{active.title}</h2>
         ) : null}
         {active.message ? (
-          <p className="mt-1 mb-3 text-xs text-base-content/65">{active.message}</p>
+          <p className="mt-1 mb-3 text-center text-xs text-base-content/65">{active.message}</p>
         ) : null}
         <div className="space-y-1.5">
           {active.items.map((item, index) => (

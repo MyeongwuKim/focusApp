@@ -17,20 +17,7 @@ const CATEGORY_LABEL: Record<PickerCategory, string> = {
   life: "생활",
 };
 
-const TASK_LIBRARY: PickerTask[] = [
-  { id: "study-algo", label: "알고리즘 문제풀기", category: "study" },
-  { id: "study-english", label: "영어 단어 암기", category: "study" },
-  { id: "study-read", label: "전공 서적 읽기", category: "study" },
-  { id: "health-walk", label: "30분 걷기", category: "health" },
-  { id: "health-stretch", label: "스트레칭", category: "health" },
-  { id: "health-water", label: "물 2L 마시기", category: "health" },
-  { id: "work-docs", label: "프로젝트 문서 정리", category: "work" },
-  { id: "work-review", label: "PR 리뷰", category: "work" },
-  { id: "work-report", label: "주간 리포트 작성", category: "work" },
-  { id: "life-clean", label: "방 정리", category: "life" },
-  { id: "life-journal", label: "하루 회고", category: "life" },
-  { id: "life-budget", label: "지출 정리", category: "life" },
-];
+const TASK_LIBRARY: PickerTask[] = [];
 
 type TodoTaskPickerModalProps = {
   isOpen: boolean;

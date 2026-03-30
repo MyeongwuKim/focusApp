@@ -59,10 +59,10 @@ export function PageHeader({
 
   if (route === MAIN_ROUTE) {
     return (
-      <header className="relative mb-2 grid h-12 grid-cols-[44px_1fr_44px] items-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
+      <header className="relative mb-2 flex h-12 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
         <button
           type="button"
-          className="btn btn-sm btn-ghost btn-circle"
+          className="btn btn-sm btn-ghost btn-circle absolute left-2 top-1/2 -translate-y-1/2"
           onClick={onOpenMenu}
           aria-label="메뉴 열기"
         >
@@ -73,7 +73,7 @@ export function PageHeader({
           <MonthDropdown month={month} onChange={onMonthChange} />
         </div>
         {weatherEnabled && weather ? (
-          <div className="pointer-events-none absolute top-1/2 right-[3rem] -translate-y-1/2">
+          <div className="pointer-events-none absolute top-1/2 right-12 -translate-y-1/2">
             <div
               className={[
                 "inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium",
@@ -89,9 +89,9 @@ export function PageHeader({
         ) : null}
         <button
           type="button"
-          className="btn btn-sm btn-ghost btn-circle justify-self-end"
+          className="btn btn-sm btn-ghost btn-circle absolute right-2 top-1/2 -translate-y-1/2"
           onClick={onGoSettings}
-          aria-label="설정으로 이동"
+          aria-label="옵션으로 이동"
         >
           <FiSettings size={18} />
         </button>
@@ -100,10 +100,10 @@ export function PageHeader({
   }
 
   return (
-    <header className="mb-2 grid h-12 grid-cols-[44px_1fr_44px] items-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
+    <header className="relative mb-2 flex h-12 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
       <button
         type="button"
-        className="btn btn-sm btn-ghost btn-circle"
+        className="btn btn-sm btn-ghost btn-circle absolute left-2 top-1/2 -translate-y-1/2"
         onClick={onGoMain}
         aria-label="뒤로가기"
       >
@@ -112,7 +112,16 @@ export function PageHeader({
       <h1 className="m-0 text-center text-lg font-semibold text-base-content">
         {routeTitleOverride ?? ROUTE_LABEL[route]}
       </h1>
-      <div aria-hidden="true" className="h-9 w-9" />
+      {route !== "settings" ? (
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost btn-circle absolute right-2 top-1/2 -translate-y-1/2"
+          onClick={onGoSettings}
+          aria-label="옵션으로 이동"
+        >
+          <FiSettings size={18} />
+        </button>
+      ) : null}
     </header>
   );
 }
