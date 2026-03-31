@@ -5,12 +5,14 @@ apps/*/node_modules/
 
 # build outputs
 apps/web-ui/dist/
+apps/api/dist/
 apps/mobile/web-dist/
 apps/mobile/app/embeddedWebUiBundle.ts
 
 # Expo / React Native local artifacts
 apps/mobile/.expo/
 apps/mobile/expo-env.d.ts
+apps/api/.env
 
 # OS files
 .DS_Store

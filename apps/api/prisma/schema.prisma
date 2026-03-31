@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  email     String    @unique
+  name      String?
+  sessions  Session[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Session {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  token     String   @unique
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DailyLog {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String
+  dateKey     String
+  monthKey    String
+  memo        String?
+  todos       DailyTaskEntry[]
+  todoCount   Int        @default(0)
+  doneCount   Int        @default(0)
+  previewTodos String[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([userId, dateKey])
+  @@index([userId, monthKey])
+}
+
+model TaskCollection {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  name      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks Task[]
+
+  @@index([userId, order])
+}
+
+model Task {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String
+  collectionId String         @db.ObjectId
+  collection   TaskCollection @relation(fields: [collectionId], references: [id])
+  title        String
+  note         String?
+  isArchived   Boolean        @default(false)
+  order        Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([userId, collectionId, order])
+  @@index([userId, isArchived, order])
+}
+
+type DailyTaskEntry {
+  id                 String
+  taskId             String?
+  titleSnapshot      String?
+  content            String
+  done               Boolean
+  order              Int
+  createdAt          DateTime
+  startedAt          DateTime?
+  completedAt        DateTime?
+  deviationSeconds   Int
+  actualFocusSeconds Int?
+}
