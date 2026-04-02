@@ -18,8 +18,7 @@ import { actionSheet, toast, useAppStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import { FiClock, FiTrash2 } from "react-icons/fi";
 import { fetchCurrentWeather, SEOUL_COORDINATES, type Coordinates } from "./utils/weather";
-import { QueryTestPage } from "./pages/QueryTestPage";
-import { useDailyLogsByMonthQuery } from "./queries/useDailyLogsByMonthQuery";
+import { dailyLogsByMonthQuery } from "./queries/useDailyLogsQuery";
 
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 type SessionMode = "focus" | "rest" | null;
@@ -149,9 +148,9 @@ function App() {
   const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
-  const today = new Date();
-  const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-  const { data } = useDailyLogsByMonthQuery(monthKey);
+
+  const monthKey = `${viewMonth.getFullYear()}-${String(viewMonth.getMonth() + 1).padStart(2, "0")}`;
+  const { data } = dailyLogsByMonthQuery(monthKey);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -600,8 +599,6 @@ function App() {
         return <TaskManagementRoutePage />;
       case "memo":
         return <MemoPage />;
-      case "stats":
-        return <QueryTestPage title={ROUTE_LABEL.stats} />;
       default:
         return <SimpleRoutePage title={ROUTE_LABEL[route]} />;
     }

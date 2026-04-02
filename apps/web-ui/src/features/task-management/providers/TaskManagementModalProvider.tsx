@@ -8,7 +8,10 @@ type CreateTaskInput = { label: string; collectionId: string };
 
 type TaskManagementModalContextValue = {
   openCreateCollection: () => Promise<string | null>;
-  openCreateTask: (collections: ManagedCollection[]) => Promise<CreateTaskInput | null>;
+  openCreateTask: (
+    collections: ManagedCollection[],
+    defaultCollectionId?: string
+  ) => Promise<CreateTaskInput | null>;
   openRename: (input: {
     title: string;
     initialValue: string;
@@ -22,6 +25,7 @@ type ModalState =
   | {
       type: "createTask";
       collections: ManagedCollection[];
+      defaultCollectionId?: string;
       resolve: (value: CreateTaskInput | null) => void;
     }
   | {
@@ -53,9 +57,9 @@ export function TaskManagementModalProvider({ children }: { children: ReactNode 
         new Promise((resolve) => {
           setModal({ type: "createCollection", resolve });
         }),
-      openCreateTask: (collections) =>
+      openCreateTask: (collections, defaultCollectionId) =>
         new Promise((resolve) => {
-          setModal({ type: "createTask", collections, resolve });
+          setModal({ type: "createTask", collections, defaultCollectionId, resolve });
         }),
       openRename: ({ title, initialValue, placeholder }) =>
         new Promise((resolve) => {
@@ -84,6 +88,7 @@ export function TaskManagementModalProvider({ children }: { children: ReactNode 
       <CreateTaskModal
         isOpen={modal.type === "createTask"}
         collections={modal.type === "createTask" ? modal.collections : []}
+        defaultCollectionId={modal.type === "createTask" ? modal.defaultCollectionId : undefined}
         onClose={closeWithNull}
         onCreate={(input) => {
           if (modal.type !== "createTask") {

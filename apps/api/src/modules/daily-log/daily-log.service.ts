@@ -8,6 +8,7 @@ interface BaseInput {
 
 interface AddTodoInput extends BaseInput {
   content: string;
+  taskId?: string | null;
   order?: number | null;
 }
 
@@ -47,12 +48,24 @@ export class DailyLogService {
       monthKey: getMonthKey(input.dateKey)
     });
 
+    let linkedTaskTitle: string | null = null;
+    if (input.taskId) {
+      const linkedTask = await this.repository.findTaskById(input.userId, input.taskId);
+      if (!linkedTask) {
+        throw new Error("TASK_NOT_FOUND");
+      }
+      linkedTaskTitle = linkedTask.title;
+    }
+
+    const createdAt = new Date();
     const todo: TodoItemRecord = {
       id: randomUUID(),
+      taskId: input.taskId ?? null,
+      titleSnapshot: linkedTaskTitle,
       content: input.content,
       done: false,
       order: input.order ?? log.todos.length,
-      createdAt: new Date(),
+      createdAt,
       startedAt: null,
       completedAt: null,
       deviationSeconds: 0,
@@ -60,7 +73,13 @@ export class DailyLogService {
     };
 
     const nextTodos = [...log.todos, todo];
-    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+    const nextLog = await this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+
+    if (input.taskId) {
+      await this.repository.updateTaskLastUsedAt(input.userId, input.taskId, createdAt);
+    }
+
+    return nextLog;
   }
 
   async startTodo(input: CompleteTodoInput) {

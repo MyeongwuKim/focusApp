@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { FiChevronDown } from "react-icons/fi";
+import { SelectDropbox } from "./SelectDropbox";
 
 type MonthDropdownProps = {
   month: Date;
@@ -69,17 +70,15 @@ export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
         }}
       >
         <label className="mb-2 block text-xs font-medium text-base-content/70">연도</label>
-        <select
-          className="select select-sm select-bordered mb-3 h-10 w-full"
+        <SelectDropbox
+          className="select-sm mb-3 h-10"
           value={month.getFullYear()}
           onChange={(event) => handleYearChange(Number(event.target.value))}
-        >
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}년
-            </option>
-          ))}
-        </select>
+          options={years.map((year) => ({
+            value: String(year),
+            label: `${year}년`
+          }))}
+        />
 
         <div className="grid grid-cols-4 gap-2">
           {Array.from({ length: 12 }, (_, monthIndex) => (

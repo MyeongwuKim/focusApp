@@ -1,14 +1,8 @@
 import { FiPlus } from "react-icons/fi";
+import { useTaskManagementView } from "../providers/TaskManagementViewProvider";
 
-type TaskManagementActionsProps = {
-  onOpenCollection: () => void;
-  onOpenTaskPicker: () => void;
-};
-
-export function TaskManagementActions({
-  onOpenCollection,
-  onOpenTaskPicker,
-}: TaskManagementActionsProps) {
+export function TaskManagementActions() {
+  const { onOpenCollection, onOpenTaskPicker } = useTaskManagementView();
   return (
     <div className="flex w-full items-center justify-end gap-2 select-none">
       <button

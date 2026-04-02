@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { FiEdit3, FiTrash2 } from "react-icons/fi";
 import { actionSheet } from "../../../stores";
+import { useTaskManagementView } from "../providers/TaskManagementViewProvider";
 import { TaskManagementCollectionItem } from "./TaskManagementCollectionItem";
 import { TaskManagementTaskItem } from "./TaskManagementTaskItem";
 
@@ -15,26 +16,19 @@ export type ManagedCollection = {
   name: string;
 };
 
-type TaskManagementBodyProps = {
-  tasks: ManagedTaskItem[];
-  collections: ManagedCollection[];
-  onRequestRenameTask: (taskId: string) => void;
-  onRequestDeleteTask: (taskId: string) => void;
-  onRequestRenameCollection: (collectionId: string) => void;
-  onRequestDeleteCollection: (collectionId: string) => void;
-};
-
-type CollectionFilter = "all" | string;
-
-export function TaskManagementBody({
-  tasks,
-  collections,
-  onRequestRenameTask,
-  onRequestDeleteTask,
-  onRequestRenameCollection,
-  onRequestDeleteCollection,
-}: TaskManagementBodyProps) {
-  const [selectedCollectionId, setSelectedCollectionId] = useState<CollectionFilter>("all");
+export function TaskManagementBody() {
+  const {
+    tasks,
+    collections,
+    selectedCollectionId,
+    onSelectCollection,
+    selectedTaskId,
+    onSelectTask,
+    onRequestRenameTask,
+    onRequestDeleteTask,
+    onRequestRenameCollection,
+    onRequestDeleteCollection,
+  } = useTaskManagementView();
 
   const collectionCountMap = useMemo(() => {
     const counts = new Map<string, number>();
@@ -134,14 +128,14 @@ export function TaskManagementBody({
       return;
     }
     if (!collections.some((collection) => collection.id === selectedCollectionId)) {
-      setSelectedCollectionId("all");
+      onSelectCollection("all");
     }
-  }, [collections, selectedCollectionId]);
+  }, [collections, onSelectCollection, selectedCollectionId]);
 
   return (
     <div className="min-h-0 flex-1 select-none">
-      <div className="grid h-full min-h-0 grid-cols-[1fr_104px] gap-2">
-        <div className="min-h-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+      <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_136px] gap-2">
+        <div className="min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
           <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
             {visibleTasks.length > 0 ? (
               visibleTasks.map((task) => (
@@ -149,6 +143,8 @@ export function TaskManagementBody({
                   key={task.id}
                   label={task.label}
                   collectionName={collectionNameById.get(task.collectionId) ?? "미분류"}
+                  active={selectedTaskId === task.id}
+                  onSelect={() => onSelectTask(task.id)}
                   onOpenMenu={() => {
                     void handleTaskMenu(task.id);
                   }}
@@ -160,20 +156,14 @@ export function TaskManagementBody({
           </div>
         </div>
 
-        <aside className="rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+        <aside className="min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
           <div className="space-y-1.5">
-            <button
-              type="button"
-              className={[
-                "btn btn-sm h-9 min-h-9 w-full rounded-lg border px-1.5 text-[11px]",
-                selectedCollectionId === "all"
-                  ? "border-primary/60 bg-primary/16 text-primary"
-                  : "border-base-300/70 bg-base-100/75 text-base-content/70",
-              ].join(" ")}
-              onClick={() => setSelectedCollectionId("all")}
-            >
-              <span className="truncate">{`전체 ${tasks.length}`}</span>
-            </button>
+            <TaskManagementCollectionItem
+              name="전체"
+              count={tasks.length}
+              active={selectedCollectionId === "all"}
+              onSelect={() => onSelectCollection("all")}
+            />
             {collections.map((collection) => {
               const active = selectedCollectionId === collection.id;
               return (
@@ -182,7 +172,7 @@ export function TaskManagementBody({
                   name={collection.name}
                   count={collectionCountMap.get(collection.id) ?? 0}
                   active={active}
-                  onSelect={() => setSelectedCollectionId(collection.id)}
+                  onSelect={() => onSelectCollection(collection.id)}
                   onOpenMenu={() => {
                     void handleCollectionMenu(collection.id);
                   }}

@@ -1,39 +1,7 @@
-export type DailyLogTodo = {
-  id: string;
-  content: string;
-  done: boolean;
-  order: number;
-  createdAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  deviationSeconds: number;
-  actualFocusSeconds: number | null;
-};
+import type { DailyLogsByMonthQuery } from "../graphql/generated.ts";
+import type { GraphQLResponse } from "./graphqlResponse";
 
-export type DailyLog = {
-  id: string;
-  userId: string;
-  dateKey: string;
-  monthKey: string;
-  memo: string | null;
-  todos: DailyLogTodo[];
-  todoCount: number;
-  doneCount: number;
-  previewTodos: string[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-type DailyLogsByMonthQueryResponse = {
-  dailyLogsByMonth: DailyLog[];
-};
-
-type GraphQLResponse<T> = {
-  data?: T;
-  errors?: Array<{ message?: string }>;
-};
-
-const DAILY_LOGS_BY_MONTH_QUERY = `
+const DAILY_LOGS_BY_MONTH_QUERY = /* GraphQL */ `
   query DailyLogsByMonth($monthKey: String!) {
     dailyLogsByMonth(monthKey: $monthKey) {
       id
@@ -62,6 +30,7 @@ const DAILY_LOGS_BY_MONTH_QUERY = `
 `;
 
 export async function fetchDailyLogsByMonth(monthKey: string) {
+  console.log(monthKey);
   const response = await fetch("/graphql", {
     method: "POST",
     headers: {
@@ -77,7 +46,7 @@ export async function fetchDailyLogsByMonth(monthKey: string) {
     throw new Error(`Daily logs fetch failed: ${response.status}`);
   }
 
-  const result = (await response.json()) as GraphQLResponse<DailyLogsByMonthQueryResponse>;
+  const result = (await response.json()) as GraphQLResponse<DailyLogsByMonthQuery>;
   if (result.errors?.length) {
     throw new Error(result.errors[0]?.message ?? "GraphQL dailyLogsByMonth failed");
   }

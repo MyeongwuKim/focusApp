@@ -1,25 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiX } from "react-icons/fi";
+import { SelectDropbox } from "../../../components/SelectDropbox";
 import type { ManagedCollection } from "./TaskManagementBody";
 
 type CreateTaskModalProps = {
   isOpen: boolean;
   collections: ManagedCollection[];
+  defaultCollectionId?: string;
   onClose: () => void;
   onCreate: (input: { label: string; collectionId: string }) => void;
 };
 
-export function CreateTaskModal({ isOpen, collections, onClose, onCreate }: CreateTaskModalProps) {
+export function CreateTaskModal({
+  isOpen,
+  collections,
+  defaultCollectionId,
+  onClose,
+  onCreate,
+}: CreateTaskModalProps) {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [label, setLabel] = useState("");
   const [collectionId, setCollectionId] = useState("");
 
   const firstCollectionId = useMemo(() => collections[0]?.id ?? "", [collections]);
+  const initialCollectionId =
+    defaultCollectionId && collections.some((collection) => collection.id === defaultCollectionId)
+      ? defaultCollectionId
+      : firstCollectionId;
 
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
-      setCollectionId((prev) => prev || firstCollectionId);
+      setCollectionId(initialCollectionId);
       return;
     }
     const timer = window.setTimeout(() => {
@@ -27,9 +39,12 @@ export function CreateTaskModal({ isOpen, collections, onClose, onCreate }: Crea
       setLabel("");
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [firstCollectionId, isOpen]);
+  }, [initialCollectionId, isOpen]);
 
   useEffect(() => {
+    if (!collectionId) {
+      return;
+    }
     if (!collections.find((collection) => collection.id === collectionId)) {
       setCollectionId(firstCollectionId);
     }
@@ -69,17 +84,14 @@ export function CreateTaskModal({ isOpen, collections, onClose, onCreate }: Crea
         </div>
 
         <div className="space-y-3">
-          <select
-            className="select select-bordered w-full focus:outline-none focus:ring-0 focus:border-base-300"
+          <SelectDropbox
             value={collectionId}
             onChange={(event) => setCollectionId(event.target.value)}
-          >
-            {collections.map((collection) => (
-              <option key={collection.id} value={collection.id}>
-                {collection.name}
-              </option>
-            ))}
-          </select>
+            options={collections.map((collection) => ({
+              value: collection.id,
+              label: collection.name,
+            }))}
+          />
           <input
             value={label}
             onChange={(event) => setLabel(event.target.value)}

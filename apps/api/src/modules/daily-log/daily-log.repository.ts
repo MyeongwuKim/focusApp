@@ -9,6 +9,8 @@ export interface UpsertDailyLogInput {
 
 export interface TodoItemRecord {
   id: string;
+  taskId?: string | null;
+  titleSnapshot?: string | null;
   content: string;
   done: boolean;
   order: number;
@@ -103,6 +105,27 @@ export class DailyLogRepository {
         todoCount,
         doneCount,
         previewTodos
+      }
+    });
+  }
+
+  findTaskById(userId: string, taskId: string) {
+    return this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        userId
+      }
+    });
+  }
+
+  updateTaskLastUsedAt(userId: string, taskId: string, lastUsedAt: Date) {
+    return this.prisma.task.updateMany({
+      where: {
+        id: taskId,
+        userId
+      },
+      data: {
+        lastUsedAt
       }
     });
   }

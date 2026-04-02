@@ -1,6 +1,6 @@
-import { GraphQLError } from "graphql";
 import { gql } from "graphql-tag";
 import type { GraphQLContext } from "../../graphql/context.js";
+import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
 import { UserRepository } from "./user.repository.js";
 import { UserService } from "./user.service.js";
 
@@ -46,12 +46,9 @@ const userResolvers = {
         const userService = new UserService(userRepository);
         return await userService.createUser(args.input);
       } catch (error) {
-        if (error instanceof Error && error.message === "EMAIL_ALREADY_EXISTS") {
-          throw new GraphQLError("Email already exists", {
-            extensions: { code: "BAD_USER_INPUT" },
-          });
-        }
-        throw error;
+        rethrowMappedGraphQLError(error, {
+          EMAIL_ALREADY_EXISTS: { message: "Email already exists" }
+        });
       }
     },
   },

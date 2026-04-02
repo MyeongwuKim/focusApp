@@ -1,6 +1,10 @@
 import { gql } from "graphql-tag";
 import { dailyLogResolvers, dailyLogTypeDefs } from "../modules/daily-log/daily-log.resolver.js";
 import { userResolvers, userTypeDefs } from "../modules/user/user.resolver.js";
+import {
+  taskCollectionResolvers,
+  taskCollectionTypeDefs
+} from "../modules/task-collection/task-collection.resolver.js";
 
 type ResolverRecord = Record<string, Record<string, unknown>>;
 
@@ -30,6 +34,7 @@ export const typeDefs = [
 
   dailyLogTypeDefs,
   userTypeDefs,
+  taskCollectionTypeDefs,
 ];
 
-export const resolvers = mergeResolvers(dailyLogResolvers, userResolvers);
+export const resolvers = mergeResolvers(dailyLogResolvers, userResolvers, taskCollectionResolvers);

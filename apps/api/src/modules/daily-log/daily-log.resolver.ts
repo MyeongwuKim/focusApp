@@ -1,8 +1,8 @@
-import { GraphQLError } from "graphql";
 import { gql } from "graphql-tag";
 import type { GraphQLContext } from "../../graphql/context.js";
 import { DailyLogRepository } from "./daily-log.repository.js";
 import { DailyLogService } from "./daily-log.service.js";
+import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
 
 export const dailyLogTypeDefs = gql`
   type TodoItem {
@@ -39,6 +39,7 @@ export const dailyLogTypeDefs = gql`
   input AddTodoInput {
     dateKey: String!
     content: String!
+    taskId: ID
     order: Int
   }
 
@@ -76,23 +77,11 @@ function toISOStringOrNull(value: Date | null) {
   return value ? value.toISOString() : null;
 }
 
-function mapKnownError(error: unknown): never {
-  if (error instanceof Error) {
-    if (error.message === "DAILY_LOG_NOT_FOUND") {
-      throw new GraphQLError("Daily log not found", {
-        extensions: { code: "BAD_USER_INPUT" }
-      });
-    }
-
-    if (error.message === "TODO_NOT_FOUND") {
-      throw new GraphQLError("Todo not found", {
-        extensions: { code: "BAD_USER_INPUT" }
-      });
-    }
-  }
-
-  throw error;
-}
+const dailyLogErrorMapping = {
+  DAILY_LOG_NOT_FOUND: { message: "데일리 로그를 찾을 수 없어요." },
+  TODO_NOT_FOUND: { message: "할일을 찾을 수 없어요." },
+  TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." }
+};
 
 export const dailyLogResolvers = {
   Query: {
@@ -130,6 +119,7 @@ export const dailyLogResolvers = {
         input: {
           dateKey: string;
           content: string;
+          taskId?: string | null;
           order?: number | null;
         };
       },
@@ -141,10 +131,11 @@ export const dailyLogResolvers = {
           userId: getUserId(context),
           dateKey: args.input.dateKey,
           content: args.input.content,
+          taskId: args.input.taskId,
           order: args.input.order
         });
       } catch (error) {
-        mapKnownError(error);
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
     startTodo: async (
@@ -160,7 +151,7 @@ export const dailyLogResolvers = {
           todoId: args.input.todoId
         });
       } catch (error) {
-        mapKnownError(error);
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
     completeTodo: async (
@@ -176,7 +167,7 @@ export const dailyLogResolvers = {
           todoId: args.input.todoId
         });
       } catch (error) {
-        mapKnownError(error);
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
     addDeviation: async (
@@ -193,7 +184,7 @@ export const dailyLogResolvers = {
           seconds: args.input.seconds
         });
       } catch (error) {
-        mapKnownError(error);
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     }
   },

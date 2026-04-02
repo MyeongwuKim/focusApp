@@ -7,6 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "web:dev": "pnpm -C apps/web-ui dev",
     "web:build": "pnpm -C apps/web-ui build",
+    "web:type": "pnpm -C apps/web-ui graphql:codegen",
     "api:dev": "pnpm -C apps/api dev",
     "api:build": "pnpm -C apps/api build",
     "api:start": "pnpm -C apps/api start",

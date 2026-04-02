@@ -61,9 +61,9 @@ model Task {
   collectionId String         @db.ObjectId
   collection   TaskCollection @relation(fields: [collectionId], references: [id])
   title        String
-  note         String?
   isArchived   Boolean        @default(false)
   order        Int            @default(0)
+  lastUsedAt   DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
