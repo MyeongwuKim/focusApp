@@ -7,7 +7,7 @@ const __dirname = path.dirname(__filename);
 
 const webDistDir = path.resolve(__dirname, '../apps/web-ui/dist');
 const mobileDistMirrorDir = path.resolve(__dirname, '../apps/mobile/web-dist');
-const outPath = path.resolve(__dirname, '../apps/mobile/app/embeddedWebUiBundle.ts');
+const outPath = path.resolve(__dirname, '../apps/mobile/src/features/webui/embeddedWebUiBundle.ts');
 
 const walkFiles = (dir, baseDir) => {
   const entries = readdirSync(dir, { withFileTypes: true });

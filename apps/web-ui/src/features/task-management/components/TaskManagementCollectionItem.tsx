@@ -5,6 +5,7 @@ type TaskManagementCollectionItemProps = {
   name: string;
   count: number;
   active: boolean;
+  dropActive?: boolean;
   onSelect: () => void;
   onOpenMenu?: () => void;
 };
@@ -13,14 +14,16 @@ function TaskManagementCollectionItemComponent({
   name,
   count,
   active,
+  dropActive = false,
   onSelect,
   onOpenMenu,
 }: TaskManagementCollectionItemProps) {
   return (
     <div
       className={[
-        "flex items-center gap-1 rounded-lg border px-1 py-1",
+        "flex items-center gap-1 rounded-lg border px-1 py-1 transition-[border-color,box-shadow,background-color]",
         active ? "border-primary/60 bg-primary/16" : "border-base-300/70 bg-base-100/75",
+        dropActive ? "border-success/70 bg-success/12 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]" : "",
       ].join(" ")}
     >
       <button
@@ -60,5 +63,6 @@ export const TaskManagementCollectionItem = memo(
     prev.name === next.name &&
     prev.count === next.count &&
     prev.active === next.active &&
+    prev.dropActive === next.dropActive &&
     Boolean(prev.onOpenMenu) === Boolean(next.onOpenMenu)
 );

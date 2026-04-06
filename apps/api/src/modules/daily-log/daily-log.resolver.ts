@@ -43,6 +43,16 @@ export const dailyLogTypeDefs = gql`
     order: Int
   }
 
+  input AddTodoItemInput {
+    content: String!
+    taskId: ID
+  }
+
+  input AddTodosInput {
+    dateKey: String!
+    items: [AddTodoItemInput!]!
+  }
+
   input TodoActionInput {
     dateKey: String!
     todoId: ID!
@@ -62,6 +72,7 @@ export const dailyLogTypeDefs = gql`
   extend type Mutation {
     upsertDailyLog(input: UpsertDailyLogInput!): DailyLog!
     addTodo(input: AddTodoInput!): DailyLog!
+    addTodos(input: AddTodosInput!): DailyLog!
     startTodo(input: TodoActionInput!): DailyLog!
     completeTodo(input: TodoActionInput!): DailyLog!
     addDeviation(input: AddDeviationInput!): DailyLog!
@@ -133,6 +144,30 @@ export const dailyLogResolvers = {
           content: args.input.content,
           taskId: args.input.taskId,
           order: args.input.order
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
+    addTodos: async (
+      _parent: unknown,
+      args: {
+        input: {
+          dateKey: string;
+          items: Array<{
+            content: string;
+            taskId?: string | null;
+          }>;
+        };
+      },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.addTodos({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          items: args.input.items
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);

@@ -23,6 +23,34 @@ interface DeleteTaskCollectionInput {
   collectionId: string;
 }
 
+interface MoveTaskToCollectionInput {
+  userId: string;
+  taskId: string;
+  collectionId: string;
+}
+
+interface ReorderTaskCollectionsInput {
+  userId: string;
+  collectionIds: string[];
+}
+
+interface ReorderTasksInput {
+  userId: string;
+  taskIds: string[];
+}
+
+interface RenameTaskInput {
+  userId: string;
+  taskId: string;
+  title: string;
+}
+
+interface RenameTaskCollectionInput {
+  userId: string;
+  collectionId: string;
+  name: string;
+}
+
 export class TaskCollecitonRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -136,6 +164,77 @@ export class TaskCollecitonRepository {
         }
       })
     ]);
+  }
+
+  async moveTaskToCollection(input: MoveTaskToCollectionInput) {
+    const nextOrder = await this.getNextTaskOrder({
+      userId: input.userId,
+      collectionId: input.collectionId
+    });
+
+    return this.prisma.task.update({
+      where: {
+        id: input.taskId
+      },
+      data: {
+        collectionId: input.collectionId,
+        order: nextOrder
+      }
+    });
+  }
+
+  async reorderTaskCollections(input: ReorderTaskCollectionsInput) {
+    await this.prisma.$transaction(
+      input.collectionIds.map((collectionId, order) =>
+        this.prisma.taskCollection.updateMany({
+          where: {
+            id: collectionId,
+            userId: input.userId
+          },
+          data: {
+            order
+          }
+        })
+      )
+    );
+  }
+
+  async reorderTasks(input: ReorderTasksInput) {
+    await this.prisma.$transaction(
+      input.taskIds.map((taskId, order) =>
+        this.prisma.task.updateMany({
+          where: {
+            id: taskId,
+            userId: input.userId
+          },
+          data: {
+            order
+          }
+        })
+      )
+    );
+  }
+
+  renameTask(input: RenameTaskInput) {
+    return this.prisma.task.update({
+      where: {
+        id: input.taskId,
+      },
+      data: {
+        title: input.title,
+      },
+    });
+  }
+
+  renameTaskCollection(input: RenameTaskCollectionInput) {
+    return this.prisma.taskCollection.update({
+      where: {
+        id: input.collectionId,
+      },
+      data: {
+        name: input.name,
+      },
+    });
   }
 
   private async getNextCollectionOrder(userId: string) {

@@ -1,20 +1,49 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MemoEditorBody } from "../features/memo/components/MemoEditorBody";
 import { MemoToolbar } from "../features/memo/components/MemoToolbar";
-
-const MEMO_STORAGE_KEY = "focus-hybrid:memo";
+import { fetchDailyLogMemo, upsertDailyLogMemo } from "../api/dailyLogApi";
+import { useAppStore } from "../stores";
 
 type MemoPageProps = {
-  storageKey?: string;
+  dateKey?: string;
   className?: string;
 };
 
-export function MemoPage({ storageKey = MEMO_STORAGE_KEY, className }: MemoPageProps) {
+function getTodayDateKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
+}
+
+export function MemoPage({ dateKey, className }: MemoPageProps) {
+  const selectedDateKey = useAppStore((state) => state.selectedDateKey);
+  const resolvedDateKey = useMemo(
+    () => dateKey ?? selectedDateKey ?? getTodayDateKey(),
+    [dateKey, selectedDateKey]
+  );
+  const queryClient = useQueryClient();
+  const hydrateGuardRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
+
+  const memoQuery = useQuery({
+    queryKey: ["daily-log-memo", resolvedDateKey] as const,
+    queryFn: () => fetchDailyLogMemo(resolvedDateKey),
+  });
+
+  const upsertMemoMutation = useMutation({
+    mutationFn: (memo: string) => upsertDailyLogMemo({ dateKey: resolvedDateKey, memo }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["daily-log-memo", resolvedDateKey], data ? { ...data } : null);
+    },
+  });
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -44,11 +73,17 @@ export function MemoPage({ storageKey = MEMO_STORAGE_KEY, className }: MemoPageP
       return;
     }
 
-    const saved = window.localStorage.getItem(storageKey);
-    if (saved) {
-      editor.commands.setContent(saved, false);
+    const nextMemo = memoQuery.data?.memo ?? "<p></p>";
+    if (editor.getHTML() === nextMemo) {
+      return;
     }
-  }, [editor, storageKey]);
+
+    hydrateGuardRef.current = true;
+    editor.commands.setContent(nextMemo, false);
+    queueMicrotask(() => {
+      hydrateGuardRef.current = false;
+    });
+  }, [editor, memoQuery.data?.memo]);
 
   useEffect(() => {
     if (!editor) {
@@ -56,14 +91,29 @@ export function MemoPage({ storageKey = MEMO_STORAGE_KEY, className }: MemoPageP
     }
 
     const handleUpdate = () => {
-      window.localStorage.setItem(storageKey, editor.getHTML());
+      if (hydrateGuardRef.current) {
+        return;
+      }
+
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+
+      saveTimerRef.current = window.setTimeout(() => {
+        const html = editor.getHTML();
+        void upsertMemoMutation.mutateAsync(html);
+      }, 450);
     };
 
     editor.on("update", handleUpdate);
     return () => {
       editor.off("update", handleUpdate);
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
     };
-  }, [editor, storageKey]);
+  }, [editor, upsertMemoMutation]);
 
   return (
     <section

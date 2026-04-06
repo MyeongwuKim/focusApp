@@ -1,20 +1,31 @@
 import { memo } from "react";
-import { FiMoreVertical, FiTag } from "react-icons/fi";
+import { FiMoreVertical, FiStar, FiTag } from "react-icons/fi";
+
+type TaskItemSideButton = {
+  type: "menu" | "favorite";
+  active?: boolean;
+  ariaLabel?: string;
+  onClick: () => void;
+};
 
 type TaskManagementTaskItemProps = {
   label: string;
   collectionName: string;
   active?: boolean;
+  isDragging?: boolean;
+  disableActions?: boolean;
   onSelect?: () => void;
-  onOpenMenu: () => void;
+  sideButton?: TaskItemSideButton;
 };
 
 function TaskManagementTaskItemComponent({
   label,
   collectionName,
   active = false,
+  isDragging = false,
+  disableActions = false,
   onSelect,
-  onOpenMenu,
+  sideButton,
 }: TaskManagementTaskItemProps) {
   return (
     <div
@@ -23,11 +34,20 @@ function TaskManagementTaskItemComponent({
         active
           ? "border-primary/70 bg-primary/10 shadow-[0_0_0_1px_rgba(59,130,246,0.2)]"
           : "border-base-300/75 bg-base-100/85 hover:bg-base-100",
+        isDragging ? "opacity-45" : "",
       ].join(" ")}
       role="button"
       tabIndex={0}
-      onClick={onSelect}
+      onClick={() => {
+        if (disableActions) {
+          return;
+        }
+        onSelect?.();
+      }}
       onKeyDown={(event) => {
+        if (disableActions) {
+          return;
+        }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect?.();
@@ -41,17 +61,38 @@ function TaskManagementTaskItemComponent({
           {collectionName}
         </p>
       </div>
-      <button
-        type="button"
-        className="btn btn-ghost btn-xs btn-circle h-7 min-h-7 w-7 min-w-7 text-base-content/55"
-        onClick={(event) => {
-          event.stopPropagation();
-          onOpenMenu();
-        }}
-        aria-label="할일 옵션"
-      >
-        <FiMoreVertical size={13} />
-      </button>
+      {sideButton ? (
+        <button
+          type="button"
+          className={[
+            "btn btn-ghost btn-xs btn-circle h-7 min-h-7 w-7 min-w-7",
+            sideButton.type === "favorite" && sideButton.active
+              ? "text-warning"
+              : "text-base-content/55",
+          ].join(" ")}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (disableActions) {
+              return;
+            }
+            sideButton.onClick();
+          }}
+          disabled={disableActions}
+          aria-label={
+            sideButton.ariaLabel ??
+            (sideButton.type === "favorite" ? "즐겨찾기" : "할일 옵션")
+          }
+        >
+          {sideButton.type === "favorite" ? (
+            <FiStar
+              size={13}
+              style={{ fill: sideButton.active ? "currentColor" : "transparent" }}
+            />
+          ) : (
+            <FiMoreVertical size={13} />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -61,5 +102,10 @@ export const TaskManagementTaskItem = memo(
   (prev, next) =>
     prev.label === next.label &&
     prev.collectionName === next.collectionName &&
-    prev.active === next.active
+    prev.active === next.active &&
+    prev.isDragging === next.isDragging &&
+    prev.disableActions === next.disableActions &&
+    prev.sideButton?.type === next.sideButton?.type &&
+    prev.sideButton?.active === next.sideButton?.active &&
+    Boolean(prev.sideButton) === Boolean(next.sideButton)
 );

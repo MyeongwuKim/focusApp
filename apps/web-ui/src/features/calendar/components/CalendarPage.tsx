@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAppStore } from "../../../stores";
+import { toast, useAppStore } from "../../../stores";
 import { buildCalendarCells, shiftMonth } from "../../../utils/calendar";
-import { formatDateKey, type HolidaysByDate } from "../../../utils/holidays";
-import { getDateTextClass, parseDateKey, shiftDateKey } from "../utils/date";
-import { getPreviewBars, getTasksForDateKey } from "../utils/task-preview";
+import { formatDateKey } from "../../../utils/holidays";
+import { parseDateKey, shiftDateKey } from "../utils/date";
 import { DateSelectionSheet } from "./DateSelectionSheet";
+import useHolidaysByViewMonth from "../queries/useHolidaysByViewMonth";
+import { CalendarDateCell, type CalendarPreviewBar } from "./CalendarDateCell";
+import { useAppNavigation } from "../../../providers/AppNavigationProvider";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -16,24 +18,28 @@ type TouchPoint = {
 type SwipeAxis = "horizontal" | "vertical" | null;
 
 type CalendarPageProps = {
-  month: Date;
-  onMonthChange: (nextMonth: Date) => void;
-  holidaysByDate: HolidaysByDate;
+  logsByDate: Record<string, { previewBars: CalendarPreviewBar[]; tasks: SelectedTaskItem[] }>;
   isActive: boolean;
-  onOpenTasksForDate: (dateKey: string, tasks: string[]) => void;
+};
+
+type SelectedTaskItem = {
+  label: string;
+  done: boolean;
 };
 
 export function CalendarPage({
-  month,
-  onMonthChange,
-  holidaysByDate,
+  logsByDate,
   isActive,
-  onOpenTasksForDate,
 }: CalendarPageProps) {
+  const { navigateTo } = useAppNavigation();
+  const viewMonth = useAppStore((state) => state.viewMonth);
+  const setViewMonth = useAppStore((state) => state.setViewMonth);
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
   const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
+  const { holidaysByDate, hasError: hasHolidayError } = useHolidaysByViewMonth(viewMonth);
   const touchStartRef = useRef<TouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
+  const holidayErrorNotifiedRef = useRef(false);
 
   const [dragX, setDragX] = useState(0);
   const [settleDirection, setSettleDirection] = useState<-1 | 0 | 1>(0);
@@ -43,17 +49,14 @@ export function CalendarPage({
     if (!selectedDateKey) {
       return [];
     }
-    return getTasksForDateKey(selectedDateKey).map((label) => ({
-      label,
-      done: false,
-    }));
-  }, [selectedDateKey]);
+    return logsByDate[selectedDateKey]?.tasks ?? [];
+  }, [selectedDateKey, logsByDate]);
 
-  const prevMonth = useMemo(() => shiftMonth(month, -1), [month]);
-  const nextMonth = useMemo(() => shiftMonth(month, 1), [month]);
+  const prevMonth = useMemo(() => shiftMonth(viewMonth, -1), [viewMonth]);
+  const nextMonth = useMemo(() => shiftMonth(viewMonth, 1), [viewMonth]);
 
   const prevCells = useMemo(() => buildCalendarCells(prevMonth), [prevMonth]);
-  const currentCells = useMemo(() => buildCalendarCells(month), [month]);
+  const currentCells = useMemo(() => buildCalendarCells(viewMonth), [viewMonth]);
   const nextCells = useMemo(() => buildCalendarCells(nextMonth), [nextMonth]);
 
   const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
@@ -123,9 +126,9 @@ export function CalendarPage({
     }
 
     if (settleDirection === -1) {
-      onMonthChange(nextMonth);
+      setViewMonth(nextMonth);
     } else if (settleDirection === 1) {
-      onMonthChange(prevMonth);
+      setViewMonth(prevMonth);
     }
 
     setSettleDirection(0);
@@ -139,6 +142,14 @@ export function CalendarPage({
     }
   }, [isActive]);
 
+  useEffect(() => {
+    if (!hasHolidayError || holidayErrorNotifiedRef.current) {
+      return;
+    }
+    holidayErrorNotifiedRef.current = true;
+    toast.error("공휴일 데이터를 가져오지 못했어요.", "불러오기 실패");
+  }, [hasHolidayError]);
+
   const handleShiftSelectedDate = (days: number) => {
     if (!selectedDateKey) {
       return;
@@ -146,8 +157,8 @@ export function CalendarPage({
     const nextDateKey = shiftDateKey(selectedDateKey, days);
     setSelectedDateKey(nextDateKey);
     const nextDate = parseDateKey(nextDateKey);
-    if (nextDate.getFullYear() !== month.getFullYear() || nextDate.getMonth() !== month.getMonth()) {
-      onMonthChange(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+    if (nextDate.getFullYear() !== viewMonth.getFullYear() || nextDate.getMonth() !== viewMonth.getMonth()) {
+      setViewMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
     }
   };
 
@@ -155,10 +166,15 @@ export function CalendarPage({
     if (!selectedDateKey) {
       return;
     }
-    onOpenTasksForDate(
-      selectedDateKey,
-      selectedTasks.map((task) => task.label)
-    );
+    navigateTo("dateTasks", {
+      query: {
+        date: selectedDateKey,
+      },
+      state: {
+        dateKey: selectedDateKey,
+        initialTasks: selectedTasks.map((task) => task.label),
+      },
+    });
     setIsDateSheetOpen(false);
   };
 
@@ -192,22 +208,18 @@ export function CalendarPage({
               <div key={monthIndex} className="h-full w-1/3 shrink-0">
                 <div className="grid h-full grid-cols-7 grid-rows-6 gap-1">
                   {cells.map((cell) => {
-                    const previewBars = cell.inCurrentMonth ? getPreviewBars(cell.date) : [];
                     const dateKey = formatDateKey(cell.date);
+                    const previewBars = cell.inCurrentMonth ? logsByDate[dateKey]?.previewBars ?? [] : [];
                     const isSelected = selectedDateKey === dateKey;
-                    const isActive = isSelected;
                     const holidayName = holidaysByDate[formatDateKey(cell.date)];
-                    const dateTextClass = getDateTextClass(
-                      cell.date,
-                      cell.inCurrentMonth,
-                      Boolean(holidayName)
-                    );
-                    const visibleBars = previewBars.slice(0, 3);
-                    const hasMoreBars = previewBars.length > 3;
                     return (
-                      <button
+                      <CalendarDateCell
                         key={cell.date.toISOString()}
-                        type="button"
+                        date={cell.date}
+                        inCurrentMonth={cell.inCurrentMonth}
+                        isSelected={isSelected}
+                        holidayName={holidayName}
+                        previewBars={previewBars}
                         onClick={() => {
                           if (selectedDateKey === dateKey) {
                             setIsDateSheetOpen(true);
@@ -219,44 +231,7 @@ export function CalendarPage({
                             setIsDateSheetOpen(false);
                           }
                         }}
-                        className={[
-                          "flex h-full min-h-[5.15rem] flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition",
-                          cell.inCurrentMonth ? "bg-base-100" : "bg-base-200/65",
-                          isActive
-                            ? "border-primary/90 bg-primary/14 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]"
-                            : "",
-                        ].join(" ")}
-                      >
-                        <div className="h-[1rem]">
-                          <div className={["text-[0.95rem] leading-none", dateTextClass].join(" ")}>
-                            {cell.date.getDate()}
-                          </div>
-                        </div>
-
-                        <div className="h-[0.55rem]">
-                          {holidayName ? (
-                            <div className="truncate text-[9px] leading-none text-error/90">
-                              {holidayName}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="flex flex-1 flex-col gap-0.5 overflow-hidden pt-0.5">
-                          {visibleBars.map((bar) => (
-                            <div
-                              key={bar.id}
-                              className="w-full truncate rounded-[6px] bg-primary/20 px-1.5 py-[1px] text-[10px] leading-tight text-primary"
-                            >
-                              {bar.label}
-                            </div>
-                          ))}
-                          {hasMoreBars ? (
-                            <div className="w-full rounded-[6px] bg-base-300/45 px-1.5 py-[1px] text-[10px] leading-tight text-base-content/60">
-                              ...
-                            </div>
-                          ) : null}
-                        </div>
-                      </button>
+                      />
                     );
                   })}
                 </div>

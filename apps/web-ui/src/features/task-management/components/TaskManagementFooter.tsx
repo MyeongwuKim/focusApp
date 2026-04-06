@@ -1,4 +1,7 @@
-import { useTaskManagementView } from "../providers/TaskManagementViewProvider";
+import {
+  useTaskManagementData,
+  useTaskManagementMeta,
+} from "../providers/TaskManagementContextProvider";
 
 function formatRecentDate(value: string | null) {
   if (!value) {
@@ -17,7 +20,8 @@ function formatRecentDate(value: string | null) {
 }
 
 export function TaskManagementFooter() {
-  const { selectedTaskId, selectedTaskLastUsedAt, recentUsedAt } = useTaskManagementView();
+  const { selectedTaskId } = useTaskManagementData();
+  const { selectedTaskLastUsedAt, recentUsedAt } = useTaskManagementMeta();
   const displayDate = selectedTaskId ? selectedTaskLastUsedAt : recentUsedAt;
 
   return (

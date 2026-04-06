@@ -8,6 +8,7 @@ apps/web-ui/dist/
 apps/api/dist/
 apps/mobile/web-dist/
 apps/mobile/app/embeddedWebUiBundle.ts
+apps/mobile/src/features/webui/embeddedWebUiBundle.ts
 
 # Expo / React Native local artifacts
 apps/mobile/.expo/

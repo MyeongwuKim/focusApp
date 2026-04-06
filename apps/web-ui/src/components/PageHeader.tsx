@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { MAIN_ROUTE, ROUTE_LABEL } from "../routes/route-config";
 import type { RouteKey } from "../routes/types";
+import { useLocation } from "react-router-dom";
 import { MonthDropdown } from "./MonthDropdown";
 import {
   FiCloud,
@@ -13,16 +15,11 @@ import {
   FiSun,
   FiMenu,
 } from "react-icons/fi";
-import { useWeatherStore } from "../stores";
+import { useAppStore, useWeatherStore } from "../stores";
+import { useAppNavigation } from "../providers/AppNavigationProvider";
 
 type PageHeaderProps = {
   route: RouteKey;
-  routeTitleOverride?: string;
-  month: Date;
-  onMonthChange: (nextMonth: Date) => void;
-  onOpenMenu: () => void;
-  onGoMain: () => void;
-  onGoSettings: () => void;
 };
 
 function WeatherIcon({ code, isDay }: { code: number; isDay: number }) {
@@ -44,18 +41,39 @@ function WeatherIcon({ code, isDay }: { code: number; isDay: number }) {
   return <FiCloud size={14} />;
 }
 
-export function PageHeader({
-  route,
-  routeTitleOverride,
-  month,
-  onMonthChange,
-  onOpenMenu,
-  onGoMain,
-  onGoSettings,
-}: PageHeaderProps) {
+function getTasksTitleFromDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const target = new Date(year, month - 1, day);
+  const today = new Date();
+  const isToday =
+    target.getFullYear() === today.getFullYear() &&
+    target.getMonth() === today.getMonth() &&
+    target.getDate() === today.getDate();
+
+  if (isToday) {
+    return "오늘 할일";
+  }
+  return `${month}.${day} 할일`;
+}
+
+export function PageHeader({ route }: PageHeaderProps) {
+  const location = useLocation();
+  const { openMenu, goMain, goSettings } = useAppNavigation();
+  const viewMonth = useAppStore((state) => state.viewMonth);
+  const setViewMonth = useAppStore((state) => state.setViewMonth);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weather = useWeatherStore((state) => state.weather);
+  const dateTasksRouteTitle = useMemo(() => {
+    if (route !== "dateTasks") {
+      return ROUTE_LABEL[route];
+    }
+    const dateParam = new URLSearchParams(location.search).get("date");
+    if (!dateParam) {
+      return ROUTE_LABEL.dateTasks;
+    }
+    return getTasksTitleFromDateKey(dateParam);
+  }, [location.search, route]);
 
   if (route === MAIN_ROUTE) {
     return (
@@ -63,14 +81,14 @@ export function PageHeader({
         <button
           type="button"
           className="btn btn-sm btn-ghost btn-circle absolute left-2 top-1/2 -translate-y-1/2"
-          onClick={onOpenMenu}
+          onClick={openMenu}
           aria-label="메뉴 열기"
         >
           <FiMenu size={18} />
         </button>
 
         <div className="flex justify-center">
-          <MonthDropdown month={month} onChange={onMonthChange} />
+          <MonthDropdown month={viewMonth} onChange={setViewMonth} />
         </div>
         {weatherEnabled && weather ? (
           <div className="pointer-events-none absolute top-1/2 right-12 -translate-y-1/2">
@@ -90,7 +108,7 @@ export function PageHeader({
         <button
           type="button"
           className="btn btn-sm btn-ghost btn-circle absolute right-2 top-1/2 -translate-y-1/2"
-          onClick={onGoSettings}
+          onClick={goSettings}
           aria-label="옵션으로 이동"
         >
           <FiSettings size={18} />
@@ -104,19 +122,19 @@ export function PageHeader({
       <button
         type="button"
         className="btn btn-sm btn-ghost btn-circle absolute left-2 top-1/2 -translate-y-1/2"
-        onClick={onGoMain}
+        onClick={goMain}
         aria-label="뒤로가기"
       >
         <FiChevronLeft size={18} />
       </button>
       <h1 className="m-0 text-center text-lg font-semibold text-base-content">
-        {routeTitleOverride ?? ROUTE_LABEL[route]}
+        {dateTasksRouteTitle}
       </h1>
       {route !== "settings" ? (
         <button
           type="button"
           className="btn btn-sm btn-ghost btn-circle absolute right-2 top-1/2 -translate-y-1/2"
-          onClick={onGoSettings}
+          onClick={goSettings}
           aria-label="옵션으로 이동"
         >
           <FiSettings size={18} />

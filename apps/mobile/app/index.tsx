@@ -4,6 +4,7 @@ import {
   Animated,
   Alert,
   Easing,
+  NativeModules,
   Pressable,
   StyleSheet,
   Text,
@@ -14,8 +15,8 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import Constants from 'expo-constants';
-import { embeddedWebUiFiles } from './embeddedWebUiBundle';
-import { SkiaWeatherOverlay } from './SkiaWeatherOverlay';
+import { embeddedWebUiFiles } from '../src/features/webui/embeddedWebUiBundle';
+import { SkiaWeatherOverlay } from '../src/features/weather/SkiaWeatherOverlay';
 
 const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
@@ -30,6 +31,34 @@ type WeatherMood = 'dreamy' | 'cinematic';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function resolveHybridApiOrigin() {
+  const envOrigin = process.env.EXPO_PUBLIC_API_ORIGIN ?? process.env.EXPO_PUBLIC_API_BASE_URL;
+  if (envOrigin?.trim()) {
+    const cleaned = envOrigin.trim().replace(/\/graphql\/?$/i, '').replace(/\/+$/, '');
+    return cleaned;
+  }
+
+  const scriptUrl = NativeModules.SourceCode?.scriptURL as string | undefined;
+  if (scriptUrl) {
+    const hostMatch = scriptUrl.match(/^[a-z]+:\/\/([^/:?#]+)/i);
+    const host = hostMatch?.[1];
+    if (host) {
+      return `http://${host}:4000`;
+    }
+  }
+
+  const expoHostUri =
+    ((Constants.expoConfig as { hostUri?: string } | null)?.hostUri ??
+      (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost) ??
+    null;
+  const expoHost = expoHostUri?.split(':')[0];
+  if (expoHost) {
+    return `http://${expoHost}:4000`;
+  }
+
+  return 'http://localhost:4000';
 }
 
 function weatherCodeToEffect(code: number): WeatherEffect {
@@ -830,6 +859,7 @@ export default function WebViewScreen() {
   const weatherMood: WeatherMood = 'dreamy';
   const webViewRef = useRef<WebView>(null);
   const { width, height } = useWindowDimensions();
+  const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
 
   const uiScale = useMemo(() => {
     const rawScale = width / BASE_WIDTH;
@@ -840,6 +870,57 @@ export default function WebViewScreen() {
     () =>
       `(() => { document.documentElement.style.setProperty('--ui-scale', '${uiScale.toFixed(3)}'); })(); true;`,
     [uiScale]
+  );
+  const webDebugBridgeScript = useMemo(
+    () => `(() => {
+      const post = (type, payload) => {
+        try {
+          window.ReactNativeWebView?.postMessage(JSON.stringify({ __wvDebug: true, type, payload }));
+        } catch {}
+      };
+      window.addEventListener('error', (event) => {
+        post('window-error', {
+          message: event?.message,
+          filename: event?.filename,
+          lineno: event?.lineno,
+          colno: event?.colno,
+        });
+      });
+      window.addEventListener('unhandledrejection', (event) => {
+        post('unhandledrejection', {
+          reason:
+            typeof event?.reason === 'string'
+              ? event.reason
+              : event?.reason?.message || String(event?.reason),
+        });
+      });
+      const wrap = (level) => {
+        const original = console[level];
+        console[level] = (...args) => {
+          post('console-' + level, {
+            args: args.map((arg) => {
+              if (typeof arg === 'string') return arg;
+              try {
+                return JSON.stringify(arg);
+              } catch {
+                return String(arg);
+              }
+            }),
+          });
+          original?.apply(console, args);
+        };
+      };
+      wrap('log');
+      wrap('warn');
+      wrap('error');
+      window.__HYBRID_API_ORIGIN__ = '${hybridApiOrigin}';
+      post('bridge-ready', { href: location.href });
+    })(); true;`,
+    [hybridApiOrigin]
+  );
+  const injectedBeforeContentLoaded = useMemo(
+    () => `${webDebugBridgeScript}\n${applyScaleScript}`,
+    [webDebugBridgeScript, applyScaleScript]
   );
 
   useEffect(() => {
@@ -861,10 +942,7 @@ export default function WebViewScreen() {
         let currentHtml = await FileSystem.readAsStringAsync(fileUri, {
           encoding: FileSystem.EncodingType.UTF8,
         });
-        currentHtml = currentHtml
-          .replace(/<script\s+type="module"\s+crossorigin/gi, '<script defer')
-          .replace(/<script\s+type="module"/gi, '<script defer')
-          .replace(/\s+crossorigin(?=[\s>])/gi, '');
+        currentHtml = currentHtml.replace(/\s+crossorigin(?=[\s>])/gi, '');
         await FileSystem.writeAsStringAsync(fileUri, currentHtml, {
           encoding: FileSystem.EncodingType.UTF8,
         });
@@ -927,11 +1005,15 @@ export default function WebViewScreen() {
 
     try {
       const parsedData = JSON.parse(data);
+      if (parsedData?.__wvDebug) {
+        console.log('[WebView debug]', parsedData.type, parsedData.payload);
+        return;
+      }
       console.log('Message from web-ui:', parsedData);
       Alert.alert('Message from Web', JSON.stringify(parsedData));
     } catch (error) {
       console.log('Failed to parse web message:', data, error);
-      Alert.alert('Message from Web', data);
+      console.log('[WebView raw message]', data);
     }
   };
 
@@ -952,17 +1034,30 @@ export default function WebViewScreen() {
             domStorageEnabled
             bounces={false}
             overScrollMode="never"
-            injectedJavaScriptBeforeContentLoaded={applyScaleScript}
+            injectedJavaScriptBeforeContentLoaded={injectedBeforeContentLoaded}
             allowingReadAccessToURL={`${FileSystem.cacheDirectory}web-ui/`}
             allowFileAccess
             allowFileAccessFromFileURLs
             allowUniversalAccessFromFileURLs
+            onLoadStart={() => {
+              console.log('WebView load start:', source.uri);
+            }}
             onLoadEnd={() => {
+              console.log('WebView load end:', source.uri);
               if (webViewRef.current) {
                 webViewRef.current.injectJavaScript(applyScaleScript);
               }
             }}
+            onLoadProgress={(event) => {
+              console.log('WebView load progress:', event.nativeEvent.progress);
+            }}
             onMessage={handleMessage}
+            onHttpError={(event) => {
+              console.log('WebView HTTP error:', event.nativeEvent.statusCode, event.nativeEvent.description);
+            }}
+            onContentProcessDidTerminate={() => {
+              console.log('WebView content process terminated');
+            }}
             onError={(event) => {
               const msg = event.nativeEvent.description || 'Unknown WebView error';
               console.log('WebView error:', msg);

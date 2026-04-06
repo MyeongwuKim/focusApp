@@ -44,6 +44,29 @@ export const taskCollectionTypeDefs = gql`
     collectionId: ID!
   }
 
+  input MoveTaskToCollectionInput {
+    taskId: ID!
+    collectionId: ID!
+  }
+
+  input ReorderTaskCollectionsInput {
+    collectionIds: [ID!]!
+  }
+
+  input ReorderTasksInput {
+    taskIds: [ID!]!
+  }
+
+  input RenameTaskInput {
+    taskId: ID!
+    title: String!
+  }
+
+  input RenameTaskCollectionInput {
+    collectionId: ID!
+    name: String!
+  }
+
   extend type Query {
     taskCollections: [TaskCollection!]!
   }
@@ -51,6 +74,11 @@ export const taskCollectionTypeDefs = gql`
   extend type Mutation {
     createTaskCollection(input: CreateTaskCollectionInput!): TaskCollection!
     addTask(input: AddTaskInput!): Task!
+    moveTaskToCollection(input: MoveTaskToCollectionInput!): Task!
+    reorderTaskCollections(input: ReorderTaskCollectionsInput!): Boolean!
+    reorderTasks(input: ReorderTasksInput!): Boolean!
+    renameTask(input: RenameTaskInput!): Task!
+    renameTaskCollection(input: RenameTaskCollectionInput!): TaskCollection!
     deleteTask(input: DeleteTaskInput!): Boolean!
     deleteTaskCollection(input: DeleteTaskCollectionInput!): Boolean!
   }
@@ -61,6 +89,7 @@ const taskCollectionErrorMapping = {
   TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." },
   TASK_TITLE_REQUIRED: { message: "태스크 제목을 입력해 주세요." },
   TASK_TITLE_DUPLICATED: { message: "같은 컬렉션에 동일한 제목의 태스크가 이미 있어요." },
+  TASK_COLLECTION_NAME_REQUIRED: { message: "컬렉션 이름을 입력해 주세요." },
 };
 
 export const taskCollectionResolvers = {
@@ -106,6 +135,76 @@ export const taskCollectionResolvers = {
         return await service.deleteTask({
           userId: getUserId(context),
           taskId: args.input.taskId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
+    },
+    moveTaskToCollection: async (
+      _parent: unknown,
+      args: { input: { taskId: string; collectionId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.moveTaskToCollection({
+          userId: getUserId(context),
+          taskId: args.input.taskId,
+          collectionId: args.input.collectionId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
+    },
+    reorderTaskCollections: async (
+      _parent: unknown,
+      args: { input: { collectionIds: string[] } },
+      context: GraphQLContext
+    ) => {
+      const service = createTaskCollectionService(context);
+      return service.reorderTaskCollections({
+        userId: getUserId(context),
+        collectionIds: args.input.collectionIds,
+      });
+    },
+    reorderTasks: async (
+      _parent: unknown,
+      args: { input: { taskIds: string[] } },
+      context: GraphQLContext
+    ) => {
+      const service = createTaskCollectionService(context);
+      return service.reorderTasks({
+        userId: getUserId(context),
+        taskIds: args.input.taskIds,
+      });
+    },
+    renameTask: async (
+      _parent: unknown,
+      args: { input: { taskId: string; title: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.renameTask({
+          userId: getUserId(context),
+          taskId: args.input.taskId,
+          title: args.input.title,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
+    },
+    renameTaskCollection: async (
+      _parent: unknown,
+      args: { input: { collectionId: string; name: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.renameTaskCollection({
+          userId: getUserId(context),
+          collectionId: args.input.collectionId,
+          name: args.input.name,
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, taskCollectionErrorMapping);

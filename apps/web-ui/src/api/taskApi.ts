@@ -4,6 +4,7 @@ import type {
   Mutation,
   TaskCollectionsQuery,
 } from "../graphql/generated.ts";
+import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
 const TASK_COLLECTIONS_QUERY = /* GraphQL */ `
@@ -57,6 +58,52 @@ export const deleteTaskQuery = /* GraphQL */ `
   }
 `;
 
+export const moveTaskToCollectionQuery = /* GraphQL */ `
+  mutation MoveTaskToCollection($input: MoveTaskToCollectionInput!) {
+    moveTaskToCollection(input: $input) {
+      id
+      collectionId
+      title
+      order
+      lastUsedAt
+    }
+  }
+`;
+
+export const reorderTaskCollectionsQuery = /* GraphQL */ `
+  mutation ReorderTaskCollections($input: ReorderTaskCollectionsInput!) {
+    reorderTaskCollections(input: $input)
+  }
+`;
+
+export const reorderTasksQuery = /* GraphQL */ `
+  mutation ReorderTasks($input: ReorderTasksInput!) {
+    reorderTasks(input: $input)
+  }
+`;
+
+export const renameTaskQuery = /* GraphQL */ `
+  mutation RenameTask($input: RenameTaskInput!) {
+    renameTask(input: $input) {
+      id
+      collectionId
+      title
+      order
+      lastUsedAt
+    }
+  }
+`;
+
+export const renameTaskCollectionQuery = /* GraphQL */ `
+  mutation RenameTaskCollection($input: RenameTaskCollectionInput!) {
+    renameTaskCollection(input: $input) {
+      id
+      name
+      order
+    }
+  }
+`;
+
 export const deleteTaskCollectionQuery = /* GraphQL */ `
   mutation DeleteTaskCollection($input: DeleteTaskCollectionInput!) {
     deleteTaskCollection(input: $input)
@@ -64,7 +111,7 @@ export const deleteTaskCollectionQuery = /* GraphQL */ `
 `;
 
 export async function fetchTaskCollections() {
-  const response = await fetch("/graphql", {
+  const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -89,12 +136,17 @@ export async function fetchTaskCollections() {
 type MutationType = {
   createTaskCollection: Pick<Mutation["createTaskCollection"], "id" | "name" | "order">;
   addTask: Pick<Mutation["addTask"], "id" | "collectionId" | "order" | "title" | "lastUsedAt">;
+  moveTaskToCollection: Pick<Mutation["addTask"], "id" | "collectionId" | "order" | "title" | "lastUsedAt">;
+  reorderTaskCollections: boolean;
+  reorderTasks: boolean;
+  renameTask: Pick<Mutation["addTask"], "id" | "collectionId" | "order" | "title" | "lastUsedAt">;
+  renameTaskCollection: Pick<Mutation["createTaskCollection"], "id" | "name" | "order">;
   deleteTask: boolean;
   deleteTaskCollection: boolean;
 };
 
 export async function addTaskCollection(input: CreateTaskCollectionInput) {
-  const response = await fetch("/graphql", {
+  const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -124,7 +176,7 @@ export async function addTaskCollection(input: CreateTaskCollectionInput) {
 }
 
 export async function addTask(input: AddTaskInput) {
-  const response = await fetch("/graphql", {
+  const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -155,7 +207,7 @@ export async function addTask(input: AddTaskInput) {
 }
 
 export async function deleteTask(input: { taskId: string }) {
-  const response = await fetch("/graphql", {
+  const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -179,8 +231,148 @@ export async function deleteTask(input: { taskId: string }) {
   return result.data?.deleteTask ?? false;
 }
 
+export async function moveTaskToCollection(input: { taskId: string; collectionId: string }) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: moveTaskToCollectionQuery,
+      variables: {
+        input,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Task move failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<MutationType>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL moveTaskToCollection failed");
+  }
+
+  const moved = result.data?.moveTaskToCollection;
+  if (!moved) {
+    throw new Error("GraphQL moveTaskToCollection failed");
+  }
+  return moved;
+}
+
+export async function reorderTaskCollections(input: { collectionIds: string[] }) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: reorderTaskCollectionsQuery,
+      variables: {
+        input,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Task collection reorder failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<MutationType>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL reorderTaskCollections failed");
+  }
+  return result.data?.reorderTaskCollections ?? false;
+}
+
+export async function reorderTasks(input: { taskIds: string[] }) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: reorderTasksQuery,
+      variables: {
+        input,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Task reorder failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<MutationType>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL reorderTasks failed");
+  }
+  return result.data?.reorderTasks ?? false;
+}
+
+export async function renameTask(input: { taskId: string; title: string }) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: renameTaskQuery,
+      variables: {
+        input,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Task rename failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<MutationType>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL renameTask failed");
+  }
+
+  const renamed = result.data?.renameTask;
+  if (!renamed) {
+    throw new Error("GraphQL renameTask failed");
+  }
+  return renamed;
+}
+
+export async function renameTaskCollection(input: { collectionId: string; name: string }) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: renameTaskCollectionQuery,
+      variables: {
+        input,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Task collection rename failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<MutationType>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL renameTaskCollection failed");
+  }
+
+  const renamed = result.data?.renameTaskCollection;
+  if (!renamed) {
+    throw new Error("GraphQL renameTaskCollection failed");
+  }
+  return renamed;
+}
+
 export async function deleteTaskCollection(input: { collectionId: string }) {
-  const response = await fetch("/graphql", {
+  const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

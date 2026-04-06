@@ -25,6 +25,16 @@ export async function createApp() {
 
   await apollo.start();
 
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (request.url.startsWith("/graphql")) {
+      reply
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Methods", "POST,OPTIONS")
+        .header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
+    return payload;
+  });
+
   await app.register(fastifyApollo(apollo), {
     path: "/graphql",
     context: async (request, reply) => buildContext(request, reply),

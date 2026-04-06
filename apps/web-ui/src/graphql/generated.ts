@@ -43,6 +43,14 @@ export type CreateUserInput = {
   name?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type DeleteTaskCollectionInput = {
+  collectionId: Scalars['ID']['input'];
+};
+
+export type DeleteTaskInput = {
+  taskId: Scalars['ID']['input'];
+};
+
 export type DailyLog = {
   __typename?: 'DailyLog';
   createdAt: Scalars['String']['output'];
@@ -66,6 +74,11 @@ export type Mutation = {
   completeTodo: DailyLog;
   createTaskCollection: TaskCollection;
   createUser: User;
+  deleteTask: Scalars['Boolean']['output'];
+  deleteTaskCollection: Scalars['Boolean']['output'];
+  moveTaskToCollection: Task;
+  reorderTaskCollections: Scalars['Boolean']['output'];
+  reorderTasks: Scalars['Boolean']['output'];
   startTodo: DailyLog;
   upsertDailyLog: DailyLog;
 };
@@ -101,6 +114,29 @@ export type MutationCreateUserArgs = {
 };
 
 
+export type MutationDeleteTaskArgs = {
+  input: DeleteTaskInput;
+};
+
+
+export type MutationDeleteTaskCollectionArgs = {
+  input: DeleteTaskCollectionInput;
+};
+
+
+export type MutationMoveTaskToCollectionArgs = {
+  input: MoveTaskToCollectionInput;
+};
+
+export type MutationReorderTaskCollectionsArgs = {
+  input: ReorderTaskCollectionsInput;
+};
+
+export type MutationReorderTasksArgs = {
+  input: ReorderTasksInput;
+};
+
+
 export type MutationStartTodoArgs = {
   input: TodoActionInput;
 };
@@ -127,6 +163,19 @@ export type QueryDailyLogArgs = {
 
 export type QueryDailyLogsByMonthArgs = {
   monthKey: Scalars['String']['input'];
+};
+
+export type MoveTaskToCollectionInput = {
+  collectionId: Scalars['ID']['input'];
+  taskId: Scalars['ID']['input'];
+};
+
+export type ReorderTaskCollectionsInput = {
+  collectionIds: Array<Scalars['ID']['input']>;
+};
+
+export type ReorderTasksInput = {
+  taskIds: Array<Scalars['ID']['input']>;
 };
 
 export type Task = {

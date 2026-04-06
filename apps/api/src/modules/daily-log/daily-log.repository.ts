@@ -118,11 +118,21 @@ export class DailyLogRepository {
     });
   }
 
-  updateTaskLastUsedAt(userId: string, taskId: string, lastUsedAt: Date) {
-    return this.prisma.task.updateMany({
+  findTasksByIds(userId: string, taskIds: string[]) {
+    return this.prisma.task.findMany({
       where: {
-        id: taskId,
-        userId
+        userId,
+        id: {
+          in: taskIds
+        }
+      }
+    });
+  }
+
+  updateTaskLastUsedAt(userId: string, taskId: string, lastUsedAt: Date) {
+    return this.prisma.task.update({
+      where: {
+        id: taskId
       },
       data: {
         lastUsedAt

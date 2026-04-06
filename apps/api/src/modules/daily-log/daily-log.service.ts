@@ -12,6 +12,15 @@ interface AddTodoInput extends BaseInput {
   order?: number | null;
 }
 
+interface AddTodoBatchItemInput {
+  content: string;
+  taskId?: string | null;
+}
+
+interface AddTodosInput extends BaseInput {
+  items: AddTodoBatchItemInput[];
+}
+
 interface CompleteTodoInput extends BaseInput {
   todoId: string;
 }
@@ -78,6 +87,99 @@ export class DailyLogService {
     if (input.taskId) {
       await this.repository.updateTaskLastUsedAt(input.userId, input.taskId, createdAt);
     }
+
+    return nextLog;
+  }
+
+  async addTodos(input: AddTodosInput) {
+    const log = await this.repository.upsertDailyLog({
+      userId: input.userId,
+      dateKey: input.dateKey,
+      monthKey: getMonthKey(input.dateKey)
+    });
+
+    const uniqueTaskIds = Array.from(
+      new Set(
+        input.items
+          .map((item) => item.taskId ?? null)
+          .filter((taskId): taskId is string => typeof taskId === "string" && taskId.length > 0)
+      )
+    );
+
+    const taskById = new Map<string, { id: string; title: string }>();
+    if (uniqueTaskIds.length > 0) {
+      const tasks = await this.repository.findTasksByIds(input.userId, uniqueTaskIds);
+      for (const task of tasks) {
+        taskById.set(task.id, { id: task.id, title: task.title });
+      }
+
+      if (taskById.size !== uniqueTaskIds.length) {
+        throw new Error("TASK_NOT_FOUND");
+      }
+    }
+
+    const existingTaskIdSet = new Set(
+      log.todos
+        .map((todo) => todo.taskId ?? null)
+        .filter((taskId): taskId is string => typeof taskId === "string" && taskId.length > 0)
+    );
+    const existingContentSet = new Set(
+      log.todos.map((todo) => todo.content.trim().toLowerCase()).filter((content) => content.length > 0)
+    );
+
+    const createdAt = new Date();
+    const appendedTodos: TodoItemRecord[] = [];
+    for (const item of input.items) {
+      const content = item.content.trim();
+      if (!content) {
+        continue;
+      }
+
+      const normalizedContent = content.toLowerCase();
+      const taskId = item.taskId ?? null;
+
+      if (taskId && existingTaskIdSet.has(taskId)) {
+        continue;
+      }
+      if (!taskId && existingContentSet.has(normalizedContent)) {
+        continue;
+      }
+
+      appendedTodos.push({
+        id: randomUUID(),
+        taskId,
+        titleSnapshot: taskId ? taskById.get(taskId)?.title ?? null : null,
+        content,
+        done: false,
+        order: log.todos.length + appendedTodos.length,
+        createdAt,
+        startedAt: null,
+        completedAt: null,
+        deviationSeconds: 0,
+        actualFocusSeconds: null
+      });
+
+      if (taskId) {
+        existingTaskIdSet.add(taskId);
+      } else {
+        existingContentSet.add(normalizedContent);
+      }
+    }
+
+    if (appendedTodos.length === 0) {
+      return log;
+    }
+
+    const nextLog = await this.repository.replaceTodos(input.userId, input.dateKey, [
+      ...log.todos,
+      ...appendedTodos
+    ]);
+
+    await Promise.all(
+      Array.from(
+        new Set(appendedTodos.map((todo) => todo.taskId ?? null).filter((taskId): taskId is string => Boolean(taskId)))
+      ).map((taskId) => this.repository.updateTaskLastUsedAt(input.userId, taskId, createdAt))
+    );
 
     return nextLog;
   }
