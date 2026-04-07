@@ -18,7 +18,16 @@ type TouchPoint = {
 type SwipeAxis = "horizontal" | "vertical" | null;
 
 type CalendarPageProps = {
-  logsByDate: Record<string, { previewBars: CalendarPreviewBar[]; tasks: SelectedTaskItem[] }>;
+  logsByDate: Record<
+    string,
+    {
+      todoCount: number;
+      doneCount: number;
+      allDone: boolean;
+      previewBars: CalendarPreviewBar[];
+      tasks: SelectedTaskItem[];
+    }
+  >;
   isActive: boolean;
 };
 
@@ -26,6 +35,29 @@ type SelectedTaskItem = {
   label: string;
   done: boolean;
 };
+
+function getSelectedRowIndex(cells: ReturnType<typeof buildCalendarCells>, selectedDateKey: string | null) {
+  if (!selectedDateKey) {
+    return null;
+  }
+
+  const foundIndex = cells.findIndex((cell) => cell.inCurrentMonth && formatDateKey(cell.date) === selectedDateKey);
+  if (foundIndex < 0) {
+    return null;
+  }
+
+  return Math.floor(foundIndex / 7);
+}
+
+function buildRowTemplate(selectedRowIndex: number | null) {
+  if (selectedRowIndex === null) {
+    return "1fr 1fr 1fr 1fr 1fr 1fr";
+  }
+
+  // 합계를 6fr로 유지해서 전체 높이는 고정, 선택된 행만 강조
+  const rows = [0, 1, 2, 3, 4, 5].map((rowIndex) => (rowIndex === selectedRowIndex ? 1.35 : 0.93));
+  return rows.map((value) => `${value}fr`).join(" ");
+}
 
 export function CalendarPage({
   logsByDate,
@@ -206,10 +238,16 @@ export function CalendarPage({
           >
             {[prevCells, currentCells, nextCells].map((cells, monthIndex) => (
               <div key={monthIndex} className="h-full w-1/3 shrink-0">
-                <div className="grid h-full grid-cols-7 grid-rows-6 gap-1">
+                <div
+                  className="grid h-full grid-cols-7 gap-1 transition-[grid-template-rows] duration-220 ease-out"
+                  style={{
+                    gridTemplateRows: buildRowTemplate(getSelectedRowIndex(cells, selectedDateKey)),
+                  }}
+                >
                   {cells.map((cell) => {
                     const dateKey = formatDateKey(cell.date);
                     const previewBars = cell.inCurrentMonth ? logsByDate[dateKey]?.previewBars ?? [] : [];
+                    const isAllDone = cell.inCurrentMonth ? (logsByDate[dateKey]?.allDone ?? false) : false;
                     const isSelected = selectedDateKey === dateKey;
                     const holidayName = holidaysByDate[formatDateKey(cell.date)];
                     return (
@@ -220,16 +258,15 @@ export function CalendarPage({
                         isSelected={isSelected}
                         holidayName={holidayName}
                         previewBars={previewBars}
+                        isAllDone={isAllDone}
                         onClick={() => {
                           if (selectedDateKey === dateKey) {
-                            setIsDateSheetOpen(true);
+                            handleOpenTasksFromSheet();
                             return;
                           }
 
                           setSelectedDateKey(dateKey);
-                          if (isDateSheetOpen) {
-                            setIsDateSheetOpen(false);
-                          }
+                          setIsDateSheetOpen(true);
                         }}
                       />
                     );

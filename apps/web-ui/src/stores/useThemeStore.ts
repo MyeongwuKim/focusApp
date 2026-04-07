@@ -34,11 +34,11 @@ const themeNameMap: Record<ThemeStyle, { light: string; dark: string }> = {
   cinematic: { light: "lofi", dark: "coffee" },
   neon: { light: "light", dark: "dracula" },
   paper: { light: "retro", dark: "night" },
-  nordic: { light: "nord", dark: "black" },
+  nordic: { light: "nord", dark: "night" },
   sunset: { light: "autumn", dark: "sunset" },
   slate: { light: "corporate", dark: "business" },
-  mono: { light: "wireframe", dark: "dim" },
-  frost: { light: "winter", dark: "dim" },
+  mono: { light: "wireframe", dark: "black" },
+  frost: { light: "winter", dark: "night" },
   ink: { light: "lofi", dark: "luxury" },
 };
 

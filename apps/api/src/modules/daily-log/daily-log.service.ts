@@ -30,6 +30,13 @@ interface AddDeviationInput extends BaseInput {
   seconds: number;
 }
 
+interface RestSessionInput extends BaseInput {}
+
+interface UpdateTodoActualFocusInput extends BaseInput {
+  todoId: string;
+  actualFocusSeconds: number;
+}
+
 export class DailyLogService {
   constructor(private readonly repository: DailyLogRepository) {}
 
@@ -76,6 +83,7 @@ export class DailyLogService {
       order: input.order ?? log.todos.length,
       createdAt,
       startedAt: null,
+      pausedAt: null,
       completedAt: null,
       deviationSeconds: 0,
       actualFocusSeconds: null
@@ -154,6 +162,7 @@ export class DailyLogService {
         order: log.todos.length + appendedTodos.length,
         createdAt,
         startedAt: null,
+        pausedAt: null,
         completedAt: null,
         deviationSeconds: 0,
         actualFocusSeconds: null
@@ -201,8 +210,74 @@ export class DailyLogService {
       ...targetTodo,
       done: false,
       startedAt: targetTodo.startedAt ?? new Date(),
+      pausedAt: null,
       completedAt: null,
       actualFocusSeconds: null
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async pauseTodo(input: CompleteTodoInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    const targetTodo = log.todos[targetIndex];
+    if (targetTodo.done) {
+      throw new Error("TODO_NOT_IN_PROGRESS");
+    }
+    if (!targetTodo.startedAt) {
+      throw new Error("TODO_NOT_IN_PROGRESS");
+    }
+    if (targetTodo.pausedAt) {
+      return log;
+    }
+
+    const nextTodos = [...log.todos];
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      pausedAt: new Date()
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async resumeTodo(input: CompleteTodoInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    const targetTodo = log.todos[targetIndex];
+    if (targetTodo.done) {
+      throw new Error("TODO_NOT_IN_PROGRESS");
+    }
+    if (!targetTodo.startedAt || !targetTodo.pausedAt) {
+      throw new Error("TODO_NOT_IN_PROGRESS");
+    }
+
+    const pausedSeconds = Math.max(
+      Math.floor((Date.now() - targetTodo.pausedAt.getTime()) / 1000),
+      0
+    );
+
+    const nextTodos = [...log.todos];
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      pausedAt: null,
+      deviationSeconds: targetTodo.deviationSeconds + pausedSeconds
     };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
@@ -222,20 +297,49 @@ export class DailyLogService {
     const now = new Date();
     const nextTodos = [...log.todos];
     const targetTodo = nextTodos[targetIndex];
+    const pausedSeconds = targetTodo.pausedAt
+      ? Math.max(Math.floor((now.getTime() - targetTodo.pausedAt.getTime()) / 1000), 0)
+      : 0;
     const startedAt = targetTodo.startedAt ?? now;
     const totalElapsedSeconds = Math.max(
       Math.floor((now.getTime() - startedAt.getTime()) / 1000),
       0
     );
-    const actualFocusSeconds = Math.max(totalElapsedSeconds - targetTodo.deviationSeconds, 0);
+    const actualFocusSeconds = Math.max(
+      totalElapsedSeconds - (targetTodo.deviationSeconds + pausedSeconds),
+      0
+    );
 
     nextTodos[targetIndex] = {
       ...targetTodo,
       done: true,
       startedAt,
+      pausedAt: null,
       completedAt: now,
+      deviationSeconds: targetTodo.deviationSeconds + pausedSeconds,
       actualFocusSeconds
     };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async deleteTodo(input: CompleteTodoInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    const nextTodos = log.todos
+      .filter((todo) => todo.id !== input.todoId)
+      .map((todo, index) => ({
+        ...todo,
+        order: index,
+      }));
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
   }
@@ -259,6 +363,83 @@ export class DailyLogService {
     };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async updateTodoActualFocusSeconds(input: UpdateTodoActualFocusInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    if (!Number.isFinite(input.actualFocusSeconds)) {
+      throw new Error("INVALID_ACTUAL_FOCUS_SECONDS");
+    }
+    const nextActualFocusSeconds = Math.max(Math.floor(input.actualFocusSeconds), 0);
+
+    const nextTodos = [...log.todos];
+    const targetTodo = nextTodos[targetIndex];
+    if (!targetTodo.done) {
+      throw new Error("TODO_NOT_DONE");
+    }
+
+    const startedAt = targetTodo.startedAt ?? targetTodo.completedAt ?? new Date();
+    const deviationSeconds = Math.max(targetTodo.deviationSeconds, 0);
+    const nextCompletedAt = new Date(
+      startedAt.getTime() + (nextActualFocusSeconds + deviationSeconds) * 1000
+    );
+
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      startedAt,
+      pausedAt: null,
+      completedAt: nextCompletedAt,
+      actualFocusSeconds: nextActualFocusSeconds
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async startRestSession(input: RestSessionInput) {
+    const log = await this.repository.upsertDailyLog({
+      userId: input.userId,
+      dateKey: input.dateKey,
+      monthKey: getMonthKey(input.dateKey)
+    });
+
+    if (log.restStartedAt) {
+      return log;
+    }
+
+    return this.repository.startRestSession(input.userId, input.dateKey, new Date());
+  }
+
+  async stopRestSession(input: RestSessionInput) {
+    const log = await this.repository.upsertDailyLog({
+      userId: input.userId,
+      dateKey: input.dateKey,
+      monthKey: getMonthKey(input.dateKey)
+    });
+
+    if (!log.restStartedAt) {
+      return log;
+    }
+
+    const elapsedSeconds = Math.max(
+      Math.floor((Date.now() - log.restStartedAt.getTime()) / 1000),
+      0
+    );
+    const nextAccumulatedSeconds = log.restAccumulatedSeconds + elapsedSeconds;
+
+    return this.repository.stopRestSession(
+      input.userId,
+      input.dateKey,
+      nextAccumulatedSeconds
+    );
   }
 }
 

@@ -372,6 +372,14 @@
     padding-left: 1.1rem;
   }
 
+  .memo-editor .ProseMirror ul {
+    list-style: disc;
+  }
+
+  .memo-editor .ProseMirror ol {
+    list-style: decimal;
+  }
+
   .memo-editor .ProseMirror ul[data-type="taskList"] {
     list-style: none;
     padding-left: 0;
@@ -450,6 +458,11 @@
   .session-progress-card--focus::after,
   .session-progress-card--rest::after {
     opacity: 1;
+  }
+
+  .ai-bot-wiggle {
+    animation: ai-bot-wiggle 1.8s ease-in-out infinite;
+    transform-origin: 50% 58%;
   }
 }
 
@@ -604,5 +617,24 @@
   }
   to {
     transform: translateX(360%);
+  }
+}
+
+@keyframes ai-bot-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  20% {
+    transform: rotate(-8deg) translateY(-1px);
+  }
+  40% {
+    transform: rotate(7deg) translateY(0);
+  }
+  60% {
+    transform: rotate(-5deg) translateY(1px);
+  }
+  80% {
+    transform: rotate(4deg) translateY(0);
   }
 }

@@ -12,6 +12,7 @@ export const dailyLogTypeDefs = gql`
     order: Int!
     createdAt: String!
     startedAt: String
+    pausedAt: String
     completedAt: String
     deviationSeconds: Int!
     actualFocusSeconds: Int
@@ -24,6 +25,8 @@ export const dailyLogTypeDefs = gql`
     monthKey: String!
     memo: String
     todos: [TodoItem!]!
+    restAccumulatedSeconds: Int!
+    restStartedAt: String
     todoCount: Int!
     doneCount: Int!
     previewTodos: [String!]!
@@ -64,6 +67,16 @@ export const dailyLogTypeDefs = gql`
     seconds: Int!
   }
 
+  input RestSessionInput {
+    dateKey: String!
+  }
+
+  input UpdateTodoActualFocusInput {
+    dateKey: String!
+    todoId: ID!
+    actualFocusSeconds: Int!
+  }
+
   extend type Query {
     dailyLog(dateKey: String!): DailyLog
     dailyLogsByMonth(monthKey: String!): [DailyLog!]!
@@ -74,8 +87,14 @@ export const dailyLogTypeDefs = gql`
     addTodo(input: AddTodoInput!): DailyLog!
     addTodos(input: AddTodosInput!): DailyLog!
     startTodo(input: TodoActionInput!): DailyLog!
+    pauseTodo(input: TodoActionInput!): DailyLog!
+    resumeTodo(input: TodoActionInput!): DailyLog!
     completeTodo(input: TodoActionInput!): DailyLog!
+    deleteTodo(input: TodoActionInput!): DailyLog!
     addDeviation(input: AddDeviationInput!): DailyLog!
+    updateTodoActualFocus(input: UpdateTodoActualFocusInput!): DailyLog!
+    startRestSession(input: RestSessionInput!): DailyLog!
+    stopRestSession(input: RestSessionInput!): DailyLog!
   }
 `;
 
@@ -91,7 +110,10 @@ function toISOStringOrNull(value: Date | null) {
 const dailyLogErrorMapping = {
   DAILY_LOG_NOT_FOUND: { message: "데일리 로그를 찾을 수 없어요." },
   TODO_NOT_FOUND: { message: "할일을 찾을 수 없어요." },
-  TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." }
+  TODO_NOT_IN_PROGRESS: { message: "진행 중인 할일이 아니에요." },
+  TODO_NOT_DONE: { message: "완료된 할일만 수정할 수 있어요." },
+  INVALID_ACTUAL_FOCUS_SECONDS: { message: "집중 시간이 올바르지 않아요." },
+  TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." },
 };
 
 export const dailyLogResolvers = {
@@ -100,11 +122,7 @@ export const dailyLogResolvers = {
       const service = buildService(context);
       return service.getDailyLog(getUserId(context), args.dateKey);
     },
-    dailyLogsByMonth: async (
-      _parent: unknown,
-      args: { monthKey: string },
-      context: GraphQLContext
-    ) => {
+    dailyLogsByMonth: async (_parent: unknown, args: { monthKey: string }, context: GraphQLContext) => {
       const service = buildService(context);
       return service.getDailyLogsByMonth(getUserId(context), args.monthKey);
     },
@@ -121,7 +139,7 @@ export const dailyLogResolvers = {
       return service.upsertDailyLog({
         userId: getUserId(context),
         dateKey: args.input.dateKey,
-        memo: args.input.memo
+        memo: args.input.memo,
       });
     },
     addTodo: async (
@@ -143,7 +161,7 @@ export const dailyLogResolvers = {
           dateKey: args.input.dateKey,
           content: args.input.content,
           taskId: args.input.taskId,
-          order: args.input.order
+          order: args.input.order,
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
@@ -167,7 +185,7 @@ export const dailyLogResolvers = {
         return await service.addTodos({
           userId: getUserId(context),
           dateKey: args.input.dateKey,
-          items: args.input.items
+          items: args.input.items,
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
@@ -183,7 +201,39 @@ export const dailyLogResolvers = {
         return await service.startTodo({
           userId: getUserId(context),
           dateKey: args.input.dateKey,
-          todoId: args.input.todoId
+          todoId: args.input.todoId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
+    pauseTodo: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.pauseTodo({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
+    resumeTodo: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.resumeTodo({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
@@ -199,7 +249,23 @@ export const dailyLogResolvers = {
         return await service.completeTodo({
           userId: getUserId(context),
           dateKey: args.input.dateKey,
-          todoId: args.input.todoId
+          todoId: args.input.todoId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
+    deleteTodo: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.deleteTodo({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
@@ -216,22 +282,63 @@ export const dailyLogResolvers = {
           userId: getUserId(context),
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
-          seconds: args.input.seconds
+          seconds: args.input.seconds,
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
-    }
+    },
+    updateTodoActualFocus: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string; actualFocusSeconds: number } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.updateTodoActualFocusSeconds({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
+          actualFocusSeconds: args.input.actualFocusSeconds,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
+    startRestSession: async (
+      _parent: unknown,
+      args: { input: { dateKey: string } },
+      context: GraphQLContext
+    ) => {
+      const service = buildService(context);
+      return service.startRestSession({
+        userId: getUserId(context),
+        dateKey: args.input.dateKey,
+      });
+    },
+    stopRestSession: async (
+      _parent: unknown,
+      args: { input: { dateKey: string } },
+      context: GraphQLContext
+    ) => {
+      const service = buildService(context);
+      return service.stopRestSession({
+        userId: getUserId(context),
+        dateKey: args.input.dateKey,
+      });
+    },
   },
   DailyLog: {
     createdAt: (parent: { createdAt: Date }) => parent.createdAt.toISOString(),
-    updatedAt: (parent: { updatedAt: Date }) => parent.updatedAt.toISOString()
+    updatedAt: (parent: { updatedAt: Date }) => parent.updatedAt.toISOString(),
+    restStartedAt: (parent: { restStartedAt: Date | null }) => toISOStringOrNull(parent.restStartedAt),
   },
   TodoItem: {
     createdAt: (parent: { createdAt: Date }) => parent.createdAt.toISOString(),
     startedAt: (parent: { startedAt: Date | null }) => toISOStringOrNull(parent.startedAt),
-    completedAt: (parent: { completedAt: Date | null }) => toISOStringOrNull(parent.completedAt)
-  }
+    pausedAt: (parent: { pausedAt: Date | null }) => toISOStringOrNull(parent.pausedAt),
+    completedAt: (parent: { completedAt: Date | null }) => toISOStringOrNull(parent.completedAt),
+  },
 };
 
 function getUserId(context: GraphQLContext) {

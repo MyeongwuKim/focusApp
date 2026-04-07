@@ -9,9 +9,8 @@ import {
   reorderById,
   taskManagementDataReducer,
 } from "../features/task-management/state/taskManagementDataReducer";
-import useTaskCollectionMutation from "../queries/useTaskCollectionMutation";
+import { useTaskCollectionMutation, useTaskCollectionQuery } from "../queries";
 import { toast } from "../stores";
-import { taskCollectionsQuery } from "../queries/useTaskCollectionsQuery";
 
 const DEFAULT_COLLECTION_ID = "collection-default";
 
@@ -34,7 +33,8 @@ function TaskManagementRouteContent() {
     reorderTasksMutation,
   } = useTaskCollectionMutation();
 
-  const { data } = taskCollectionsQuery();
+  const { taskCollectionsQuery } = useTaskCollectionQuery();
+  const { data } = taskCollectionsQuery;
 
   const recentUsedAt = useMemo(() => {
     if (!data) {

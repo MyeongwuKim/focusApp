@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SimpleRoutePage } from "./pages/SimpleRoutePage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { DateTasksRoutePage } from "./pages/DateTasksRoutePage";
+import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
 import { MemoPage } from "./pages/MemoPage";
 import { CalendarRootPage } from "./pages/CalendarRootPage";
 import { TaskManagementRoutePage } from "./pages/TaskManagementRoutePage";
+import { StatsRoutePage } from "./pages/StatsRoutePage";
 import { DrawerMenu } from "./components/DrawerMenu";
 import { PageHeader } from "./components/PageHeader";
 import { Toast } from "./components/Toast";
@@ -198,6 +199,19 @@ function App() {
     setIsDrawerOpen(false);
   };
 
+  const goOverlayBack = () => {
+    const historyState = window.history.state as { idx?: number } | null;
+    const stackIndex = typeof historyState?.idx === "number" ? historyState.idx : 0;
+
+    if (stackIndex > 0) {
+      navigate(-1);
+      return;
+    }
+
+    navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
+    setIsDrawerOpen(false);
+  };
+
   const navigationActions = useMemo(
     () => ({
       activeRoute,
@@ -206,9 +220,9 @@ function App() {
       navigateTo,
       goMain: () => navigateTo(MAIN_ROUTE),
       goSettings: () => navigateTo("settings"),
-      goOverlayBack: () => navigate(-1),
+      goOverlayBack,
     }),
-    [activeRoute, navigateTo, navigate]
+    [activeRoute, navigateTo, goOverlayBack]
   );
 
   const renderOverlayBody = (route: RouteKey) => {
@@ -216,11 +230,13 @@ function App() {
       case "settings":
         return <SettingsPage />;
       case "dateTasks":
-        return <DateTasksRoutePage />;
+        return <DateTodosRoutePage />;
       case "tasks":
         return <TaskManagementRoutePage />;
       case "memo":
         return <MemoPage />;
+      case "stats":
+        return <StatsRoutePage />;
       default:
         return <SimpleRoutePage title={ROUTE_LABEL[route]} />;
     }
@@ -236,7 +252,8 @@ function App() {
 
           {overlayRoute ? (
             <div
-              className="absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
+              key={`${location.pathname}${location.search}`}
+              className="overlay-enter absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
               onTouchStart={(event) => {
                 const touch = event.touches[0];
                 overlayTouchStartRef.current = { x: touch.clientX, y: touch.clientY };

@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { fetchTaskCollections } from "../api/taskApi";
+import { fetchTaskCollections } from "../../api/taskApi";
 
 export const taskCollectionsQueryKey = ["taskCollections"] as const;
 
@@ -13,4 +13,12 @@ export function taskCollectionsQuery() {
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+}
+
+export function useTaskCollectionQuery() {
+  const taskCollections = taskCollectionsQuery();
+
+  return {
+    taskCollectionsQuery: taskCollections,
+  };
 }

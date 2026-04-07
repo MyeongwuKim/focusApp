@@ -58,7 +58,7 @@ function getTasksTitleFromDateKey(dateKey: string) {
 
 export function PageHeader({ route }: PageHeaderProps) {
   const location = useLocation();
-  const { openMenu, goMain, goSettings } = useAppNavigation();
+  const { openMenu, goOverlayBack, goSettings } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
@@ -122,7 +122,7 @@ export function PageHeader({ route }: PageHeaderProps) {
       <button
         type="button"
         className="btn btn-sm btn-ghost btn-circle absolute left-2 top-1/2 -translate-y-1/2"
-        onClick={goMain}
+        onClick={goOverlayBack}
         aria-label="뒤로가기"
       >
         <FiChevronLeft size={18} />

@@ -17,6 +17,7 @@ const ROUTE_ICON: Partial<Record<RouteKey, ReactNode>> = {
 
 export function DrawerMenu({ isOpen }: DrawerMenuProps) {
   const { activeRoute, closeMenu, navigateTo } = useAppNavigation();
+  const accountId = "guest";
 
   return (
     <div
@@ -42,19 +43,22 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
         ].join(" ")}
         aria-hidden={!isOpen}
       >
-        <div className="mb-6">
-          <h2 className="m-0 text-base font-semibold text-base-content">Focus Hybrid</h2>
-          <p className="mt-1 text-sm text-base-content/65">메뉴</p>
+        <div className="mb-3">
+          <p className="m-0 text-xs font-medium uppercase tracking-wide text-base-content/55">ID</p>
+          <h2 className="mt-1 text-base font-semibold text-base-content">{accountId}</h2>
         </div>
+        <div className="mb-3 h-px w-full bg-base-300/90" />
 
-        <nav className="menu gap-1 rounded-box bg-base-200/60 p-2 text-sm">
+        <nav className="menu gap-1 p-0 text-sm">
           {DRAWER_ROUTES.map((route) => (
             <button
               key={route.key}
               type="button"
               className={[
-                "btn justify-start gap-2.5",
-                activeRoute === route.key ? "btn-soft btn-primary" : "btn-ghost",
+                "btn justify-start gap-2.5 rounded-lg border border-transparent px-2.5",
+                activeRoute === route.key
+                  ? "bg-base-200 text-primary"
+                  : "btn-ghost text-base-content/80",
               ].join(" ")}
               onClick={() => navigateTo(route.key)}
             >

@@ -16,6 +16,7 @@ export interface TodoItemRecord {
   order: number;
   createdAt: Date;
   startedAt: Date | null;
+  pausedAt: Date | null;
   completedAt: Date | null;
   deviationSeconds: number;
   actualFocusSeconds: number | null;
@@ -105,6 +106,35 @@ export class DailyLogRepository {
         todoCount,
         doneCount,
         previewTodos
+      }
+    });
+  }
+
+  startRestSession(userId: string, dateKey: string, startedAt: Date) {
+    return this.prisma.dailyLog.update({
+      where: {
+        userId_dateKey: {
+          userId,
+          dateKey
+        }
+      },
+      data: {
+        restStartedAt: startedAt
+      }
+    });
+  }
+
+  stopRestSession(userId: string, dateKey: string, nextAccumulatedSeconds: number) {
+    return this.prisma.dailyLog.update({
+      where: {
+        userId_dateKey: {
+          userId,
+          dateKey
+        }
+      },
+      data: {
+        restAccumulatedSeconds: nextAccumulatedSeconds,
+        restStartedAt: null
       }
     });
   }

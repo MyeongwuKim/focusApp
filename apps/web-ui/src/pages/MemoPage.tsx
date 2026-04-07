@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MemoEditorBody } from "../features/memo/components/MemoEditorBody";
 import { MemoToolbar } from "../features/memo/components/MemoToolbar";
-import { fetchDailyLogMemo, upsertDailyLogMemo } from "../api/dailyLogApi";
+import { useDailyLogMemoMutation, useDailyLogQuery } from "../queries";
 import { useAppStore } from "../stores";
 
 type MemoPageProps = {
@@ -28,21 +27,15 @@ export function MemoPage({ dateKey, className }: MemoPageProps) {
     () => dateKey ?? selectedDateKey ?? getTodayDateKey(),
     [dateKey, selectedDateKey]
   );
-  const queryClient = useQueryClient();
   const hydrateGuardRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
+  const lastSavedMemoRef = useRef("<p></p>");
 
-  const memoQuery = useQuery({
-    queryKey: ["daily-log-memo", resolvedDateKey] as const,
-    queryFn: () => fetchDailyLogMemo(resolvedDateKey),
+  const { dailyLogMemoQuery: memoQuery } = useDailyLogQuery({
+    memoDateKey: resolvedDateKey,
   });
-
-  const upsertMemoMutation = useMutation({
-    mutationFn: (memo: string) => upsertDailyLogMemo({ dateKey: resolvedDateKey, memo }),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["daily-log-memo", resolvedDateKey], data ? { ...data } : null);
-    },
-  });
+  const { upsertDailyLogMemoMutation } = useDailyLogMemoMutation(resolvedDateKey);
+  const mutateMemoAsyncRef = useRef(upsertDailyLogMemoMutation.mutateAsync);
 
   const editor = useEditor({
     extensions: [
@@ -69,21 +62,47 @@ export function MemoPage({ dateKey, className }: MemoPageProps) {
   });
 
   useEffect(() => {
+    mutateMemoAsyncRef.current = upsertDailyLogMemoMutation.mutateAsync;
+  }, [upsertDailyLogMemoMutation.mutateAsync]);
+
+  useEffect(() => {
     if (!editor) {
       return;
     }
 
     const nextMemo = memoQuery.data?.memo ?? "<p></p>";
     if (editor.getHTML() === nextMemo) {
+      lastSavedMemoRef.current = nextMemo;
       return;
     }
 
     hydrateGuardRef.current = true;
     editor.commands.setContent(nextMemo, false);
+    lastSavedMemoRef.current = nextMemo;
     queueMicrotask(() => {
       hydrateGuardRef.current = false;
     });
   }, [editor, memoQuery.data?.memo]);
+
+  const saveCurrentMemo = useCallback(() => {
+    if (!editor) {
+      return;
+    }
+
+    const html = editor.getHTML();
+    if (html === lastSavedMemoRef.current) {
+      return;
+    }
+
+    void mutateMemoAsyncRef
+      .current(html)
+      .then(() => {
+        lastSavedMemoRef.current = html;
+      })
+      .catch(() => {
+        // 자동 저장 실패는 다음 입력 주기에 재시도
+      });
+  }, [editor]);
 
   useEffect(() => {
     if (!editor) {
@@ -100,20 +119,34 @@ export function MemoPage({ dateKey, className }: MemoPageProps) {
       }
 
       saveTimerRef.current = window.setTimeout(() => {
-        const html = editor.getHTML();
-        void upsertMemoMutation.mutateAsync(html);
+        saveCurrentMemo();
       }, 450);
     };
 
-    editor.on("update", handleUpdate);
-    return () => {
-      editor.off("update", handleUpdate);
+    const handleBlur = () => {
+      if (hydrateGuardRef.current) {
+        return;
+      }
+
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
+      saveCurrentMemo();
     };
-  }, [editor, upsertMemoMutation]);
+
+    editor.on("update", handleUpdate);
+    editor.on("blur", handleBlur);
+    return () => {
+      editor.off("update", handleUpdate);
+      editor.off("blur", handleBlur);
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      saveCurrentMemo();
+    };
+  }, [editor, saveCurrentMemo]);
 
   return (
     <section

@@ -3,6 +3,7 @@ import fastifyApollo, { fastifyApolloDrainPlugin } from "@as-integrations/fastif
 import Fastify from "fastify";
 import { buildContext, type GraphQLContext } from "./graphql/context.js";
 import { resolvers, typeDefs } from "./graphql/schema.js";
+import { registerStatsCommentaryRoute } from "./modules/stats/stats-commentary.route.js";
 
 export async function createApp() {
   const app = Fastify({
@@ -26,7 +27,7 @@ export async function createApp() {
   await apollo.start();
 
   app.addHook("onSend", async (request, reply, payload) => {
-    if (request.url.startsWith("/graphql")) {
+    if (request.url.startsWith("/graphql") || request.url.startsWith("/api/")) {
       reply
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "POST,OPTIONS")
@@ -39,6 +40,17 @@ export async function createApp() {
     path: "/graphql",
     context: async (request, reply) => buildContext(request, reply),
   });
+
+  app.options("/api/stats/commentary", async (_request, reply) => {
+    return reply
+      .code(204)
+      .header("Access-Control-Allow-Origin", "*")
+      .header("Access-Control-Allow-Methods", "POST,OPTIONS")
+      .header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+      .send();
+  });
+
+  await registerStatsCommentaryRoute(app);
 
   return app;
 }

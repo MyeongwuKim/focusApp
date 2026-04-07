@@ -32,6 +32,8 @@ model DailyLog {
   monthKey    String
   memo        String?
   todos       DailyTaskEntry[]
+  restAccumulatedSeconds Int @default(0)
+  restStartedAt DateTime?
   todoCount   Int        @default(0)
   doneCount   Int        @default(0)
   previewTodos String[]
@@ -80,6 +82,7 @@ type DailyTaskEntry {
   order              Int
   createdAt          DateTime
   startedAt          DateTime?
+  pausedAt           DateTime?
   completedAt        DateTime?
   deviationSeconds   Int
   actualFocusSeconds Int?

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
-import { taskCollectionsQuery } from "../../../queries/useTaskCollectionsQuery";
+import { useTaskCollectionQuery } from "../../../queries";
 import { TaskManagementTaskItem } from "../../task-management/components/TaskManagementTaskItem";
 import { TaskManagementCollectionItem } from "../../task-management/components/TaskManagementCollectionItem";
 
@@ -24,7 +24,8 @@ type TodoTaskPickerModalProps = {
 };
 
 export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPickerModalProps) {
-  const { data: collections = [], isLoading } = taskCollectionsQuery();
+  const { taskCollectionsQuery } = useTaskCollectionQuery();
+  const { data: collections = [], isLoading } = taskCollectionsQuery;
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<PickerCategory>("all");

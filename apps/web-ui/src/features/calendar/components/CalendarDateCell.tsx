@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { FiCheckCircle } from "react-icons/fi";
 import { getDateTextClass } from "../utils/date";
 
 export type CalendarPreviewBar = {
@@ -12,6 +13,7 @@ type CalendarDateCellProps = {
   isSelected: boolean;
   holidayName?: string;
   previewBars: CalendarPreviewBar[];
+  isAllDone: boolean;
   onClick: () => void;
 };
 
@@ -21,24 +23,35 @@ export const CalendarDateCell = memo(function CalendarDateCell({
   isSelected,
   holidayName,
   previewBars,
+  isAllDone,
   onClick,
 }: CalendarDateCellProps) {
   const dateTextClass = getDateTextClass(date, inCurrentMonth, Boolean(holidayName));
-  const visibleBars = previewBars.slice(0, 3);
-  const hasMoreBars = previewBars.length > 3;
+  const collapsedMaxBars = 3;
+  const visibleBars = isSelected ? previewBars : previewBars.slice(0, collapsedMaxBars);
+  const hasMoreBars = !isSelected && previewBars.length > collapsedMaxBars;
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={[
-        "flex h-full min-h-[5.15rem] flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition",
+        "relative z-0 flex h-full min-h-[5.15rem] flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition-[border-color,background-color,box-shadow] duration-220 ease-out",
         inCurrentMonth ? "bg-base-100" : "bg-base-200/65",
-        isSelected ? "border-primary/90 bg-primary/14 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]" : "",
+        isSelected ? "z-10 border-primary/90 bg-primary/14 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]" : "",
       ].join(" ")}
     >
-      <div className="h-[1rem]">
+      <div className="flex h-[1rem] items-center justify-between">
         <div className={["text-[0.95rem] leading-none", dateTextClass].join(" ")}>{date.getDate()}</div>
+        {isAllDone ? (
+          <span
+            className="inline-flex items-center justify-center rounded-full bg-emerald-500/15 p-[2px] text-emerald-600"
+            aria-label="모든 할일 완료"
+            title="모든 할일 완료"
+          >
+            <FiCheckCircle size={10} />
+          </span>
+        ) : null}
       </div>
 
       <div className="h-[0.55rem]">
@@ -60,6 +73,7 @@ export const CalendarDateCell = memo(function CalendarDateCell({
           </div>
         ) : null}
       </div>
+
     </button>
   );
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiCoffee, FiPause, FiPlay } from "react-icons/fi";
+import { FiCoffee, FiPause } from "react-icons/fi";
 import { RestDurationBottomSheet } from "./RestDurationBottomSheet";
 
 type TodoProgressFooterProps = {
@@ -16,7 +16,6 @@ type TodoProgressFooterProps = {
     restDurationPreviewMin: number | null;
     restDurationDefaultMin: number | null;
   };
-  onToggleFocus: () => void;
   onToggleRest: () => void;
   onApplyRestDurationOnce: (nextDurationMin: number | null) => void;
   onSaveRestDurationDefault: (nextDurationMin: number | null) => void;
@@ -33,7 +32,6 @@ function formatRestDurationLabel(durationMin: number | null) {
 export function TodoProgressFooter({
   summary,
   session,
-  onToggleFocus,
   onToggleRest,
   onApplyRestDurationOnce,
   onSaveRestDurationDefault,
@@ -95,19 +93,6 @@ export function TodoProgressFooter({
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            className={[
-              "btn btn-xs h-7 min-h-7 rounded-full px-2.5",
-              session.active === "focus"
-                ? "border-info/30 bg-info/20 text-info"
-                : "border-base-300 bg-base-100 text-base-content/75",
-            ].join(" ")}
-            onClick={onToggleFocus}
-          >
-            {session.active === "focus" ? <FiPause size={12} /> : <FiPlay size={12} />}
-            {session.active === "focus" ? "집중 중지" : "집중 시작"}
-          </button>
           <button
             type="button"
             className={[

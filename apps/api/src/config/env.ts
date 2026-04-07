@@ -3,7 +3,9 @@ import { z } from "zod";
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
-  DATABASE_URL: z.string().min(1)
+  DATABASE_URL: z.string().min(1),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
 });
 
 const parsed = envSchema.safeParse(process.env);

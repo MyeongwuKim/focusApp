@@ -15,6 +15,9 @@ export default function useHolidaysByViewMonth(viewMonth: Date) {
       queryKey: ["kr-holidays", year] as const,
       queryFn: () => fetchKoreanHolidays(year),
       staleTime: 24 * 60 * 60 * 1000,
+      meta: {
+        skipGlobalErrorToast: true,
+      },
     })),
   });
 

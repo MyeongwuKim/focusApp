@@ -6,7 +6,7 @@ import { MAIN_ROUTE } from "../routes/route-config";
 import { shiftMonth } from "../utils/calendar";
 
 import { useAppStore } from "../stores";
-import useDailyLogsQuery from "../queries/useDailyLogsQuery";
+import { useDailyLogQuery } from "../queries";
 
 type CalendarRootPageProps = {
   isOverlayActive: boolean;
@@ -22,7 +22,8 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
       ),
     [viewMonth]
   );
-  const { monthlyLogs } = useDailyLogsQuery(monthKeys);
+  const { monthlyLogsQuery } = useDailyLogQuery({ monthKeys });
+  const { monthlyLogs } = monthlyLogsQuery;
 
   const logsByDate = useMemo(() => {
     if (monthlyLogs.length === 0) {
@@ -32,7 +33,10 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
     return monthlyLogs.reduce((acc, log) => {
       const sortedTodos = [...log.todos].sort((a, b) => a.order - b.order);
       acc[log.dateKey] = {
-        previewBars: sortedTodos.slice(0, 3).map((todo) => ({
+        todoCount: log.todoCount,
+        doneCount: log.doneCount,
+        allDone: log.todoCount > 0 && log.doneCount === log.todoCount,
+        previewBars: sortedTodos.map((todo) => ({
           id: todo.id,
           label: todo.content,
         })),
@@ -42,7 +46,16 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         })),
       };
       return acc;
-    }, {} as Record<string, { previewBars: { id: string; label: string }[]; tasks: { label: string; done: boolean }[] }>);
+    }, {} as Record<
+      string,
+      {
+        todoCount: number;
+        doneCount: number;
+        allDone: boolean;
+        previewBars: { id: string; label: string }[];
+        tasks: { label: string; done: boolean }[];
+      }
+    >);
   }, [monthlyLogs]);
 
   return (

@@ -13,6 +13,7 @@ import type { TaskItem } from "../types";
 type TodoItemCardProps = {
   item: TaskItem;
   onTaskAction: (taskId: string, action: "start" | "pause" | "resume" | "complete") => void;
+  onEditActualFocus?: (taskId: string) => void;
   onOpenMenu: (taskId: string) => void;
   disableActions?: boolean;
   isDragging?: boolean;
@@ -35,6 +36,7 @@ function renderStatusIcon(status: TaskItem["status"]) {
 function renderTaskActions(
   item: TaskItem,
   onTaskAction: TodoItemCardProps["onTaskAction"],
+  onEditActualFocus?: TodoItemCardProps["onEditActualFocus"],
   disableActions = false
 ) {
   if (item.status === "todo") {
@@ -101,10 +103,22 @@ function renderTaskActions(
     );
   }
 
+  const actualFocusMinutes = Math.max(Math.round((item.completedDurationMs ?? item.accumulatedMs) / 60000), 0);
+
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-      <FiCheckCircle size={12} />
-      완료됨
+    <div className="flex flex-wrap items-center gap-1.5">
+      <div className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
+        <FiCheckCircle size={12} />
+        완료됨
+      </div>
+      <button
+        type="button"
+        className="btn btn-xs h-7 min-h-7 rounded-full border-success/30 bg-base-100 px-2.5 text-success"
+        disabled={disableActions}
+        onClick={() => onEditActualFocus?.(item.id)}
+      >
+        집중 {actualFocusMinutes}분
+      </button>
     </div>
   );
 }
@@ -112,6 +126,7 @@ function renderTaskActions(
 export function TodoItemCard({
   item,
   onTaskAction,
+  onEditActualFocus,
   onOpenMenu,
   disableActions = false,
   isDragging = false,
@@ -149,7 +164,7 @@ export function TodoItemCard({
           <FiMoreVertical size={13} />
         </button>
       </div>
-      <div className="mt-2">{renderTaskActions(item, onTaskAction, disableActions)}</div>
+      <div className="mt-2">{renderTaskActions(item, onTaskAction, onEditActualFocus, disableActions)}</div>
     </div>
   );
 }

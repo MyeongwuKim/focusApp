@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FiCheckCircle, FiChevronUp } from "react-icons/fi";
+import { FiCheckCircle, FiChevronRight, FiChevronUp, FiClipboard } from "react-icons/fi";
 import { useAppStore } from "../../../stores";
 import { formatDateLabel } from "../utils/date";
 
@@ -100,7 +100,6 @@ export function DateSelectionSheet({
 
   const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
     const closeThreshold = 84;
-    const openTasksThreshold = 64;
     const swipeThreshold = 52;
 
     setIsDragging(false);
@@ -111,13 +110,6 @@ export function DateSelectionSheet({
       }
       setDragX(0);
       setDragY(0);
-      touchStartRef.current = null;
-      swipeAxisRef.current = null;
-      return;
-    }
-
-    if (dragY < -openTasksThreshold) {
-      onRequestOpenTasks();
       touchStartRef.current = null;
       swipeAxisRef.current = null;
       return;
@@ -159,19 +151,38 @@ export function DateSelectionSheet({
             setShouldRender(false);
           }
         }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
-        <div className="mb-1 flex items-center justify-center text-base-content/45">
-          <FiChevronUp size={18} />
+        <div
+          className="mb-1 select-none"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={() => {
+            setIsDragging(false);
+            setDragX(0);
+            setDragY(0);
+            touchStartRef.current = null;
+            swipeAxisRef.current = null;
+          }}
+        >
+          <div className="flex items-center justify-center text-base-content/45">
+            <FiChevronUp size={18} />
+          </div>
         </div>
-        <div className="mb-1 flex items-center justify-between">
+        <div className="mt-1 flex items-center justify-between">
           <p className="m-0 text-[0.95rem] font-semibold text-base-content">
             {formatDateLabel(selectedDateKey)}
           </p>
+          <button
+            type="button"
+            className="btn btn-xs h-7 min-h-7 rounded-full border-base-300 bg-base-100 px-2 text-[11px] text-base-content/80"
+            onClick={onRequestOpenTasks}
+          >
+            상세
+            <FiChevronRight size={12} />
+          </button>
         </div>
-        <div className="mt-2 flex-1 space-y-2 overflow-y-auto">
+        <div className="mt-2 flex-1 space-y-2 overflow-y-auto overscroll-contain">
           {selectedTasks.length > 0 ? (
             selectedTasks.map((task, index) => (
               <div
@@ -185,7 +196,14 @@ export function DateSelectionSheet({
               </div>
             ))
           ) : (
-            <p className="m-0 text-sm text-base-content/60">이 날짜에는 할 일이 없어요.</p>
+            <div className="flex min-h-full flex-col items-center justify-center gap-4 px-3 py-6 text-center">
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-base-200 text-base-content/60">
+                <FiClipboard size={20} />
+              </span>
+              <p className="m-0 text-base font-semibold tracking-tight text-base-content/80">
+                지금은 비어 있어요. 작은 할 일부터 시작해볼까요?
+              </p>
+            </div>
           )}
         </div>
       </div>

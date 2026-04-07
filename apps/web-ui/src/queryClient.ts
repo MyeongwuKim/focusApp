@@ -1,6 +1,39 @@
-import { QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
+import { toast } from "./stores";
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "요청 처리 중 오류가 발생했어요.";
+}
+
+type GlobalErrorMeta = {
+  skipGlobalErrorToast?: boolean;
+  globalErrorTitle?: string;
+};
 
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      const meta = (query.meta ?? {}) as GlobalErrorMeta;
+      if (meta.skipGlobalErrorToast) {
+        return;
+      }
+
+      toast.error(getErrorMessage(error), meta.globalErrorTitle ?? "요청 실패");
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _context, mutation) => {
+      const meta = (mutation.meta ?? {}) as GlobalErrorMeta & { useGlobalErrorToast?: boolean };
+      if (!meta.useGlobalErrorToast || meta.skipGlobalErrorToast) {
+        return;
+      }
+
+      toast.error(getErrorMessage(error), meta.globalErrorTitle ?? "요청 실패");
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 60 * 1000,
