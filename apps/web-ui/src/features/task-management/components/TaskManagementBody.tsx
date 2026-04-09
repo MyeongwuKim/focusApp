@@ -415,7 +415,11 @@ export function TaskManagementBody() {
                   collectionName={collectionNameById.get(draggingTask.collectionId) ?? "미분류"}
                   active={selectedTaskId === draggingTask.id}
                   disableActions
-                  onOpenMenu={() => {}}
+                  sideButton={{
+                    type: "menu",
+                    ariaLabel: "할일 옵션",
+                    onClick: () => {},
+                  }}
                 />
               </div>
             ) : null}

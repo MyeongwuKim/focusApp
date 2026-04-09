@@ -16,6 +16,7 @@ export interface TodoItemRecord {
   order: number;
   createdAt: Date;
   startedAt: Date | null;
+  scheduledStartAt: Date | null;
   pausedAt: Date | null;
   completedAt: Date | null;
   deviationSeconds: number;

@@ -29,6 +29,7 @@ type CalendarPageProps = {
     }
   >;
   isActive: boolean;
+  todayOpenSignal?: number;
 };
 
 type SelectedTaskItem = {
@@ -62,6 +63,7 @@ function buildRowTemplate(selectedRowIndex: number | null) {
 export function CalendarPage({
   logsByDate,
   isActive,
+  todayOpenSignal = 0,
 }: CalendarPageProps) {
   const { navigateTo } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
@@ -72,6 +74,8 @@ export function CalendarPage({
   const touchStartRef = useRef<TouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
   const holidayErrorNotifiedRef = useRef(false);
+  const todayOpenSignalRef = useRef(todayOpenSignal);
+  const shouldOpenTodaySheetRef = useRef(false);
 
   const [dragX, setDragX] = useState(0);
   const [settleDirection, setSettleDirection] = useState<-1 | 0 | 1>(0);
@@ -86,6 +90,7 @@ export function CalendarPage({
 
   const prevMonth = useMemo(() => shiftMonth(viewMonth, -1), [viewMonth]);
   const nextMonth = useMemo(() => shiftMonth(viewMonth, 1), [viewMonth]);
+  const todayDateKey = formatDateKey(new Date());
 
   const prevCells = useMemo(() => buildCalendarCells(prevMonth), [prevMonth]);
   const currentCells = useMemo(() => buildCalendarCells(viewMonth), [viewMonth]);
@@ -175,6 +180,20 @@ export function CalendarPage({
   }, [isActive]);
 
   useEffect(() => {
+    if (todayOpenSignal !== todayOpenSignalRef.current) {
+      todayOpenSignalRef.current = todayOpenSignal;
+      shouldOpenTodaySheetRef.current = true;
+    }
+
+    if (!shouldOpenTodaySheetRef.current || !selectedDateKey) {
+      return;
+    }
+
+    setIsDateSheetOpen(true);
+    shouldOpenTodaySheetRef.current = false;
+  }, [todayOpenSignal, selectedDateKey]);
+
+  useEffect(() => {
     if (!hasHolidayError || holidayErrorNotifiedRef.current) {
       return;
     }
@@ -249,12 +268,14 @@ export function CalendarPage({
                     const previewBars = cell.inCurrentMonth ? logsByDate[dateKey]?.previewBars ?? [] : [];
                     const isAllDone = cell.inCurrentMonth ? (logsByDate[dateKey]?.allDone ?? false) : false;
                     const isSelected = selectedDateKey === dateKey;
+                    const isToday = dateKey === todayDateKey;
                     const holidayName = holidaysByDate[formatDateKey(cell.date)];
                     return (
                       <CalendarDateCell
                         key={cell.date.toISOString()}
                         date={cell.date}
                         inCurrentMonth={cell.inCurrentMonth}
+                        isToday={isToday}
                         isSelected={isSelected}
                         holidayName={holidayName}
                         previewBars={previewBars}

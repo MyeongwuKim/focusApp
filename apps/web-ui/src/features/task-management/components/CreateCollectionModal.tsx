@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { FiX } from "react-icons/fi";
+import { Button } from "../../../components/ui/Button";
+import { InputField } from "../../../components/ui/InputField";
 
 type CreateCollectionModalProps = {
   isOpen: boolean;
@@ -44,18 +46,13 @@ export function CreateCollectionModal({ isOpen, onClose, onCreate }: CreateColle
       >
         <div className="mb-3 flex items-center justify-between">
           <h3 className="m-0 text-base font-semibold text-base-content">컬렉션 추가</h3>
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs btn-circle"
-            onClick={onClose}
-            aria-label="컬렉션 추가 닫기"
-          >
+          <Button variant="ghost" size="xs" circle onClick={onClose} aria-label="컬렉션 추가 닫기">
             <FiX size={14} />
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-3">
-          <input
+          <InputField
             value={name}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
@@ -69,16 +66,16 @@ export function CreateCollectionModal({ isOpen, onClose, onCreate }: CreateColle
                 onClose();
               }
             }}
-            className="input input-bordered w-full focus:outline-none focus:ring-0 focus:border-base-300"
+            className="w-full"
             placeholder="컬렉션 이름"
           />
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose}>
               취소
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               disabled={name.trim().length === 0}
               onClick={() => {
                 const nextName = name.trim();
@@ -90,7 +87,7 @@ export function CreateCollectionModal({ isOpen, onClose, onCreate }: CreateColle
               }}
             >
               생성
-            </button>
+            </Button>
           </div>
         </div>
       </div>

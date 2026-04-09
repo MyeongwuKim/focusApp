@@ -10,6 +10,7 @@ export type CalendarPreviewBar = {
 type CalendarDateCellProps = {
   date: Date;
   inCurrentMonth: boolean;
+  isToday: boolean;
   isSelected: boolean;
   holidayName?: string;
   previewBars: CalendarPreviewBar[];
@@ -20,6 +21,7 @@ type CalendarDateCellProps = {
 export const CalendarDateCell = memo(function CalendarDateCell({
   date,
   inCurrentMonth,
+  isToday,
   isSelected,
   holidayName,
   previewBars,
@@ -42,7 +44,15 @@ export const CalendarDateCell = memo(function CalendarDateCell({
       ].join(" ")}
     >
       <div className="flex h-[1rem] items-center justify-between">
-        <div className={["text-[0.95rem] leading-none", dateTextClass].join(" ")}>{date.getDate()}</div>
+        <div
+          className={[
+            "text-[0.95rem] leading-none",
+            dateTextClass,
+            isToday ? "font-semibold text-primary" : "",
+          ].join(" ")}
+        >
+          {date.getDate()}
+        </div>
         {isAllDone ? (
           <span
             className="inline-flex items-center justify-center rounded-full bg-emerald-500/15 p-[2px] text-emerald-600"

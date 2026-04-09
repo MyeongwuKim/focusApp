@@ -1,4 +1,5 @@
 import { THEME_STYLES, THEME_STYLE_LABEL, useThemeStore } from "../../../stores";
+import { Button } from "../../../components/ui/Button";
 import { SegmentedToggle } from "../../../components/SegmentedToggle";
 import { SettingsDetailShell } from "./SettingsDetailShell";
 
@@ -16,15 +17,15 @@ export function SettingsThemeView() {
           {THEME_STYLES.map((style) => {
             const isActive = style === themeStyle;
             return (
-              <button
+              <Button
                 key={style}
-                type="button"
-                className={`btn btn-sm ${isActive ? "btn-primary" : "btn-ghost"}`}
+                size="sm"
+                variant={isActive ? "primary" : "ghost"}
                 onClick={() => setThemeStyle(style)}
                 aria-pressed={isActive}
               >
                 {THEME_STYLE_LABEL[style]}
-              </button>
+              </Button>
             );
           })}
         </div>

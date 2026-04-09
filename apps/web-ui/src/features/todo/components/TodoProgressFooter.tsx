@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiCoffee, FiPause } from "react-icons/fi";
+import { Button } from "../../../components/ui/Button";
 import { RestDurationBottomSheet } from "./RestDurationBottomSheet";
 
 type TodoProgressFooterProps = {
@@ -93,10 +94,10 @@ export function TodoProgressFooter({
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
+          <Button
+            size="xs"
             className={[
-              "btn btn-xs h-7 min-h-7 rounded-full px-2.5",
+              "h-7 min-h-7 rounded-full px-2.5",
               session.active === "rest"
                 ? "border-warning/30 bg-warning/20 text-warning"
                 : "border-base-300 bg-base-100 text-base-content/75",
@@ -105,7 +106,7 @@ export function TodoProgressFooter({
           >
             {session.active === "rest" ? <FiPause size={12} /> : <FiCoffee size={12} />}
             {session.active === "rest" ? "휴식 중지" : "휴식 시작"}
-          </button>
+          </Button>
         </div>
       </div>
 

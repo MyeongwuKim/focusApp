@@ -15,6 +15,7 @@ interface AddTodoInput extends BaseInput {
 interface AddTodoBatchItemInput {
   content: string;
   taskId?: string | null;
+  scheduledStartAt?: string | null;
 }
 
 interface AddTodosInput extends BaseInput {
@@ -35,6 +36,11 @@ interface RestSessionInput extends BaseInput {}
 interface UpdateTodoActualFocusInput extends BaseInput {
   todoId: string;
   actualFocusSeconds: number;
+}
+
+interface UpdateTodoScheduleInput extends BaseInput {
+  todoId: string;
+  scheduledStartAt: string | null;
 }
 
 export class DailyLogService {
@@ -83,6 +89,7 @@ export class DailyLogService {
       order: input.order ?? log.todos.length,
       createdAt,
       startedAt: null,
+      scheduledStartAt: null,
       pausedAt: null,
       completedAt: null,
       deviationSeconds: 0,
@@ -162,6 +169,7 @@ export class DailyLogService {
         order: log.todos.length + appendedTodos.length,
         createdAt,
         startedAt: null,
+        scheduledStartAt: parseScheduledStartAt(item.scheduledStartAt),
         pausedAt: null,
         completedAt: null,
         deviationSeconds: 0,
@@ -203,6 +211,9 @@ export class DailyLogService {
     if (targetIndex < 0) {
       throw new Error("TODO_NOT_FOUND");
     }
+    if (hasAnotherInProgressTodo(log.todos, input.todoId)) {
+      throw new Error("ANOTHER_TODO_ALREADY_IN_PROGRESS");
+    }
 
     const nextTodos = [...log.todos];
     const targetTodo = nextTodos[targetIndex];
@@ -210,6 +221,7 @@ export class DailyLogService {
       ...targetTodo,
       done: false,
       startedAt: targetTodo.startedAt ?? new Date(),
+      scheduledStartAt: null,
       pausedAt: null,
       completedAt: null,
       actualFocusSeconds: null
@@ -259,6 +271,9 @@ export class DailyLogService {
     if (targetIndex < 0) {
       throw new Error("TODO_NOT_FOUND");
     }
+    if (hasAnotherInProgressTodo(log.todos, input.todoId)) {
+      throw new Error("ANOTHER_TODO_ALREADY_IN_PROGRESS");
+    }
 
     const targetTodo = log.todos[targetIndex];
     if (targetTodo.done) {
@@ -277,6 +292,7 @@ export class DailyLogService {
     nextTodos[targetIndex] = {
       ...targetTodo,
       pausedAt: null,
+      scheduledStartAt: null,
       deviationSeconds: targetTodo.deviationSeconds + pausedSeconds
     };
 
@@ -314,10 +330,48 @@ export class DailyLogService {
       ...targetTodo,
       done: true,
       startedAt,
+      scheduledStartAt: null,
       pausedAt: null,
       completedAt: now,
       deviationSeconds: targetTodo.deviationSeconds + pausedSeconds,
       actualFocusSeconds
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async resetTodo(input: CompleteTodoInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    const targetTodo = log.todos[targetIndex];
+    if (
+      !targetTodo.done &&
+      !targetTodo.startedAt &&
+      !targetTodo.pausedAt &&
+      !targetTodo.completedAt &&
+      targetTodo.deviationSeconds === 0 &&
+      targetTodo.actualFocusSeconds === null
+    ) {
+      return log;
+    }
+
+    const nextTodos = [...log.todos];
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      done: false,
+      startedAt: null,
+      pausedAt: null,
+      completedAt: null,
+      deviationSeconds: 0,
+      actualFocusSeconds: null
     };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
@@ -404,6 +458,39 @@ export class DailyLogService {
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
   }
 
+  async updateTodoSchedule(input: UpdateTodoScheduleInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    let nextScheduledStartAt: Date | null = null;
+    if (input.scheduledStartAt) {
+      nextScheduledStartAt = new Date(input.scheduledStartAt);
+      if (Number.isNaN(nextScheduledStartAt.getTime())) {
+        throw new Error("INVALID_SCHEDULED_START_AT");
+      }
+
+      if (input.dateKey === getTodayDateKey() && nextScheduledStartAt.getTime() <= Date.now()) {
+        throw new Error("SCHEDULE_MUST_BE_FUTURE_FOR_TODAY");
+      }
+    }
+
+    const nextTodos = [...log.todos];
+    const targetTodo = nextTodos[targetIndex];
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      scheduledStartAt: nextScheduledStartAt,
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
   async startRestSession(input: RestSessionInput) {
     const log = await this.repository.upsertDailyLog({
       userId: input.userId,
@@ -443,6 +530,32 @@ export class DailyLogService {
   }
 }
 
+function hasAnotherInProgressTodo(todos: TodoItemRecord[], excludeTodoId: string) {
+  return todos.some(
+    (todo) => todo.id !== excludeTodoId && !todo.done && Boolean(todo.startedAt) && !todo.pausedAt
+  );
+}
+
 function getMonthKey(dateKey: string) {
   return dateKey.slice(0, 7);
+}
+
+function getTodayDateKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function parseScheduledStartAt(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("INVALID_SCHEDULED_START_AT");
+  }
+
+  return parsed;
 }

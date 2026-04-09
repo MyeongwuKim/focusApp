@@ -9,6 +9,7 @@ import {
   FiList,
   FiType,
 } from "react-icons/fi";
+import { Button } from "../../../components/ui/Button";
 
 const TEXT_STYLE_OPTIONS = [
   { key: "paragraph", label: "본문" },
@@ -42,12 +43,10 @@ export function MemoToolbar({ editor }: MemoToolbarProps) {
 
   return (
     <div className="mb-2 flex shrink-0 flex-wrap gap-1.5 rounded-xl border border-base-300/80 bg-base-100/85 p-1.5">
-      <button
-        type="button"
-        className={[
-          "btn btn-xs h-8 min-h-8 rounded-lg px-3",
-          editor?.isActive("heading") || isHeadingMenuOpen ? "btn-primary" : "btn-ghost",
-        ].join(" ")}
+      <Button
+        size="xs"
+        variant={editor?.isActive("heading") || isHeadingMenuOpen ? "primary" : "ghost"}
+        className="h-8 min-h-8 rounded-lg px-3"
         onClick={() => {
           setIsHeadingMenuOpen((prev) => !prev);
           setIsFormatMenuOpen(false);
@@ -62,18 +61,18 @@ export function MemoToolbar({ editor }: MemoToolbarProps) {
             isHeadingMenuOpen ? "rotate-180" : "rotate-0",
           ].join(" ")}
         />
-      </button>
-      <button
-        type="button"
-        className={[
-          "btn btn-xs h-8 min-h-8 rounded-lg px-3",
-          (editor?.isActive("bold") ||
-            editor?.isActive("italic") ||
-            editor?.isActive("strike") ||
-            isFormatMenuOpen)
-            ? "btn-primary"
-            : "btn-ghost",
-        ].join(" ")}
+      </Button>
+      <Button
+        size="xs"
+        variant={
+          editor?.isActive("bold") ||
+          editor?.isActive("italic") ||
+          editor?.isActive("strike") ||
+          isFormatMenuOpen
+            ? "primary"
+            : "ghost"
+        }
+        className="h-8 min-h-8 rounded-lg px-3"
         onClick={() => {
           setIsFormatMenuOpen((prev) => !prev);
           setIsHeadingMenuOpen(false);
@@ -88,40 +87,34 @@ export function MemoToolbar({ editor }: MemoToolbarProps) {
             isFormatMenuOpen ? "rotate-180" : "rotate-0",
           ].join(" ")}
         />
-      </button>
-      <button
-        type="button"
-        className={[
-          "btn btn-xs h-8 min-h-8 rounded-lg px-2.5",
-          editor?.isActive("bulletList") ? "btn-primary" : "btn-ghost",
-        ].join(" ")}
+      </Button>
+      <Button
+        size="xs"
+        variant={editor?.isActive("bulletList") ? "primary" : "ghost"}
+        className="h-8 min-h-8 rounded-lg px-2.5"
         onClick={() => editor?.chain().focus().toggleBulletList().run()}
       >
         <FiList size={13} />
         목록
-      </button>
-      <button
-        type="button"
-        className={[
-          "btn btn-xs h-8 min-h-8 rounded-lg px-2.5",
-          editor?.isActive("orderedList") ? "btn-primary" : "btn-ghost",
-        ].join(" ")}
+      </Button>
+      <Button
+        size="xs"
+        variant={editor?.isActive("orderedList") ? "primary" : "ghost"}
+        className="h-8 min-h-8 rounded-lg px-2.5"
         onClick={() => editor?.chain().focus().toggleOrderedList().run()}
       >
         <FiHash size={13} />
         번호
-      </button>
-      <button
-        type="button"
-        className={[
-          "btn btn-xs h-8 min-h-8 rounded-lg px-2.5",
-          editor?.isActive("taskList") ? "btn-primary" : "btn-ghost",
-        ].join(" ")}
+      </Button>
+      <Button
+        size="xs"
+        variant={editor?.isActive("taskList") ? "primary" : "ghost"}
+        className="h-8 min-h-8 rounded-lg px-2.5"
         onClick={() => editor?.chain().focus().toggleTaskList().run()}
       >
         <FiCheckSquare size={13} />
         체크
-      </button>
+      </Button>
 
       <div
         className={[
@@ -139,13 +132,11 @@ export function MemoToolbar({ editor }: MemoToolbarProps) {
                   });
 
             return (
-              <button
+              <Button
                 key={option.key}
-                type="button"
-                className={[
-                  "btn btn-xs h-7 min-h-7 rounded-md px-2.5",
-                  isActive ? "btn-primary" : "btn-ghost",
-                ].join(" ")}
+                size="xs"
+                variant={isActive ? "primary" : "ghost"}
+                className="h-7 min-h-7 rounded-md px-2.5"
                 onClick={() => {
                   if (option.key === "paragraph") {
                     editor?.chain().focus().setParagraph().run();
@@ -160,7 +151,7 @@ export function MemoToolbar({ editor }: MemoToolbarProps) {
                 }}
               >
                 {option.label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -173,39 +164,33 @@ export function MemoToolbar({ editor }: MemoToolbarProps) {
         ].join(" ")}
       >
         <div className="flex flex-wrap gap-1.5 rounded-lg border border-base-300/70 bg-base-200/60 p-1.5">
-          <button
-            type="button"
-            className={[
-              "btn btn-xs h-7 min-h-7 rounded-md px-2.5",
-              editor?.isActive("bold") ? "btn-primary" : "btn-ghost",
-            ].join(" ")}
+          <Button
+            size="xs"
+            variant={editor?.isActive("bold") ? "primary" : "ghost"}
+            className="h-7 min-h-7 rounded-md px-2.5"
             onClick={() => editor?.chain().focus().toggleBold().run()}
           >
             <FiBold size={12} />
             볼드
-          </button>
-          <button
-            type="button"
-            className={[
-              "btn btn-xs h-7 min-h-7 rounded-md px-2.5",
-              editor?.isActive("italic") ? "btn-primary" : "btn-ghost",
-            ].join(" ")}
+          </Button>
+          <Button
+            size="xs"
+            variant={editor?.isActive("italic") ? "primary" : "ghost"}
+            className="h-7 min-h-7 rounded-md px-2.5"
             onClick={() => editor?.chain().focus().toggleItalic().run()}
           >
             <FiItalic size={12} />
             기울임
-          </button>
-          <button
-            type="button"
-            className={[
-              "btn btn-xs h-7 min-h-7 rounded-md px-2.5",
-              editor?.isActive("strike") ? "btn-primary" : "btn-ghost",
-            ].join(" ")}
+          </Button>
+          <Button
+            size="xs"
+            variant={editor?.isActive("strike") ? "primary" : "ghost"}
+            className="h-7 min-h-7 rounded-md px-2.5"
             onClick={() => editor?.chain().focus().toggleStrike().run()}
           >
             <span className="line-through">S</span>
             취소선
-          </button>
+          </Button>
         </div>
       </div>
     </div>

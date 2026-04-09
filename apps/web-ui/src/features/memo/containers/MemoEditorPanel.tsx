@@ -4,12 +4,12 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import { MemoEditorBody } from "../features/memo/components/MemoEditorBody";
-import { MemoToolbar } from "../features/memo/components/MemoToolbar";
-import { useDailyLogMemoMutation, useDailyLogQuery } from "../queries";
-import { useAppStore } from "../stores";
+import { MemoEditorBody } from "../components/MemoEditorBody";
+import { MemoToolbar } from "../components/MemoToolbar";
+import { useDailyLogMemoMutation, useDailyLogQuery } from "../../../queries";
+import { useAppStore } from "../../../stores";
 
-type MemoPageProps = {
+type MemoEditorPanelProps = {
   dateKey?: string;
   className?: string;
 };
@@ -21,7 +21,7 @@ function getTodayDateKey() {
   ).padStart(2, "0")}`;
 }
 
-export function MemoPage({ dateKey, className }: MemoPageProps) {
+export function MemoEditorPanel({ dateKey, className }: MemoEditorPanelProps) {
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
   const resolvedDateKey = useMemo(
     () => dateKey ?? selectedDateKey ?? getTodayDateKey(),

@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
-import { useTaskCollectionQuery } from "../../../queries";
+import { Button } from "../../../components/ui/Button";
+import { InputField } from "../../../components/ui/InputField";
+import { useTaskCollectionMutation, useTaskCollectionQuery } from "../../../queries";
+import { toast } from "../../../stores";
 import { TaskManagementTaskItem } from "../../task-management/components/TaskManagementTaskItem";
 import { TaskManagementCollectionItem } from "../../task-management/components/TaskManagementCollectionItem";
 
-type PickerCategory = "all" | string;
+type PickerCategory = "all" | "favorite" | string;
 
 type PickerTask = {
   id: string;
   label: string;
   collectionId: string;
+  isFavorite: boolean;
 };
 
 type TodoTaskPickerModalProps = {
@@ -25,6 +29,7 @@ type TodoTaskPickerModalProps = {
 
 export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPickerModalProps) {
   const { taskCollectionsQuery } = useTaskCollectionQuery();
+  const { setTaskFavoriteMutation } = useTaskCollectionMutation();
   const { data: collections = [], isLoading } = taskCollectionsQuery;
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(false);
@@ -36,7 +41,6 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
       taskId?: string | null;
     }>
   >([]);
-  const [favoriteTaskIds, setFavoriteTaskIds] = useState<string[]>([]);
   const [customLabel, setCustomLabel] = useState("");
 
   useEffect(() => {
@@ -68,6 +72,7 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
   const categoryItems = useMemo(
     () => [
       { id: "all", label: "전체" },
+      { id: "favorite", label: "즐겨찾기" },
       ...collections.map((collection) => ({
         id: collection.id,
         label: collection.name,
@@ -85,6 +90,7 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
             id: task.id,
             label: task.title,
             collectionId: collection.id,
+            isFavorite: Boolean(task.isFavorite),
           }))
       ),
     [collections]
@@ -94,17 +100,19 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     const base =
       selectedCategory === "all"
         ? taskLibrary
-        : taskLibrary.filter((task) => task.collectionId === selectedCategory);
+        : selectedCategory === "favorite"
+          ? taskLibrary.filter((task) => task.isFavorite)
+          : taskLibrary.filter((task) => task.collectionId === selectedCategory);
 
     return [...base].sort((a, b) => {
-      const aFavorite = favoriteTaskIds.includes(a.id);
-      const bFavorite = favoriteTaskIds.includes(b.id);
+      const aFavorite = a.isFavorite;
+      const bFavorite = b.isFavorite;
       if (aFavorite === bFavorite) {
         return a.label.localeCompare(b.label, "ko");
       }
       return aFavorite ? -1 : 1;
     });
-  }, [favoriteTaskIds, selectedCategory, taskLibrary]);
+  }, [selectedCategory, taskLibrary]);
 
   const collectionCountMap = useMemo(() => {
     const counts = new Map<string, number>();
@@ -113,6 +121,10 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     }
     return counts;
   }, [taskLibrary]);
+  const favoriteCount = useMemo(
+    () => taskLibrary.filter((task) => task.isFavorite).length,
+    [taskLibrary]
+  );
 
   const toggleTaskSelection = (task: PickerTask) => {
     const nextKey = `task:${task.id}`;
@@ -149,10 +161,23 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     setCustomLabel("");
   };
 
-  const toggleFavoriteTask = (taskId: string) => {
-    setFavoriteTaskIds((prev) =>
-      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
-    );
+  const toggleFavoriteTask = (task: PickerTask) => {
+    void (async () => {
+      try {
+        await setTaskFavoriteMutation.mutateAsync({
+          taskId: task.id,
+          isFavorite: !task.isFavorite,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "즐겨찾기 저장 중 오류가 발생했어요.";
+        toast.show({
+          type: "error",
+          title: "저장 실패",
+          message,
+          duration: 2200,
+        });
+      }
+    })();
   };
 
   const handleApply = () => {
@@ -184,14 +209,9 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
         ].join(" ")}
       >
         <header className="grid h-12 shrink-0 grid-cols-[44px_1fr_64px] items-center border-b border-base-300/80 px-2">
-        <button
-          type="button"
-          aria-label="할일 선택 닫기"
-          className="btn btn-sm btn-ghost btn-circle"
-          onClick={onClose}
-        >
+        <Button variant="ghost" size="sm" circle aria-label="할일 선택 닫기" onClick={onClose}>
           <FiX size={18} />
-        </button>
+        </Button>
         <h2 className="m-0 text-center text-sm font-semibold text-base-content">할일 가져오기</h2>
         <div aria-hidden="true" />
         </header>
@@ -218,9 +238,9 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
                     onSelect={() => toggleTaskSelection(task)}
                     sideButton={{
                       type: "favorite",
-                      active: favoriteTaskIds.includes(task.id),
-                      ariaLabel: favoriteTaskIds.includes(task.id) ? "즐겨찾기 해제" : "즐겨찾기",
-                      onClick: () => toggleFavoriteTask(task.id),
+                      active: task.isFavorite,
+                      ariaLabel: task.isFavorite ? "즐겨찾기 해제" : "즐겨찾기",
+                      onClick: () => toggleFavoriteTask(task),
                     }}
                   />
                 </div>
@@ -235,6 +255,8 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
             const count =
               category.id === "all"
                 ? taskLibrary.length
+                : category.id === "favorite"
+                  ? favoriteCount
                 : (collectionCountMap.get(category.id) ?? 0);
             return (
               <div
@@ -269,22 +291,26 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
           <div className="no-scrollbar flex max-h-16 flex-wrap gap-1 overflow-y-auto">
             {selectedItems.length > 0 ? (
               selectedItems.map((item) => (
-                <button
+                <Button
                   key={item.key}
-                  type="button"
                   className="rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 text-xs text-primary"
                   onClick={() =>
                     item.taskId
-                      ? toggleTaskSelection({
-                          id: item.taskId,
-                          label: item.label,
-                          collectionId: "all",
-                        })
+                      ? (() => {
+                          const task =
+                            taskLibrary.find((candidate) => candidate.id === item.taskId) ?? {
+                              id: item.taskId,
+                              label: item.label,
+                              collectionId: "all",
+                              isFavorite: false,
+                            };
+                          toggleTaskSelection(task);
+                        })()
                       : toggleCustomSelection(item.label)
                   }
                 >
                   {item.label}
-                </button>
+                </Button>
               ))
             ) : (
               <p className="m-0 text-xs text-base-content/55">아직 선택된 할일이 없어요.</p>
@@ -294,7 +320,7 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
 
         <div className="mt-2 grid grid-cols-[1fr_96px] gap-2">
           <div className="flex items-center gap-1.5 rounded-full border border-base-300/75 bg-base-100/90 px-3">
-            <input
+            <InputField
               value={customLabel}
               onChange={(event) => setCustomLabel(event.target.value)}
               onKeyDown={(event) => {
@@ -303,26 +329,22 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
                   addCustomTask();
                 }
               }}
-              className="h-9 w-full bg-transparent text-sm outline-none"
+              variant="plain"
+              className="h-9 w-full bg-transparent text-sm"
               placeholder="리스트에 없는 할일 직접 추가"
             />
-            <button
-              type="button"
-              className="btn btn-xs btn-ghost btn-circle"
-              onClick={addCustomTask}
-              aria-label="직접 할일 추가"
-            >
+            <Button variant="ghost" size="xs" circle onClick={addCustomTask} aria-label="직접 할일 추가">
               <FiPlus size={14} />
-            </button>
+            </Button>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary h-9 min-h-9 rounded-full text-xs"
+          <Button
+            variant="primary"
+            className="h-9 min-h-9 rounded-full text-xs"
             disabled={selectedItems.length === 0}
             onClick={handleApply}
           >
             {selectedItems.length}개 추가
-          </button>
+          </Button>
         </div>
         </div>
       </div>

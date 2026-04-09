@@ -5,6 +5,10 @@ import {
   taskCollectionResolvers,
   taskCollectionTypeDefs
 } from "../modules/task-collection/task-collection.resolver.js";
+import {
+  routineTemplateResolvers,
+  routineTemplateTypeDefs,
+} from "../modules/routine-template/routine-template.resolver.js";
 
 type ResolverRecord = Record<string, Record<string, unknown>>;
 
@@ -35,6 +39,12 @@ export const typeDefs = [
   dailyLogTypeDefs,
   userTypeDefs,
   taskCollectionTypeDefs,
+  routineTemplateTypeDefs,
 ];
 
-export const resolvers = mergeResolvers(dailyLogResolvers, userResolvers, taskCollectionResolvers);
+export const resolvers = mergeResolvers(
+  dailyLogResolvers,
+  userResolvers,
+  taskCollectionResolvers,
+  routineTemplateResolvers
+);

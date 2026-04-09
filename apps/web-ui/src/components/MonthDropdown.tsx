@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { FiChevronDown } from "react-icons/fi";
 import { SelectDropbox } from "./SelectDropbox";
+import { Button } from "./ui/Button";
 
 type MonthDropdownProps = {
   month: Date;
@@ -82,17 +83,14 @@ export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
 
         <div className="grid grid-cols-4 gap-2">
           {Array.from({ length: 12 }, (_, monthIndex) => (
-            <button
+            <Button
               key={monthIndex}
-              type="button"
-              className={[
-                "btn h-8 min-h-8",
-                month.getMonth() === monthIndex ? "btn-primary" : "btn-ghost",
-              ].join(" ")}
+              variant={month.getMonth() === monthIndex ? "primary" : "ghost"}
+              className="h-8 min-h-8"
               onClick={() => handleMonthClick(monthIndex)}
             >
               {monthIndex + 1}월
-            </button>
+            </Button>
           ))}
         </div>
       </div>

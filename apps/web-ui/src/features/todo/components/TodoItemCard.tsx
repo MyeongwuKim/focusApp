@@ -1,13 +1,16 @@
 import {
+  FiAlertCircle,
   FiCheck,
   FiCheckCircle,
   FiCircle,
+  FiClock,
   FiMoreVertical,
   FiPause,
   FiPauseCircle,
   FiPlay,
   FiPlayCircle,
 } from "react-icons/fi";
+import { Button } from "../../../components/ui/Button";
 import type { TaskItem } from "../types";
 
 type TodoItemCardProps = {
@@ -24,6 +27,9 @@ function renderStatusIcon(status: TaskItem["status"]) {
   if (status === "done") {
     return <FiCheckCircle size={18} className="text-success" />;
   }
+  if (status === "overdue") {
+    return <FiAlertCircle size={18} className="text-error" />;
+  }
   if (status === "in_progress") {
     return <FiPlayCircle size={18} className="text-info" />;
   }
@@ -33,47 +39,63 @@ function renderStatusIcon(status: TaskItem["status"]) {
   return <FiCircle size={18} className="text-base-content/50" />;
 }
 
+function formatScheduledTime(epochMs: number) {
+  const date = new Date(epochMs);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 function renderTaskActions(
   item: TaskItem,
   onTaskAction: TodoItemCardProps["onTaskAction"],
   onEditActualFocus?: TodoItemCardProps["onEditActualFocus"],
   disableActions = false
 ) {
+  if (item.status === "overdue") {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <div className="inline-flex items-center gap-1 rounded-full border border-error/35 bg-error/12 px-2.5 py-1 text-xs font-semibold text-error">
+          <FiAlertCircle size={12} />
+          미완료
+        </div>
+      </div>
+    );
+  }
+
   if (item.status === "todo") {
     return (
-      <button
-        type="button"
-        className="btn btn-sm h-8 min-h-8 rounded-full border-info/35 bg-info/15 px-3 text-info"
+      <Button
+        size="sm"
+        className="h-8 min-h-8 rounded-full border-info/35 bg-info/15 px-3 text-info"
         disabled={disableActions}
         onClick={() => onTaskAction(item.id, "start")}
       >
         <FiPlay size={13} />
         할일 시작
-      </button>
+      </Button>
     );
   }
 
   if (item.status === "in_progress") {
     return (
       <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          className="btn btn-sm h-8 min-h-8 rounded-full border-warning/35 bg-warning/15 px-3 text-warning"
+        <Button
+          size="sm"
+          className="h-8 min-h-8 rounded-full border-warning/35 bg-warning/15 px-3 text-warning"
           disabled={disableActions}
           onClick={() => onTaskAction(item.id, "pause")}
         >
           <FiPause size={13} />
           중단
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm h-8 min-h-8 rounded-full border-success/35 bg-success/15 px-3 text-success"
+        </Button>
+        <Button
+          size="sm"
+          className="h-8 min-h-8 rounded-full border-success/35 bg-success/15 px-3 text-success"
           disabled={disableActions}
           onClick={() => onTaskAction(item.id, "complete")}
         >
           <FiCheck size={13} />
           완료
-        </button>
+        </Button>
       </div>
     );
   }
@@ -81,24 +103,24 @@ function renderTaskActions(
   if (item.status === "paused") {
     return (
       <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          className="btn btn-sm h-8 min-h-8 rounded-full border-info/35 bg-info/15 px-3 text-info"
+        <Button
+          size="sm"
+          className="h-8 min-h-8 rounded-full border-info/35 bg-info/15 px-3 text-info"
           disabled={disableActions}
           onClick={() => onTaskAction(item.id, "resume")}
         >
           <FiPlay size={13} />
           재개
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm h-8 min-h-8 rounded-full border-success/35 bg-success/15 px-3 text-success"
+        </Button>
+        <Button
+          size="sm"
+          className="h-8 min-h-8 rounded-full border-success/35 bg-success/15 px-3 text-success"
           disabled={disableActions}
           onClick={() => onTaskAction(item.id, "complete")}
         >
           <FiCheck size={13} />
           완료
-        </button>
+        </Button>
       </div>
     );
   }
@@ -111,14 +133,14 @@ function renderTaskActions(
         <FiCheckCircle size={12} />
         완료됨
       </div>
-      <button
-        type="button"
-        className="btn btn-xs h-7 min-h-7 rounded-full border-success/30 bg-base-100 px-2.5 text-success"
+      <Button
+        size="xs"
+        className="h-7 min-h-7 rounded-full border-success/30 bg-base-100 px-2.5 text-success"
         disabled={disableActions}
         onClick={() => onEditActualFocus?.(item.id)}
       >
         집중 {actualFocusMinutes}분
-      </button>
+      </Button>
     </div>
   );
 }
@@ -137,6 +159,7 @@ export function TodoItemCard({
       className={[
         "rounded-lg border border-base-300/80 bg-base-100/85 px-3 py-2.5 transition-[box-shadow,transform,border-color] duration-200",
         item.status === "done" ? "bg-success/8" : "",
+        item.status === "overdue" ? "border-error/35 bg-error/6" : "",
         item.status === "in_progress" ? "border-info/45" : "",
         isLongPressActive
           ? "border-primary/55 shadow-[0_0_0_1px_rgba(99,102,241,0.22),0_0_18px_rgba(99,102,241,0.22)]"
@@ -148,21 +171,30 @@ export function TodoItemCard({
         {renderStatusIcon(item.status)}
         <p
           className={[
-            "m-0 flex-1 truncate text-sm text-base-content/90",
+            "m-0 min-w-0 flex-1 truncate text-sm text-base-content/90",
             item.status === "done" ? "text-base-content/55 line-through" : "",
+            item.status === "overdue" ? "text-error/90" : "",
           ].join(" ")}
         >
           {item.label}
         </p>
-        <button
-          type="button"
+        {item.scheduledStartAt ? (
+          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-info/85">
+            <FiClock size={11} />
+            {formatScheduledTime(item.scheduledStartAt)}
+          </span>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="xs"
+          square
           aria-label="할일 옵션"
-          className="btn btn-ghost btn-xs btn-square h-7 min-h-7 rounded-full text-base-content/70"
+          className="h-7 min-h-7 rounded-full text-base-content/70"
           onClick={() => onOpenMenu(item.id)}
           disabled={disableActions}
         >
           <FiMoreVertical size={13} />
-        </button>
+        </Button>
       </div>
       <div className="mt-2">{renderTaskActions(item, onTaskAction, onEditActualFocus, disableActions)}</div>
     </div>

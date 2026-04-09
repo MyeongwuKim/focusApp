@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { FiMoreVertical } from "react-icons/fi";
+import { Button } from "../../../components/ui/Button";
 
 type TaskManagementCollectionItemProps = {
   name: string;
@@ -26,10 +27,10 @@ function TaskManagementCollectionItemComponent({
         dropActive ? "border-success/70 bg-success/12 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]" : "",
       ].join(" ")}
     >
-      <button
-        type="button"
+      <Button
+        size="sm"
         className={[
-          "btn btn-sm h-10 min-h-10 min-w-0 flex-1 border-transparent bg-transparent px-1 text-[11px] shadow-none",
+          "h-10 min-h-10 min-w-0 flex-1 border-transparent bg-transparent px-1 text-[11px] shadow-none",
           active ? "text-primary" : "text-base-content/70",
         ].join(" ")}
         onClick={onSelect}
@@ -42,16 +43,18 @@ function TaskManagementCollectionItemComponent({
             {count}
           </span>
         </span>
-      </button>
+      </Button>
       {onOpenMenu ? (
-        <button
-          type="button"
-          className="btn btn-ghost btn-xs btn-circle h-7 min-h-7 w-7 min-w-7 border-transparent bg-transparent text-base-content/55 shadow-none"
+        <Button
+          variant="ghost"
+          size="xs"
+          circle
+          className="h-7 min-h-7 w-7 min-w-7 border-transparent bg-transparent text-base-content/55 shadow-none"
           onClick={onOpenMenu}
           aria-label="컬렉션 옵션"
         >
           <FiMoreVertical size={12} />
-        </button>
+        </Button>
       ) : null}
     </div>
   );

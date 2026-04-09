@@ -9,6 +9,7 @@ export const taskCollectionTypeDefs = gql`
     userId: String!
     collectionId: String!
     title: String!
+    isFavorite: Boolean!
     isArchived: Boolean!
     order: Int!
     lastUsedAt: String
@@ -67,6 +68,11 @@ export const taskCollectionTypeDefs = gql`
     name: String!
   }
 
+  input SetTaskFavoriteInput {
+    taskId: ID!
+    isFavorite: Boolean!
+  }
+
   extend type Query {
     taskCollections: [TaskCollection!]!
   }
@@ -79,6 +85,7 @@ export const taskCollectionTypeDefs = gql`
     reorderTasks(input: ReorderTasksInput!): Boolean!
     renameTask(input: RenameTaskInput!): Task!
     renameTaskCollection(input: RenameTaskCollectionInput!): TaskCollection!
+    setTaskFavorite(input: SetTaskFavoriteInput!): Task!
     deleteTask(input: DeleteTaskInput!): Boolean!
     deleteTaskCollection(input: DeleteTaskCollectionInput!): Boolean!
   }
@@ -210,6 +217,22 @@ export const taskCollectionResolvers = {
         rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
       }
     },
+    setTaskFavorite: async (
+      _parent: unknown,
+      args: { input: { taskId: string; isFavorite: boolean } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.setTaskFavorite({
+          userId: getUserId(context),
+          taskId: args.input.taskId,
+          isFavorite: args.input.isFavorite,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
+    },
     deleteTaskCollection: async (
       _parent: unknown,
       args: { input: { collectionId: string } },
@@ -231,6 +254,7 @@ export const taskCollectionResolvers = {
     updatedAt: (parent: { updatedAt: Date }) => parent.updatedAt.toISOString(),
   },
   Task: {
+    isFavorite: (parent: { isFavorite: boolean | null | undefined }) => Boolean(parent.isFavorite),
     lastUsedAt: (parent: { lastUsedAt: Date | null }) =>
       parent.lastUsedAt ? parent.lastUsedAt.toISOString() : null,
     createdAt: (parent: { createdAt: Date }) => parent.createdAt.toISOString(),

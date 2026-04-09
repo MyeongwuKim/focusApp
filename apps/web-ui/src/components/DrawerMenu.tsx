@@ -4,6 +4,7 @@ import type { RouteKey } from "../routes/types";
 import { FiArchive, FiBarChart2, FiLogOut, FiSettings } from "react-icons/fi";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 import { toast } from "../stores";
+import { Button } from "./ui/Button";
 
 type DrawerMenuProps = {
   isOpen: boolean;
@@ -51,14 +52,14 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
 
         <nav className="menu gap-1 p-0 text-sm">
           {DRAWER_ROUTES.map((route) => (
-            <button
+            <Button
               key={route.key}
-              type="button"
+              variant={activeRoute === route.key ? "default" : "ghost"}
               className={[
-                "btn justify-start gap-2.5 rounded-lg border border-transparent px-2.5",
+                "justify-start gap-2.5 rounded-lg border border-transparent px-2.5",
                 activeRoute === route.key
                   ? "bg-base-200 text-primary"
-                  : "btn-ghost text-base-content/80",
+                  : "text-base-content/80",
               ].join(" ")}
               onClick={() => navigateTo(route.key)}
             >
@@ -66,14 +67,14 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
                 {ROUTE_ICON[route.key]}
               </span>
               {route.label}
-            </button>
+            </Button>
           ))}
 
           <div className="my-1 h-px w-full bg-base-300/80" />
 
-          <button
-            type="button"
-            className="btn btn-ghost justify-start gap-2.5 text-error"
+          <Button
+            variant="ghost"
+            className="justify-start gap-2.5 text-error"
             onClick={() => {
               closeMenu();
               toast.show({
@@ -88,7 +89,7 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
               <FiLogOut size={15} />
             </span>
             로그아웃
-          </button>
+          </Button>
         </nav>
       </aside>
     </div>

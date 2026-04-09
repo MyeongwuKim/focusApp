@@ -63,6 +63,7 @@ model Task {
   collectionId String         @db.ObjectId
   collection   TaskCollection @relation(fields: [collectionId], references: [id])
   title        String
+  isFavorite   Boolean?       @default(false)
   isArchived   Boolean        @default(false)
   order        Int            @default(0)
   lastUsedAt   DateTime?
@@ -71,6 +72,17 @@ model Task {
 
   @@index([userId, collectionId, order])
   @@index([userId, isArchived, order])
+}
+
+model RoutineTemplate {
+  id        String                @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  name      String
+  items     RoutineTemplateEntry[]
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@index([userId, name])
 }
 
 type DailyTaskEntry {
@@ -82,8 +94,18 @@ type DailyTaskEntry {
   order              Int
   createdAt          DateTime
   startedAt          DateTime?
+  scheduledStartAt   DateTime?
   pausedAt           DateTime?
   completedAt        DateTime?
   deviationSeconds   Int
   actualFocusSeconds Int?
+}
+
+type RoutineTemplateEntry {
+  id               String
+  taskId           String?
+  titleSnapshot    String?
+  content          String
+  order            Int
+  scheduledTimeHHmm String?
 }

@@ -5,11 +5,13 @@ import {
   completeTodoFromDailyLog,
   deleteTodoFromDailyLog,
   pauseTodoFromDailyLog,
+  resetTodoFromDailyLog,
   resumeTodoFromDailyLog,
   startRestSession,
   startTodoFromDailyLog,
   stopRestSession,
   updateTodoActualFocusFromDailyLog,
+  updateTodoScheduleFromDailyLog,
   upsertDailyLogMemo,
 } from "../../api/dailyLogApi";
 import { dailyLogByDateQueryKey, dailyLogMemoQueryKey } from "./queries";
@@ -19,6 +21,7 @@ type AddTodosToDailyLogInput = {
   items: Array<{
     content: string;
     taskId?: string | null;
+    scheduledStartAt?: string | null;
   }>;
 };
 
@@ -93,6 +96,21 @@ export function useCompleteTodoFromDailyLogMutation() {
   });
 }
 
+export function useResetTodoFromDailyLogMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { dateKey: string; todoId: string }) => resetTodoFromDailyLog(input),
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(dailyLogByDateQueryKey(variables.dateKey), data ? { ...data } : null);
+      void queryClient.invalidateQueries({
+        queryKey: ["daily-logs"],
+        exact: false,
+      });
+    },
+  });
+}
+
 export function useAddTodoDeviationToDailyLogMutation() {
   const queryClient = useQueryClient();
 
@@ -111,6 +129,22 @@ export function useUpdateTodoActualFocusMutation() {
   return useMutation({
     mutationFn: (input: { dateKey: string; todoId: string; actualFocusSeconds: number }) =>
       updateTodoActualFocusFromDailyLog(input),
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(dailyLogByDateQueryKey(variables.dateKey), data ? { ...data } : null);
+      void queryClient.invalidateQueries({
+        queryKey: ["daily-logs"],
+        exact: false,
+      });
+    },
+  });
+}
+
+export function useUpdateTodoScheduleMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { dateKey: string; todoId: string; scheduledStartAt: string | null }) =>
+      updateTodoScheduleFromDailyLog(input),
     onSuccess: (data, variables) => {
       queryClient.setQueryData(dailyLogByDateQueryKey(variables.dateKey), data ? { ...data } : null);
       void queryClient.invalidateQueries({
@@ -180,7 +214,9 @@ export function useDailyLogMutation() {
   const pauseTodoMutation = usePauseTodoFromDailyLogMutation();
   const resumeTodoMutation = useResumeTodoFromDailyLogMutation();
   const completeTodoMutation = useCompleteTodoFromDailyLogMutation();
+  const resetTodoMutation = useResetTodoFromDailyLogMutation();
   const updateTodoActualFocusMutation = useUpdateTodoActualFocusMutation();
+  const updateTodoScheduleMutation = useUpdateTodoScheduleMutation();
   const startRestSessionMutation = useStartRestSessionMutation();
   const stopRestSessionMutation = useStopRestSessionMutation();
 
@@ -191,7 +227,9 @@ export function useDailyLogMutation() {
     pauseTodoMutation,
     resumeTodoMutation,
     completeTodoMutation,
+    resetTodoMutation,
     updateTodoActualFocusMutation,
+    updateTodoScheduleMutation,
     startRestSessionMutation,
     stopRestSessionMutation,
   };

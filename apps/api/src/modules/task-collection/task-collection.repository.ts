@@ -51,6 +51,12 @@ interface RenameTaskCollectionInput {
   name: string;
 }
 
+interface SetTaskFavoriteInput {
+  userId: string;
+  taskId: string;
+  isFavorite: boolean;
+}
+
 export class TaskCollecitonRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -235,6 +241,24 @@ export class TaskCollecitonRepository {
         name: input.name,
       },
     });
+  }
+
+  async setTaskFavorite(input: SetTaskFavoriteInput) {
+    const result = await this.prisma.task.updateMany({
+      where: {
+        id: input.taskId,
+        userId: input.userId,
+      },
+      data: {
+        isFavorite: input.isFavorite,
+      },
+    });
+
+    if (result.count === 0) {
+      return null;
+    }
+
+    return this.findTaskById(input.userId, input.taskId);
   }
 
   private async getNextCollectionOrder(userId: string) {

@@ -9,6 +9,7 @@ import {
   renameTaskCollection,
   reorderTaskCollections,
   reorderTasks,
+  setTaskFavorite,
 } from "../../api/taskApi";
 import { taskCollectionsQueryKey } from "./queries";
 import type { AddTaskInput, CreateTaskCollectionInput } from "../../graphql/generated";
@@ -85,6 +86,13 @@ export function useTaskCollectionMutation() {
     },
   });
 
+  const setTaskFavoriteMutation = useMutation({
+    mutationFn: (input: { taskId: string; isFavorite: boolean }) => setTaskFavorite(input),
+    onSuccess: async () => {
+      await invalidateTaskCollections(queryClient);
+    },
+  });
+
   return {
     createTaskCollectionMutation,
     addTaskMutation,
@@ -95,5 +103,6 @@ export function useTaskCollectionMutation() {
     reorderTasksMutation,
     renameTaskMutation,
     renameTaskCollectionMutation,
+    setTaskFavoriteMutation,
   };
 }

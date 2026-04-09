@@ -12,6 +12,7 @@ export const dailyLogTypeDefs = gql`
     order: Int!
     createdAt: String!
     startedAt: String
+    scheduledStartAt: String
     pausedAt: String
     completedAt: String
     deviationSeconds: Int!
@@ -49,6 +50,7 @@ export const dailyLogTypeDefs = gql`
   input AddTodoItemInput {
     content: String!
     taskId: ID
+    scheduledStartAt: String
   }
 
   input AddTodosInput {
@@ -77,6 +79,12 @@ export const dailyLogTypeDefs = gql`
     actualFocusSeconds: Int!
   }
 
+  input UpdateTodoScheduleInput {
+    dateKey: String!
+    todoId: ID!
+    scheduledStartAt: String
+  }
+
   extend type Query {
     dailyLog(dateKey: String!): DailyLog
     dailyLogsByMonth(monthKey: String!): [DailyLog!]!
@@ -90,9 +98,11 @@ export const dailyLogTypeDefs = gql`
     pauseTodo(input: TodoActionInput!): DailyLog!
     resumeTodo(input: TodoActionInput!): DailyLog!
     completeTodo(input: TodoActionInput!): DailyLog!
+    resetTodo(input: TodoActionInput!): DailyLog!
     deleteTodo(input: TodoActionInput!): DailyLog!
     addDeviation(input: AddDeviationInput!): DailyLog!
     updateTodoActualFocus(input: UpdateTodoActualFocusInput!): DailyLog!
+    updateTodoSchedule(input: UpdateTodoScheduleInput!): DailyLog!
     startRestSession(input: RestSessionInput!): DailyLog!
     stopRestSession(input: RestSessionInput!): DailyLog!
   }
@@ -110,9 +120,12 @@ function toISOStringOrNull(value: Date | null) {
 const dailyLogErrorMapping = {
   DAILY_LOG_NOT_FOUND: { message: "데일리 로그를 찾을 수 없어요." },
   TODO_NOT_FOUND: { message: "할일을 찾을 수 없어요." },
+  ANOTHER_TODO_ALREADY_IN_PROGRESS: { message: "진행 중인 할일이 있어요." },
   TODO_NOT_IN_PROGRESS: { message: "진행 중인 할일이 아니에요." },
   TODO_NOT_DONE: { message: "완료된 할일만 수정할 수 있어요." },
   INVALID_ACTUAL_FOCUS_SECONDS: { message: "집중 시간이 올바르지 않아요." },
+  INVALID_SCHEDULED_START_AT: { message: "시작 예정 시간이 올바르지 않아요." },
+  SCHEDULE_MUST_BE_FUTURE_FOR_TODAY: { message: "오늘 일정은 현재 시각 이후로만 설정할 수 있어요." },
   TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." },
 };
 
@@ -175,6 +188,7 @@ export const dailyLogResolvers = {
           items: Array<{
             content: string;
             taskId?: string | null;
+            scheduledStartAt?: string | null;
           }>;
         };
       },
@@ -255,6 +269,22 @@ export const dailyLogResolvers = {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
+    resetTodo: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.resetTodo({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
     deleteTodo: async (
       _parent: unknown,
       args: { input: { dateKey: string; todoId: string } },
@@ -305,6 +335,23 @@ export const dailyLogResolvers = {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
+    updateTodoSchedule: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string; scheduledStartAt: string | null } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.updateTodoSchedule({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
+          scheduledStartAt: args.input.scheduledStartAt,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
     startRestSession: async (
       _parent: unknown,
       args: { input: { dateKey: string } },
@@ -336,6 +383,8 @@ export const dailyLogResolvers = {
   TodoItem: {
     createdAt: (parent: { createdAt: Date }) => parent.createdAt.toISOString(),
     startedAt: (parent: { startedAt: Date | null }) => toISOStringOrNull(parent.startedAt),
+    scheduledStartAt: (parent: { scheduledStartAt: Date | null }) =>
+      toISOStringOrNull(parent.scheduledStartAt),
     pausedAt: (parent: { pausedAt: Date | null }) => toISOStringOrNull(parent.pausedAt),
     completedAt: (parent: { completedAt: Date | null }) => toISOStringOrNull(parent.completedAt),
   },

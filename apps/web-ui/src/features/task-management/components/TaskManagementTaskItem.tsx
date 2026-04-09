@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { FiMoreVertical, FiStar, FiTag } from "react-icons/fi";
+import { Button } from "../../../components/ui/Button";
 
 type TaskItemSideButton = {
   type: "menu" | "favorite";
@@ -62,10 +63,12 @@ function TaskManagementTaskItemComponent({
         </p>
       </div>
       {sideButton ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="xs"
+          circle
           className={[
-            "btn btn-ghost btn-xs btn-circle h-7 min-h-7 w-7 min-w-7",
+            "h-7 min-h-7 w-7 min-w-7",
             sideButton.type === "favorite" && sideButton.active
               ? "text-warning"
               : "text-base-content/55",
@@ -91,7 +94,7 @@ function TaskManagementTaskItemComponent({
           ) : (
             <FiMoreVertical size={13} />
           )}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

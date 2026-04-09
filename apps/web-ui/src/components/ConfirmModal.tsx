@@ -1,13 +1,14 @@
+import { Button } from "./ui/Button";
 import { useConfirmStore } from "../stores";
 
-function toneClassName(tone: "primary" | "neutral" | "danger" = "neutral") {
+function toneVariant(tone: "primary" | "neutral" | "danger" = "neutral") {
   if (tone === "primary") {
-    return "btn-primary";
+    return "primary";
   }
   if (tone === "danger") {
-    return "btn-error";
+    return "error";
   }
-  return "btn-ghost";
+  return "ghost";
 }
 
 export function ConfirmModal() {
@@ -58,14 +59,14 @@ export function ConfirmModal() {
         ) : null}
         <div className="confirm-modal__actions">
           {active.buttons.map((button, index) => (
-            <button
+            <Button
               key={`${button.label}-${index}`}
-              type="button"
-              className={["btn h-10 min-h-10 rounded-xl px-4", toneClassName(button.tone)].join(" ")}
+              variant={toneVariant(button.tone)}
+              className="h-10 min-h-10 rounded-xl px-4"
               onClick={() => closeWithResult(button.value ?? button.label)}
             >
               {button.label}
-            </button>
+            </Button>
           ))}
         </div>
       </section>

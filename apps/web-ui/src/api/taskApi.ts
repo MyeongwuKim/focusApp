@@ -1,8 +1,6 @@
 import type {
   AddTaskInput,
   CreateTaskCollectionInput,
-  Mutation,
-  TaskCollectionsQuery,
 } from "../graphql/generated.ts";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
@@ -20,6 +18,7 @@ const TASK_COLLECTIONS_QUERY = /* GraphQL */ `
         userId
         collectionId
         title
+        isFavorite
         isArchived
         order
         lastUsedAt
@@ -94,6 +93,19 @@ export const renameTaskQuery = /* GraphQL */ `
   }
 `;
 
+export const setTaskFavoriteQuery = /* GraphQL */ `
+  mutation SetTaskFavorite($input: SetTaskFavoriteInput!) {
+    setTaskFavorite(input: $input) {
+      id
+      collectionId
+      title
+      isFavorite
+      order
+      lastUsedAt
+    }
+  }
+`;
+
 export const renameTaskCollectionQuery = /* GraphQL */ `
   mutation RenameTaskCollection($input: RenameTaskCollectionInput!) {
     renameTaskCollection(input: $input) {
@@ -125,7 +137,7 @@ export async function fetchTaskCollections() {
     throw new Error(`Task collections fetch failed: ${response.status}`);
   }
 
-  const result = (await response.json()) as GraphQLResponse<TaskCollectionsQuery>;
+  const result = (await response.json()) as GraphQLResponse<TaskCollectionsPayload>;
   if (result.errors?.length) {
     throw new Error(result.errors[0]?.message ?? "GraphQL taskCollections failed");
   }
@@ -134,15 +146,74 @@ export async function fetchTaskCollections() {
 }
 
 type MutationType = {
-  createTaskCollection: Pick<Mutation["createTaskCollection"], "id" | "name" | "order">;
-  addTask: Pick<Mutation["addTask"], "id" | "collectionId" | "order" | "title" | "lastUsedAt">;
-  moveTaskToCollection: Pick<Mutation["addTask"], "id" | "collectionId" | "order" | "title" | "lastUsedAt">;
+  createTaskCollection: {
+    id: string;
+    name: string;
+    order: number;
+  };
+  addTask: {
+    id: string;
+    collectionId: string;
+    order: number;
+    title: string;
+    lastUsedAt?: string | null;
+    isFavorite?: boolean | null;
+  };
+  moveTaskToCollection: {
+    id: string;
+    collectionId: string;
+    order: number;
+    title: string;
+    lastUsedAt?: string | null;
+    isFavorite?: boolean | null;
+  };
   reorderTaskCollections: boolean;
   reorderTasks: boolean;
-  renameTask: Pick<Mutation["addTask"], "id" | "collectionId" | "order" | "title" | "lastUsedAt">;
-  renameTaskCollection: Pick<Mutation["createTaskCollection"], "id" | "name" | "order">;
+  renameTask: {
+    id: string;
+    collectionId: string;
+    order: number;
+    title: string;
+    lastUsedAt?: string | null;
+    isFavorite?: boolean | null;
+  };
+  renameTaskCollection: {
+    id: string;
+    name: string;
+    order: number;
+  };
+  setTaskFavorite: {
+    id: string;
+    collectionId: string;
+    order: number;
+    title: string;
+    lastUsedAt?: string | null;
+    isFavorite?: boolean | null;
+  };
   deleteTask: boolean;
   deleteTaskCollection: boolean;
+};
+
+type TaskCollectionsPayload = {
+  taskCollections: Array<{
+    id: string;
+    name: string;
+    order: number;
+    createdAt: string;
+    updatedAt: string;
+    tasks: Array<{
+      id: string;
+      userId: string;
+      collectionId: string;
+      title: string;
+      isFavorite?: boolean | null;
+      isArchived: boolean;
+      order: number;
+      lastUsedAt?: string | null;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+    }>;
+  }>;
 };
 
 export async function addTaskCollection(input: CreateTaskCollectionInput) {
@@ -394,4 +465,34 @@ export async function deleteTaskCollection(input: { collectionId: string }) {
     throw new Error(result.errors[0]?.message ?? "GraphQL deleteTaskCollection failed");
   }
   return result.data?.deleteTaskCollection ?? false;
+}
+
+export async function setTaskFavorite(input: { taskId: string; isFavorite: boolean }) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: setTaskFavoriteQuery,
+      variables: {
+        input,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Task favorite update failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<MutationType>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL setTaskFavorite failed");
+  }
+
+  const updated = result.data?.setTaskFavorite;
+  if (!updated) {
+    throw new Error("GraphQL setTaskFavorite failed");
+  }
+  return updated;
 }

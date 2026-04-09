@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FiClock, FiTrash2 } from "react-icons/fi";
+import { FiCheckCircle, FiClock, FiRotateCcw, FiTrash2 } from "react-icons/fi";
 import type { TaskItem } from "../types";
-import { useDailyLogMutation, useDailyLogQuery } from "../../../queries";
+import type { RoutineTemplate } from "../../../api/routineTemplateApi";
+import { useDailyLogMutation, useDailyLogQuery, useRoutineTemplateMutation, useRoutineTemplateQuery } from "../../../queries";
 import { actionSheet, confirm, toast, useAppStore } from "../../../stores";
+import { formatDateKey } from "../../../utils/holidays";
 
 type RestDurationMin = number | null;
 const REST_DURATION_DEFAULT_STORAGE_KEY = "date-tasks:rest-duration-default-min";
@@ -30,6 +32,7 @@ type DailyLogWithTodos = {
     done: boolean;
     order: number;
     startedAt: string | null;
+    scheduledStartAt: string | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
@@ -39,6 +42,7 @@ type DailyLogWithTodos = {
 
 type DateTodosRouteContextValue = {
   items: TaskItem[];
+  isItemsHydrating: boolean;
   reorderTasksByIds: (orderedIdsValue: string[]) => void;
   handleDateTaskAction: (taskId: string, action: "start" | "pause" | "resume" | "complete") => void;
   handleEditActualFocus: (taskId: string) => void;
@@ -57,7 +61,36 @@ type DateTodosRouteContextValue = {
 
   isTaskPickerOpen: boolean;
   closeTaskPicker: () => void;
-  handleDateAddTasks: (items: Array<{ label: string; taskId?: string | null }>) => Promise<void>;
+  handleDateAddTasks: (items: Array<{ label: string; taskId?: string | null; scheduledStartAt?: string | null }>) => Promise<void>;
+  openRoutineImport: () => void;
+  openRoutineCreate: () => void;
+  isRoutineImportOpen: boolean;
+  closeRoutineImport: () => void;
+  isRoutineCreateOpen: boolean;
+  closeRoutineCreate: () => void;
+  routineTemplates: RoutineTemplate[];
+  isRoutineTemplatesLoading: boolean;
+  handleApplyRoutineTemplate: (routineTemplateId: string) => Promise<void>;
+  handleCreateRoutineTemplate: (input: {
+    name: string;
+    items: Array<{
+      taskId?: string | null;
+      titleSnapshot?: string | null;
+      content: string;
+      scheduledTimeHHmm?: string | null;
+    }>;
+  }) => Promise<void>;
+  handleUpdateRoutineTemplate: (input: {
+    routineTemplateId: string;
+    items: Array<{
+      id?: string;
+      taskId?: string | null;
+      titleSnapshot?: string | null;
+      content: string;
+      scheduledTimeHHmm?: string | null;
+    }>;
+  }) => Promise<void>;
+  handleDeleteRoutineTemplate: (routineTemplateId: string) => Promise<void>;
 
   shouldRenderMemo: boolean;
   isMemoVisible: boolean;
@@ -74,6 +107,12 @@ type DateTodosRouteContextValue = {
   } | null;
   closeEditingActualFocus: () => void;
   handleSaveActualFocus: (minutes: number) => Promise<void>;
+  editingScheduledStart: {
+    taskId: string;
+    initialTime: string;
+  } | null;
+  closeEditingScheduledStart: () => void;
+  handleSaveScheduledStart: (time: string) => Promise<void>;
 };
 
 const DateTodosRouteContext = createContext<DateTodosRouteContextValue | null>(null);
@@ -128,29 +167,53 @@ function toEpochMillis(value: string | null) {
   return Number.isFinite(epoch) ? epoch : null;
 }
 
+function toIsoByDateAndHHmm(dateKey: string, hhmm?: string | null) {
+  if (!hhmm) {
+    return null;
+  }
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm.trim());
+  if (!match) {
+    return null;
+  }
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const [hour, minute] = hhmm.split(":").map(Number);
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString();
+}
+
 function mapDailyLogTodosToTaskItems(
   dateKey: string,
+  todayKey: string,
   todos: Array<{
     id: string;
     content: string;
     done: boolean;
     order: number;
     startedAt: string | null;
+    scheduledStartAt: string | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
     actualFocusSeconds: number | null;
   }>
 ) {
+  const isPastDate = dateKey < todayKey;
+
   return [...todos]
     .sort((a, b) => a.order - b.order)
     .map((todo) => {
       const startedAt = toEpochMillis(todo.startedAt);
+      const scheduledStartAt = toEpochMillis(todo.scheduledStartAt);
       const completedAt = toEpochMillis(todo.completedAt);
       const completedDurationMs = todo.done ? (todo.actualFocusSeconds ?? 0) * 1000 : null;
       const status: TaskItem["status"] = todo.done
         ? "done"
-        : todo.pausedAt
+        : isPastDate
+          ? "overdue"
+          : todo.pausedAt
           ? "paused"
           : startedAt
             ? "in_progress"
@@ -162,6 +225,7 @@ function mapDailyLogTodosToTaskItems(
         status,
         accumulatedMs: completedDurationMs ?? 0,
         startedAt: status === "in_progress" ? startedAt : null,
+        scheduledStartAt,
         completedAt: status === "done" ? completedAt : null,
         completedDurationMs,
       };
@@ -185,6 +249,8 @@ export function DateTodosRouteProvider({
     readRestDurationFromSessionStorage(REST_DURATION_ONCE_STORAGE_KEY, undefined)
   );
   const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
+  const [isRoutineImportOpen, setIsRoutineImportOpen] = useState(false);
+  const [isRoutineCreateOpen, setIsRoutineCreateOpen] = useState(false);
   const [restSettingsRequestId, setRestSettingsRequestId] = useState(0);
   const [isMemoOpen, setIsMemoOpen] = useState(false);
   const [shouldRenderMemo, setShouldRenderMemo] = useState(false);
@@ -196,14 +262,24 @@ export function DateTodosRouteProvider({
     taskId: string;
     initialMinutes: number;
   } | null>(null);
+  const [editingScheduledStart, setEditingScheduledStart] = useState<{
+    taskId: string;
+    initialTime: string;
+  } | null>(null);
   const [liveTick, setLiveTick] = useState(0);
   const [activeRestDurationMin, setActiveRestDurationMin] = useState<RestDurationMin>(null);
+  const [hydratedDateKey, setHydratedDateKey] = useState<string | null>(null);
 
-  const hydratedFromApiDateKeyRef = useRef<string | null>(null);
   const wasAllDoneRef = useRef(false);
   const completionWatchReadyRef = useRef(false);
 
   const { dailyLogByDateQuery: dailyLogQuery } = useDailyLogQuery({ dateKey });
+  const { routineTemplatesQuery } = useRoutineTemplateQuery();
+  const {
+    createRoutineTemplateMutation,
+    updateRoutineTemplateMutation,
+    deleteRoutineTemplateMutation,
+  } = useRoutineTemplateMutation();
   const {
     addTodosMutation,
     deleteTodoMutation,
@@ -211,7 +287,9 @@ export function DateTodosRouteProvider({
     pauseTodoMutation,
     resumeTodoMutation,
     completeTodoMutation,
+    resetTodoMutation,
     updateTodoActualFocusMutation,
+    updateTodoScheduleMutation,
     startRestSessionMutation,
     stopRestSessionMutation,
   } = useDailyLogMutation();
@@ -249,7 +327,7 @@ export function DateTodosRouteProvider({
       setIsCompletionPanelOpen(false);
       wasAllDoneRef.current = false;
       completionWatchReadyRef.current = false;
-      hydratedFromApiDateKeyRef.current = null;
+      setHydratedDateKey(null);
       return;
     }
 
@@ -258,7 +336,7 @@ export function DateTodosRouteProvider({
     setIsCompletionPanelOpen(false);
     wasAllDoneRef.current = false;
     completionWatchReadyRef.current = false;
-    hydratedFromApiDateKeyRef.current = null;
+    setHydratedDateKey(null);
   }, [dateKey]);
 
   useEffect(() => {
@@ -266,14 +344,14 @@ export function DateTodosRouteProvider({
       return;
     }
 
-    if (hydratedFromApiDateKeyRef.current === dateKey) {
+    if (hydratedDateKey === dateKey) {
       return;
     }
 
     const todos = dailyLogQuery.data?.todos ?? [];
-    setDateTasksRouteItems(mapDailyLogTodosToTaskItems(dateKey, todos));
-    hydratedFromApiDateKeyRef.current = dateKey;
-  }, [dateKey, dailyLogQuery.data, dailyLogQuery.isSuccess]);
+    setDateTasksRouteItems(mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), todos));
+    setHydratedDateKey(dateKey);
+  }, [dateKey, dailyLogQuery.data, dailyLogQuery.isSuccess, hydratedDateKey]);
 
   const restStartedAtMs = useMemo(() => {
     const value = dailyLogQuery.data?.restStartedAt ?? null;
@@ -379,8 +457,10 @@ export function DateTodosRouteProvider({
     if (!dateKey) {
       return;
     }
-    setDateTasksRouteItems(mapDailyLogTodosToTaskItems(dateKey, nextLog?.todos ?? []));
-    hydratedFromApiDateKeyRef.current = dateKey;
+    setDateTasksRouteItems(
+      mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), nextLog?.todos ?? [])
+    );
+    setHydratedDateKey(dateKey);
   };
 
   const toggleRestSession = () => {
@@ -477,8 +557,27 @@ export function DateTodosRouteProvider({
     }
 
     const target = dateTasksRouteItems.find((item) => item.id === taskId);
-    if (!target || target.status === "done") {
+    if (!target) {
       return;
+    }
+
+    if (target.status === "done" && action !== "start") {
+      return;
+    }
+
+    if (action === "start" || action === "resume") {
+      const hasAnotherInProgress = dateTasksRouteItems.some(
+        (item) => item.id !== taskId && item.status === "in_progress"
+      );
+      if (hasAnotherInProgress) {
+        toast.show({
+          type: "error",
+          title: "동시 진행 불가",
+          message: "진행 중인 할일이 있어요.",
+          duration: 2000,
+        });
+        return;
+      }
     }
 
     if (action === "pause") {
@@ -497,6 +596,22 @@ export function DateTodosRouteProvider({
     void (async () => {
       try {
         if (action === "start") {
+          const todayKey = formatDateKey(new Date());
+          if (dateKey !== todayKey) {
+            const confirmed = await confirm({
+              title: "오늘 날짜가 아니에요",
+              message: "선택한 날짜의 할일을 시작할까요?",
+              buttons: [
+                { label: "취소", value: "cancel", tone: "neutral" },
+                { label: "시작", value: "start", tone: "primary" },
+              ],
+            });
+
+            if (confirmed !== "start") {
+              return;
+            }
+          }
+
           if (isRestActive) {
             await stopRestSessionRef.current({ dateKey });
             setActiveRestDurationMin(null);
@@ -581,7 +696,77 @@ export function DateTodosRouteProvider({
     }
   };
 
-  const handleDateAddTasks = async (items: Array<{ label: string; taskId?: string | null }>) => {
+  const handleSaveScheduledStart = async (time: string) => {
+    if (!dateKey || !editingScheduledStart) {
+      return;
+    }
+
+    const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+    if (!timeMatch) {
+      toast.show({
+        type: "error",
+        title: "시간 형식 오류",
+        message: "시간은 HH:mm 형식으로 입력해 주세요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    const [hour, minute] = time.split(":").map(Number);
+    const [year, month, day] = dateKey.split("-").map(Number);
+    const scheduled = new Date(year, month - 1, day, hour, minute, 0, 0);
+    if (Number.isNaN(scheduled.getTime())) {
+      toast.show({
+        type: "error",
+        title: "시간 형식 오류",
+        message: "시작 시간을 확인해 주세요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+    if (dateKey === todayKey && scheduled.getTime() <= now.getTime()) {
+      toast.show({
+        type: "error",
+        title: "시간 선택 오류",
+        message: "오늘 일정은 현재 시각 이후로 설정해 주세요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    try {
+      const nextLog = await updateTodoScheduleMutation.mutateAsync({
+        dateKey,
+        todoId: editingScheduledStart.taskId,
+        scheduledStartAt: scheduled.toISOString(),
+      });
+      applyDailyLog(nextLog);
+      setEditingScheduledStart(null);
+      toast.show({
+        type: "positive",
+        title: "시작시간 설정됨",
+        message: `${time}에 알림 기준 시간으로 저장했어요.`,
+        duration: 1800,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "시작시간 저장 중 오류가 발생했어요.";
+      toast.show({
+        type: "error",
+        title: "설정 실패",
+        message,
+        duration: 2200,
+      });
+    }
+  };
+
+  const handleDateAddTasks = async (
+    items: Array<{ label: string; taskId?: string | null; scheduledStartAt?: string | null }>
+  ) => {
     if (!dateKey || items.length === 0) {
       return;
     }
@@ -592,6 +777,7 @@ export function DateTodosRouteProvider({
         items: items.map((item) => ({
           content: item.label,
           taskId: item.taskId ?? null,
+          scheduledStartAt: item.scheduledStartAt ?? null,
         })),
       });
       applyDailyLog(nextLog);
@@ -606,16 +792,233 @@ export function DateTodosRouteProvider({
     }
   };
 
+  const handleApplyRoutineTemplate = async (routineTemplateId: string) => {
+    if (!dateKey) {
+      return;
+    }
+
+    const routine = (routineTemplatesQuery.data ?? []).find(
+      (template) => template.id === routineTemplateId
+    );
+    if (!routine) {
+      toast.show({
+        type: "error",
+        title: "루틴 없음",
+        message: "선택한 루틴을 찾을 수 없어요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    await handleDateAddTasks(
+      routine.items
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((item) => ({
+          label: item.content,
+          taskId: item.taskId ?? null,
+          scheduledStartAt: toIsoByDateAndHHmm(dateKey, item.scheduledTimeHHmm),
+        }))
+    );
+  };
+
+  const handleCreateRoutineTemplate = async (input: {
+    name: string;
+    items: Array<{
+      taskId?: string | null;
+      titleSnapshot?: string | null;
+      content: string;
+      scheduledTimeHHmm?: string | null;
+    }>;
+  }) => {
+    const normalizedName = input.name.trim();
+    if (!normalizedName) {
+      toast.show({
+        type: "error",
+        title: "저장 실패",
+        message: "루틴 이름을 입력해 주세요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    const duplicatedName = (routineTemplatesQuery.data ?? []).some(
+      (template) => template.name.trim().toLowerCase() === normalizedName.toLowerCase()
+    );
+    if (duplicatedName) {
+      toast.show({
+        type: "error",
+        title: "저장 실패",
+        message: "같은 이름의 루틴이 이미 있어요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    const normalizedItems = input.items
+      .map((item) => ({
+        taskId: item.taskId ?? null,
+        titleSnapshot: item.titleSnapshot ?? null,
+        content: item.content.trim(),
+        scheduledTimeHHmm: item.scheduledTimeHHmm ?? null,
+      }))
+      .filter((item) => item.content.length > 0);
+
+    if (normalizedItems.length === 0) {
+      toast.show({
+        type: "error",
+        title: "저장 실패",
+        message: "루틴 항목을 1개 이상 입력해 주세요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    try {
+      const created = await createRoutineTemplateMutation.mutateAsync({
+        name: normalizedName,
+        items: normalizedItems.map((item, index) => ({
+          taskId: item.taskId,
+          titleSnapshot: item.titleSnapshot,
+          content: item.content,
+          order: index,
+          scheduledTimeHHmm: item.scheduledTimeHHmm,
+        })),
+      });
+      toast.show({
+        type: "positive",
+        title: "루틴 저장됨",
+        message: `${created.name} 루틴을 저장했어요.`,
+        duration: 1800,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "루틴 저장 중 오류가 발생했어요.";
+      toast.show({
+        type: "error",
+        title: "루틴 저장 실패",
+        message,
+        duration: 2200,
+      });
+    }
+  };
+
+  const handleUpdateRoutineTemplate = async (input: {
+    routineTemplateId: string;
+    items: Array<{
+      id?: string;
+      taskId?: string | null;
+      titleSnapshot?: string | null;
+      content: string;
+      scheduledTimeHHmm?: string | null;
+    }>;
+  }) => {
+    const normalizedItems = input.items
+      .map((item) => ({
+        id: item.id,
+        taskId: item.taskId ?? null,
+        titleSnapshot: item.titleSnapshot ?? null,
+        content: item.content.trim(),
+        scheduledTimeHHmm: item.scheduledTimeHHmm ?? null,
+      }))
+      .filter((item) => item.content.length > 0);
+
+    if (normalizedItems.length === 0) {
+      toast.show({
+        type: "error",
+        title: "수정 실패",
+        message: "루틴 항목을 1개 이상 남겨 주세요.",
+        duration: 2200,
+      });
+      return;
+    }
+
+    try {
+      await updateRoutineTemplateMutation.mutateAsync({
+        routineTemplateId: input.routineTemplateId,
+        items: normalizedItems.map((item, index) => ({
+          id: item.id,
+          taskId: item.taskId,
+          titleSnapshot: item.titleSnapshot,
+          content: item.content,
+          order: index,
+          scheduledTimeHHmm: item.scheduledTimeHHmm,
+        })),
+      });
+      toast.show({
+        type: "positive",
+        title: "루틴 수정됨",
+        message: "루틴 항목이 업데이트되었어요.",
+        duration: 1800,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "루틴 수정 중 오류가 발생했어요.";
+      toast.show({
+        type: "error",
+        title: "루틴 수정 실패",
+        message,
+        duration: 2200,
+      });
+    }
+  };
+
+  const handleDeleteRoutineTemplate = async (routineTemplateId: string) => {
+    try {
+      await deleteRoutineTemplateMutation.mutateAsync({ routineTemplateId });
+      toast.show({
+        type: "positive",
+        title: "루틴 삭제됨",
+        message: "저장된 루틴을 삭제했어요.",
+        duration: 1800,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "루틴 삭제 중 오류가 발생했어요.";
+      toast.show({
+        type: "error",
+        title: "루틴 삭제 실패",
+        message,
+        duration: 2200,
+      });
+    }
+  };
+
   const handleDateTaskMenuAction = async (taskId: string) => {
     const target = dateTasksRouteItems.find((item) => item.id === taskId);
     if (!target) {
       return;
     }
 
+    const canCompleteFromMenu = target.status === "overdue";
+    const canReset = target.status === "in_progress" || target.status === "paused" || target.status === "done";
+    const resetLabel = "초기화";
+    const resetDescription =
+      target.status === "done" ? "시작 전 상태로 되돌립니다." : "진행 기록을 초기화하고 시작 전 상태로 되돌립니다.";
+
     const result = await actionSheet({
       title: target.label,
       message: "작업을 선택하세요",
       items: [
+        ...(canCompleteFromMenu
+          ? [
+              {
+                label: "완료 처리",
+                value: "mark_done",
+                tone: "primary" as const,
+                icon: <FiCheckCircle size={14} />,
+                description: "완료 상태로 변경합니다.",
+              },
+            ]
+          : []),
+        ...(canReset
+          ? [
+              {
+                label: resetLabel,
+                value: "mark_todo",
+                tone: "muted" as const,
+                icon: <FiRotateCcw size={14} />,
+                description: resetDescription,
+              },
+            ]
+          : []),
         {
           label: "시작시간 설정",
           value: "schedule",
@@ -633,13 +1036,48 @@ export function DateTodosRouteProvider({
       ],
     });
 
+    if (result === "mark_done") {
+      handleDateTaskAction(taskId, "complete");
+      return;
+    }
+
+    if (result === "mark_todo") {
+      if (!dateKey) {
+        return;
+      }
+
+      try {
+        const nextLog = await resetTodoMutation.mutateAsync({ dateKey, todoId: taskId });
+        applyDailyLog(nextLog);
+        toast.show({
+          type: "positive",
+          title: "초기화됨",
+          message: "할일이 시작 전 상태로 되돌아갔어요.",
+          duration: 1800,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "할일 상태 업데이트 중 오류가 발생했어요.";
+        toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
+      }
+      return;
+    }
+
     if (result === "schedule") {
-      toast.show({
-        type: "positive",
-        title: "준비 중",
-        message: "시작시간 설정 기능은 다음 단계에서 연결할게요.",
-        duration: 2200,
-      });
+      if (target.status === "done" || target.status === "overdue") {
+        toast.show({
+          type: "error",
+          title: "설정 불가",
+          message: "완료/미완료 상태에서는 시작시간을 설정할 수 없어요.",
+          duration: 2200,
+        });
+        return;
+      }
+
+      const initialDate = target.scheduledStartAt ? new Date(target.scheduledStartAt) : new Date();
+      const initialTime = `${String(initialDate.getHours()).padStart(2, "0")}:${String(
+        initialDate.getMinutes()
+      ).padStart(2, "0")}`;
+      setEditingScheduledStart({ taskId, initialTime });
       return;
     }
 
@@ -692,6 +1130,16 @@ export function DateTodosRouteProvider({
 
     return { totalCount, completedCount, totalMinutes, progressPercent };
   }, [dateTasksRouteItems]);
+
+  const isItemsHydrating = useMemo(() => {
+    if (!dateKey) {
+      return false;
+    }
+    if (dailyLogQuery.isError) {
+      return false;
+    }
+    return hydratedDateKey !== dateKey;
+  }, [dateKey, dailyLogQuery.isError, hydratedDateKey]);
 
   useEffect(() => {
     const isAllDone = summary.totalCount > 0 && summary.completedCount === summary.totalCount;
@@ -761,6 +1209,7 @@ export function DateTodosRouteProvider({
 
   const value: DateTodosRouteContextValue = {
     items: dateTasksRouteItems,
+    isItemsHydrating,
     reorderTasksByIds,
     handleDateTaskAction,
     handleEditActualFocus,
@@ -785,6 +1234,18 @@ export function DateTodosRouteProvider({
     isTaskPickerOpen,
     closeTaskPicker: () => setIsTaskPickerOpen(false),
     handleDateAddTasks,
+    openRoutineImport: () => setIsRoutineImportOpen(true),
+    openRoutineCreate: () => setIsRoutineCreateOpen(true),
+    isRoutineImportOpen,
+    closeRoutineImport: () => setIsRoutineImportOpen(false),
+    isRoutineCreateOpen,
+    closeRoutineCreate: () => setIsRoutineCreateOpen(false),
+    routineTemplates: routineTemplatesQuery.data ?? [],
+    isRoutineTemplatesLoading: routineTemplatesQuery.isLoading,
+    handleApplyRoutineTemplate,
+    handleCreateRoutineTemplate,
+    handleUpdateRoutineTemplate,
+    handleDeleteRoutineTemplate,
 
     shouldRenderMemo,
     isMemoVisible,
@@ -798,6 +1259,9 @@ export function DateTodosRouteProvider({
     editingActualFocus,
     closeEditingActualFocus: () => setEditingActualFocus(null),
     handleSaveActualFocus,
+    editingScheduledStart,
+    closeEditingScheduledStart: () => setEditingScheduledStart(null),
+    handleSaveScheduledStart,
   };
 
   return <DateTodosRouteContext.Provider value={value}>{children}</DateTodosRouteContext.Provider>;

@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { CalendarPage } from "../features/calendar/components/CalendarPage";
 import { FooterBar } from "../features/calendar/components/FooterBar";
 import { PageHeader } from "../components/PageHeader";
 import { MAIN_ROUTE } from "../routes/route-config";
 import { shiftMonth } from "../utils/calendar";
+import { formatDateKey } from "../utils/holidays";
 
 import { useAppStore } from "../stores";
 import { useDailyLogQuery } from "../queries";
@@ -14,6 +15,9 @@ type CalendarRootPageProps = {
 
 export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   const viewMonth = useAppStore((state) => state.viewMonth);
+  const setViewMonth = useAppStore((state) => state.setViewMonth);
+  const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
+  const [todayOpenSignal, setTodayOpenSignal] = useState(0);
 
   const monthKeys = useMemo(
     () =>
@@ -61,8 +65,15 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   return (
     <>
       <PageHeader route={MAIN_ROUTE} />
-      <CalendarPage logsByDate={logsByDate} isActive={!isOverlayActive} />
-      <FooterBar />
+      <CalendarPage logsByDate={logsByDate} isActive={!isOverlayActive} todayOpenSignal={todayOpenSignal} />
+      <FooterBar
+        onGoToday={() => {
+          const now = new Date();
+          setViewMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+          setSelectedDateKey(formatDateKey(now));
+          setTodayOpenSignal((prev) => prev + 1);
+        }}
+      />
     </>
   );
 }

@@ -51,6 +51,12 @@ interface RenameTaskCollectionInput {
   name: string;
 }
 
+interface SetTaskFavoriteInput {
+  userId: string;
+  taskId: string;
+  isFavorite: boolean;
+}
+
 export class TaskCollectionService {
   constructor(private readonly repository: TaskCollecitonRepository) {}
 
@@ -172,6 +178,20 @@ export class TaskCollectionService {
       ...input,
       name,
     });
+  }
+
+  async setTaskFavorite(input: SetTaskFavoriteInput) {
+    const task = await this.repository.findTaskById(input.userId, input.taskId);
+    if (!task) {
+      throw new Error("TASK_NOT_FOUND");
+    }
+
+    const updated = await this.repository.setTaskFavorite(input);
+    if (!updated) {
+      throw new Error("TASK_NOT_FOUND");
+    }
+
+    return updated;
   }
 
   private async addTaskWithValidation(input: AddTaskInput) {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FiCheckCircle, FiChevronRight, FiChevronUp, FiClipboard } from "react-icons/fi";
+import { Button } from "../../../components/ui/Button";
 import { useAppStore } from "../../../stores";
 import { formatDateLabel } from "../utils/date";
 
@@ -173,14 +174,14 @@ export function DateSelectionSheet({
           <p className="m-0 text-[0.95rem] font-semibold text-base-content">
             {formatDateLabel(selectedDateKey)}
           </p>
-          <button
-            type="button"
-            className="btn btn-xs h-7 min-h-7 rounded-full border-base-300 bg-base-100 px-2 text-[11px] text-base-content/80"
+          <Button
+            size="xs"
+            className="h-7 min-h-7 rounded-full border-base-300 bg-base-100 px-2 text-[11px] text-base-content/80"
             onClick={onRequestOpenTasks}
           >
             상세
             <FiChevronRight size={12} />
-          </button>
+          </Button>
         </div>
         <div className="mt-2 flex-1 space-y-2 overflow-y-auto overscroll-contain">
           {selectedTasks.length > 0 ? (

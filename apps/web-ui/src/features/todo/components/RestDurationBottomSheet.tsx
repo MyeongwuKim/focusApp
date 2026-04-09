@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "../../../components/ui/Button";
+import { InputField } from "../../../components/ui/InputField";
 
 type RestDurationBottomSheetProps = {
   isOpen: boolean;
@@ -72,24 +74,25 @@ export function RestDurationBottomSheet({
 
         <div className="mt-2 flex flex-wrap gap-1.5">
           {PRESET_REST_DURATIONS.map((duration) => (
-            <button
+            <Button
               key={duration === null ? "unlimited" : duration}
-              type="button"
+              size="sm"
+              variant={draftDurationMin === duration ? "primary" : "ghost"}
               className={[
-                "btn btn-sm h-8 min-h-8 rounded-full px-3 text-xs",
+                "h-8 min-h-8 rounded-full px-3 text-xs",
                 draftDurationMin === duration
-                  ? "btn-primary border-primary/55 bg-primary/16 text-primary"
-                  : "btn-ghost border border-base-300/80 bg-base-100 text-base-content/72",
+                  ? "border-primary/55 bg-primary/16 text-primary"
+                  : "border border-base-300/80 bg-base-100 text-base-content/72",
               ].join(" ")}
               onClick={() => setDraftDurationMin(duration)}
             >
               {formatRestDurationLabel(duration)}
-            </button>
+            </Button>
           ))}
         </div>
 
         <div className="mt-2 flex items-center gap-2 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
-          <input
+          <InputField
             type="number"
             min={1}
             max={999}
@@ -97,39 +100,36 @@ export function RestDurationBottomSheet({
             inputMode="numeric"
             value={customMinutesInput}
             onChange={(event) => setCustomMinutesInput(event.target.value)}
-            className="input input-sm h-9 min-h-9 w-full border-base-300 bg-base-100"
+            className="input-sm h-9 min-h-9 w-full border-base-300 bg-base-100"
             placeholder="커스텀 분 입력 (예: 45)"
           />
-          <button
-            type="button"
-            className="btn btn-sm h-9 min-h-9 rounded-full px-3 text-xs"
-            onClick={applyCustomMinutes}
-          >
+          <Button size="sm" className="h-9 min-h-9 rounded-full px-3 text-xs" onClick={applyCustomMinutes}>
             적용
-          </button>
+          </Button>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="btn btn-sm h-9 min-h-9 rounded-full border border-base-300 bg-base-100 text-xs"
+          <Button
+            size="sm"
+            className="h-9 min-h-9 rounded-full border border-base-300 bg-base-100 text-xs"
             onClick={() => {
               onApplyOnce(draftDurationMin);
               onClose();
             }}
           >
             이번만 적용
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm h-9 min-h-9 rounded-full btn-primary text-xs"
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            className="h-9 min-h-9 rounded-full text-xs"
             onClick={() => {
               onSaveDefault(draftDurationMin);
               onClose();
             }}
           >
             기본값 저장
-          </button>
+          </Button>
         </div>
       </div>
     </div>

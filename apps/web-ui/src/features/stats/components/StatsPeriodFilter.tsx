@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Button } from "../../../components/ui/Button";
+import { InputField } from "../../../components/ui/InputField";
 import {
   STATS_MAX_RANGE_DAYS,
   formatDateInput,
@@ -62,17 +64,31 @@ export function StatsPeriodFilter() {
   return (
     <>
       <div className="grid grid-cols-4 gap-2">
-        <button className={`btn btn-sm ${normalized.preset === "day" ? "btn-primary" : ""}`} onClick={() => applyPreset("day")}>하루</button>
-        <button className={`btn btn-sm ${normalized.preset === "7d" ? "btn-primary" : ""}`} onClick={() => applyPreset("7d")}>7일</button>
-        <button className={`btn btn-sm ${normalized.preset === "30d" ? "btn-primary" : ""}`} onClick={() => applyPreset("30d")}>30일</button>
-        <button className={`btn btn-sm ${normalized.preset === "1y" ? "btn-primary" : ""}`} onClick={() => applyPreset("1y")}>1년</button>
+        <Button size="sm" variant={normalized.preset === "day" ? "primary" : "default"} onClick={() => applyPreset("day")}>
+          하루
+        </Button>
+        <Button size="sm" variant={normalized.preset === "7d" ? "primary" : "default"} onClick={() => applyPreset("7d")}>
+          7일
+        </Button>
+        <Button
+          size="sm"
+          variant={normalized.preset === "30d" ? "primary" : "default"}
+          onClick={() => applyPreset("30d")}
+        >
+          30일
+        </Button>
+        <Button size="sm" variant={normalized.preset === "1y" ? "primary" : "default"} onClick={() => applyPreset("1y")}>
+          1년
+        </Button>
       </div>
 
       <div className="rounded-xl border border-base-300/80 bg-base-200/40 p-3">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]">
-          <input type="date" className="input input-bordered w-full" value={startInput} onChange={(event) => setStartInput(event.target.value)} />
-          <input type="date" className="input input-bordered w-full" value={endInput} max={normalized.todayKey} onChange={(event) => setEndInput(event.target.value)} />
-          <button className="btn btn-primary" disabled={!canApply} onClick={applyCustomRange}>기간 적용</button>
+          <InputField type="date" className="w-full" value={startInput} onChange={(event) => setStartInput(event.target.value)} />
+          <InputField type="date" className="w-full" value={endInput} max={normalized.todayKey} onChange={(event) => setEndInput(event.target.value)} />
+          <Button variant="primary" disabled={!canApply} onClick={applyCustomRange}>
+            기간 적용
+          </Button>
         </div>
         <p className="mt-2 text-xs text-base-content/65">{guideText}</p>
       </div>

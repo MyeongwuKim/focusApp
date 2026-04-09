@@ -53,6 +53,7 @@ const DAILY_LOG_BY_DATE_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -75,6 +76,7 @@ const ADD_TODOS_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -97,6 +99,7 @@ const DELETE_TODO_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -119,6 +122,7 @@ const START_TODO_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -141,6 +145,7 @@ const PAUSE_TODO_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -163,6 +168,7 @@ const RESUME_TODO_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -185,6 +191,30 @@ const COMPLETE_TODO_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
+        pausedAt
+        completedAt
+        deviationSeconds
+        actualFocusSeconds
+      }
+    }
+  }
+`;
+
+const RESET_TODO_QUERY = /* GraphQL */ `
+  mutation ResetTodo($input: TodoActionInput!) {
+    resetTodo(input: $input) {
+      dateKey
+      memo
+      restAccumulatedSeconds
+      restStartedAt
+      todos {
+        id
+        content
+        done
+        order
+        startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -207,6 +237,7 @@ const ADD_DEVIATION_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -229,6 +260,30 @@ const UPDATE_TODO_ACTUAL_FOCUS_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
+        pausedAt
+        completedAt
+        deviationSeconds
+        actualFocusSeconds
+      }
+    }
+  }
+`;
+
+const UPDATE_TODO_SCHEDULE_QUERY = /* GraphQL */ `
+  mutation UpdateTodoSchedule($input: UpdateTodoScheduleInput!) {
+    updateTodoSchedule(input: $input) {
+      dateKey
+      memo
+      restAccumulatedSeconds
+      restStartedAt
+      todos {
+        id
+        content
+        done
+        order
+        startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -251,6 +306,7 @@ const START_REST_SESSION_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -273,6 +329,7 @@ const STOP_REST_SESSION_QUERY = /* GraphQL */ `
         done
         order
         startedAt
+        scheduledStartAt
         pausedAt
         completedAt
         deviationSeconds
@@ -288,6 +345,7 @@ type DailyLogTodo = {
   done: boolean;
   order: number;
   startedAt: string | null;
+  scheduledStartAt: string | null;
   pausedAt: string | null;
   completedAt: string | null;
   deviationSeconds: number;
@@ -344,12 +402,20 @@ type CompleteTodoMutation = {
   completeTodo: DailyLogPayload;
 };
 
+type ResetTodoMutation = {
+  resetTodo: DailyLogPayload;
+};
+
 type AddDeviationMutation = {
   addDeviation: DailyLogPayload;
 };
 
 type UpdateTodoActualFocusMutation = {
   updateTodoActualFocus: DailyLogPayload;
+};
+
+type UpdateTodoScheduleMutation = {
+  updateTodoSchedule: DailyLogPayload;
 };
 
 type StartRestSessionMutation = {
@@ -465,6 +531,7 @@ export async function addTodosToDailyLog(input: {
   items: Array<{
     content: string;
     taskId?: string | null;
+    scheduledStartAt?: string | null;
   }>;
 }) {
   const response = await fetch(getGraphqlEndpoint(), {
@@ -634,6 +701,34 @@ export async function completeTodoFromDailyLog(input: { dateKey: string; todoId:
   return next;
 }
 
+export async function resetTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: RESET_TODO_QUERY,
+      variables: { input },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Reset todo failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<ResetTodoMutation>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL resetTodo failed");
+  }
+
+  const next = result.data?.resetTodo;
+  if (!next) {
+    throw new Error("GraphQL resetTodo failed");
+  }
+  return next;
+}
+
 export async function addTodoDeviationToDailyLog(input: {
   dateKey: string;
   todoId: string;
@@ -694,6 +789,38 @@ export async function updateTodoActualFocusFromDailyLog(input: {
   const next = result.data?.updateTodoActualFocus;
   if (!next) {
     throw new Error("GraphQL updateTodoActualFocus failed");
+  }
+  return next;
+}
+
+export async function updateTodoScheduleFromDailyLog(input: {
+  dateKey: string;
+  todoId: string;
+  scheduledStartAt: string | null;
+}) {
+  const response = await fetch(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: UPDATE_TODO_SCHEDULE_QUERY,
+      variables: { input },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Update todo schedule failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<UpdateTodoScheduleMutation>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL updateTodoSchedule failed");
+  }
+
+  const next = result.data?.updateTodoSchedule;
+  if (!next) {
+    throw new Error("GraphQL updateTodoSchedule failed");
   }
   return next;
 }

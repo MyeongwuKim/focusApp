@@ -17,6 +17,7 @@ import {
 } from "react-icons/fi";
 import { useAppStore, useWeatherStore } from "../stores";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
+import { Button } from "./ui/Button";
 
 type PageHeaderProps = {
   route: RouteKey;
@@ -78,14 +79,16 @@ export function PageHeader({ route }: PageHeaderProps) {
   if (route === MAIN_ROUTE) {
     return (
       <header className="relative mb-2 flex h-12 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
-        <button
-          type="button"
-          className="btn btn-sm btn-ghost btn-circle absolute left-2 top-1/2 -translate-y-1/2"
+        <Button
+          variant="ghost"
+          size="sm"
+          circle
+          className="absolute left-2 top-1/2 -translate-y-1/2"
           onClick={openMenu}
           aria-label="메뉴 열기"
         >
           <FiMenu size={18} />
-        </button>
+        </Button>
 
         <div className="flex justify-center">
           <MonthDropdown month={viewMonth} onChange={setViewMonth} />
@@ -105,40 +108,46 @@ export function PageHeader({ route }: PageHeaderProps) {
             </div>
           </div>
         ) : null}
-        <button
-          type="button"
-          className="btn btn-sm btn-ghost btn-circle absolute right-2 top-1/2 -translate-y-1/2"
+        <Button
+          variant="ghost"
+          size="sm"
+          circle
+          className="absolute right-2 top-1/2 -translate-y-1/2"
           onClick={goSettings}
           aria-label="옵션으로 이동"
         >
           <FiSettings size={18} />
-        </button>
+        </Button>
       </header>
     );
   }
 
   return (
     <header className="relative mb-2 flex h-12 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
-      <button
-        type="button"
-        className="btn btn-sm btn-ghost btn-circle absolute left-2 top-1/2 -translate-y-1/2"
+      <Button
+        variant="ghost"
+        size="sm"
+        circle
+        className="absolute left-2 top-1/2 -translate-y-1/2"
         onClick={goOverlayBack}
         aria-label="뒤로가기"
       >
         <FiChevronLeft size={18} />
-      </button>
+      </Button>
       <h1 className="m-0 text-center text-lg font-semibold text-base-content">
         {dateTasksRouteTitle}
       </h1>
       {route !== "settings" ? (
-        <button
-          type="button"
-          className="btn btn-sm btn-ghost btn-circle absolute right-2 top-1/2 -translate-y-1/2"
+        <Button
+          variant="ghost"
+          size="sm"
+          circle
+          className="absolute right-2 top-1/2 -translate-y-1/2"
           onClick={goSettings}
           aria-label="옵션으로 이동"
         >
           <FiSettings size={18} />
-        </button>
+        </Button>
       ) : null}
     </header>
   );

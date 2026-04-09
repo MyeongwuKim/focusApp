@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiX } from "react-icons/fi";
 import { SelectDropbox } from "../../../components/SelectDropbox";
+import { Button } from "../../../components/ui/Button";
+import { InputField } from "../../../components/ui/InputField";
 import type { ManagedCollection } from "./TaskManagementBody";
 
 type CreateTaskModalProps = {
@@ -73,14 +75,9 @@ export function CreateTaskModal({
       >
         <div className="mb-3 flex items-center justify-between">
           <h3 className="m-0 text-base font-semibold text-base-content">할일 추가</h3>
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs btn-circle"
-            onClick={onClose}
-            aria-label="할일 추가 닫기"
-          >
+          <Button variant="ghost" size="xs" circle onClick={onClose} aria-label="할일 추가 닫기">
             <FiX size={14} />
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-3">
@@ -92,7 +89,7 @@ export function CreateTaskModal({
               label: collection.name,
             }))}
           />
-          <input
+          <InputField
             value={label}
             onChange={(event) => setLabel(event.target.value)}
             onKeyDown={(event) => {
@@ -105,16 +102,16 @@ export function CreateTaskModal({
                 onClose();
               }
             }}
-            className="input input-bordered w-full focus:outline-none focus:ring-0 focus:border-base-300"
+            className="w-full"
             placeholder="추가할 할일"
           />
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose}>
               취소
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               disabled={disabled}
               onClick={() => {
                 if (disabled) {
@@ -125,7 +122,7 @@ export function CreateTaskModal({
               }}
             >
               추가
-            </button>
+            </Button>
           </div>
         </div>
       </div>

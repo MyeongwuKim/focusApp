@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { SimpleRoutePage } from "./pages/SimpleRoutePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
-import { MemoPage } from "./pages/MemoPage";
 import { CalendarRootPage } from "./pages/CalendarRootPage";
 import { TaskManagementRoutePage } from "./pages/TaskManagementRoutePage";
 import { StatsRoutePage } from "./pages/StatsRoutePage";
@@ -14,7 +12,7 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { ActionSheet } from "./components/ActionSheet";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { NavigateOptions } from "./providers/AppNavigationProvider";
-import { MAIN_ROUTE, ROUTE_LABEL } from "./routes/route-config";
+import { MAIN_ROUTE } from "./routes/route-config";
 import { toast, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import { fetchCurrentWeather, SEOUL_COORDINATES, type Coordinates } from "./utils/weather";
@@ -24,7 +22,6 @@ const ROUTE_PATH: Record<RouteKey, string> = {
   calendar: "/calendar",
   tasks: "/tasks",
   dateTasks: "/date-tasks",
-  memo: "/memo",
   stats: "/stats",
   settings: "/settings",
 };
@@ -233,12 +230,15 @@ function App() {
         return <DateTodosRoutePage />;
       case "tasks":
         return <TaskManagementRoutePage />;
-      case "memo":
-        return <MemoPage />;
       case "stats":
         return <StatsRoutePage />;
+      case "calendar":
+        return null;
       default:
-        return <SimpleRoutePage title={ROUTE_LABEL[route]} />;
+        {
+          const _exhaustive: never = route;
+          return _exhaustive;
+        }
     }
   };
 
@@ -252,7 +252,7 @@ function App() {
 
           {overlayRoute ? (
             <div
-              key={`${location.pathname}${location.search}`}
+              key={location.pathname}
               className="overlay-enter absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
               onTouchStart={(event) => {
                 const touch = event.touches[0];
