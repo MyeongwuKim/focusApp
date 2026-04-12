@@ -9,6 +9,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -40,6 +41,7 @@ export type ManagedCollection = {
 
 const TASK_DRAG_ID_PREFIX = "task:";
 const COLLECTION_DROP_ID_PREFIX = "collection:";
+const UNCATEGORIZED_COLLECTION_NAME = "미분류";
 
 const toTaskDragId = (taskId: string) => `${TASK_DRAG_ID_PREFIX}${taskId}`;
 const toCollectionDropId = (collectionId: string) => `${COLLECTION_DROP_ID_PREFIX}${collectionId}`;
@@ -49,6 +51,9 @@ const parseTaskDragId = (dragId: string) =>
 
 const parseCollectionDropId = (dropId: string) =>
   dropId.startsWith(COLLECTION_DROP_ID_PREFIX) ? dropId.slice(COLLECTION_DROP_ID_PREFIX.length) : null;
+
+const isUncategorizedCollection = (name: string) =>
+  name.trim().toLowerCase() === UNCATEGORIZED_COLLECTION_NAME.toLowerCase();
 
 function DraggableTaskItem({
   task,
@@ -153,6 +158,7 @@ export function TaskManagementBody() {
   } = useTaskManagementActions();
   const { openRename } = useTaskManagementModals();
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [draggingTaskWidth, setDraggingTaskWidth] = useState<number | null>(null);
   const draggingTask = useMemo(
     () => (draggingTaskId ? tasks.find((task) => task.id === draggingTaskId) ?? null : null),
     [draggingTaskId, tasks]
@@ -201,6 +207,7 @@ export function TaskManagementBody() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggingTaskId(null);
+    setDraggingTaskWidth(null);
     if (!event.over) {
       return;
     }
@@ -233,6 +240,12 @@ export function TaskManagementBody() {
       return;
     }
     onReorderCollections(activeCollectionId, overCollectionId);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggingTaskId(parseTaskDragId(String(event.active.id)));
+    const activeRectWidth = event.active.rect.current.initial?.width;
+    setDraggingTaskWidth(typeof activeRectWidth === "number" ? activeRectWidth : null);
   };
 
   const handleTaskMenu = async (taskId: string) => {
@@ -280,7 +293,7 @@ export function TaskManagementBody() {
 
   const handleCollectionMenu = async (collectionId: string) => {
     const target = collections.find((collection) => collection.id === collectionId);
-    if (!target) {
+    if (!target || isUncategorizedCollection(target.name)) {
       return;
     }
 
@@ -340,12 +353,11 @@ export function TaskManagementBody() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          onDragStart={(event) => {
-            setDraggingTaskId(parseTaskDragId(String(event.active.id)));
-          }}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onDragCancel={() => {
             setDraggingTaskId(null);
+            setDraggingTaskWidth(null);
           }}
         >
           <div className="min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
@@ -389,6 +401,7 @@ export function TaskManagementBody() {
               <SortableContext items={collectionDropIds} strategy={verticalListSortingStrategy}>
                 {collections.map((collection) => {
                   const active = selectedCollectionId === collection.id;
+                  const showCollectionMenu = !isUncategorizedCollection(collection.name);
                   return (
                     <DroppableCollectionItem
                       key={collection.id}
@@ -398,9 +411,13 @@ export function TaskManagementBody() {
                       active={active}
                       draggingTaskId={draggingTaskId}
                       onSelect={() => onSelectCollection(collection.id)}
-                      onOpenMenu={() => {
-                        void handleCollectionMenu(collection.id);
-                      }}
+                      onOpenMenu={
+                        showCollectionMenu
+                          ? () => {
+                              void handleCollectionMenu(collection.id);
+                            }
+                          : undefined
+                      }
                     />
                   );
                 })}
@@ -409,7 +426,7 @@ export function TaskManagementBody() {
           </aside>
           <DragOverlay>
             {draggingTask ? (
-              <div className="w-[min(360px,62vw)] rounded-lg">
+              <div className="rounded-lg" style={draggingTaskWidth ? { width: `${draggingTaskWidth}px` } : undefined}>
                 <TaskManagementTaskItem
                   label={draggingTask.label}
                   collectionName={collectionNameById.get(draggingTask.collectionId) ?? "미분류"}

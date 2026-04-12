@@ -1,4 +1,4 @@
-export type Preset = "day" | "7d" | "30d" | "1y" | "custom";
+export type Preset = "7d" | "30d" | "1y";
 
 export const STATS_MAX_RANGE_DAYS = 730;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -22,11 +22,8 @@ export function getTodayDate() {
   return parseInputDate(formatDateInput(new Date()));
 }
 
-export function getPresetRange(preset: Exclude<Preset, "custom">) {
+export function getPresetRange(preset: Preset) {
   const end = getTodayDate();
-  if (preset === "day") {
-    return { start: end, end };
-  }
   if (preset === "7d") {
     return { start: addDays(end, -6), end };
   }
@@ -37,7 +34,7 @@ export function getPresetRange(preset: Exclude<Preset, "custom">) {
 }
 
 function isPreset(value: string | null): value is Preset {
-  return value === "day" || value === "7d" || value === "30d" || value === "1y" || value === "custom";
+  return value === "7d" || value === "30d" || value === "1y";
 }
 
 export function normalizeStatsSearchParams(source: URLSearchParams) {
@@ -45,7 +42,7 @@ export function normalizeStatsSearchParams(source: URLSearchParams) {
   const todayKey = formatDateInput(today);
 
   const preset = isPreset(source.get("preset")) ? (source.get("preset") as Preset) : "7d";
-  const fallback = getPresetRange(preset === "custom" ? "7d" : preset);
+  const fallback = getPresetRange(preset);
 
   const rawStart = source.get("start");
   const rawEnd = source.get("end");

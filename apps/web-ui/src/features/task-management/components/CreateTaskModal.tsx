@@ -83,7 +83,7 @@ export function CreateTaskModal({
         <div className="space-y-3">
           <SelectDropbox
             value={collectionId}
-            onChange={(event) => setCollectionId(event.target.value)}
+            onValueChange={setCollectionId}
             options={collections.map((collection) => ({
               value: collection.id,
               label: collection.name,

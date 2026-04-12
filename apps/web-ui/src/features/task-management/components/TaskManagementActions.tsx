@@ -1,5 +1,6 @@
-import { FiPlus } from "react-icons/fi";
+import { FiBarChart2, FiPlus } from "react-icons/fi";
 import { PillActionButton } from "../../../components/ui/PillActionButton";
+import { useAppNavigation } from "../../../providers/AppNavigationProvider";
 import {
   useTaskManagementActions,
   useTaskManagementData,
@@ -7,9 +8,11 @@ import {
 import { useTaskManagementModals } from "../providers/TaskManagementModalProvider";
 
 export function TaskManagementActions() {
+  const { goPage } = useAppNavigation();
   const { onCreateCollection, onCreateTask } = useTaskManagementActions();
   const { tasks, collections, selectedCollectionId, selectedTaskId } = useTaskManagementData();
   const { openCreateCollection, openCreateTask } = useTaskManagementModals();
+  const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : null;
 
   const handleOpenCollection = () => {
     void (async () => {
@@ -36,8 +39,24 @@ export function TaskManagementActions() {
     })();
   };
 
+  const handleOpenTaskStats = () => {
+    if (!selectedTask) {
+      return;
+    }
+    goPage("/tasks/stats", {
+      query: {
+        taskId: selectedTask.id,
+        taskLabel: selectedTask.label,
+        preset: "7d",
+      },
+    });
+  };
+
   return (
     <div className="flex w-full items-center justify-end gap-2 select-none">
+      <PillActionButton icon={<FiBarChart2 size={14} />} onClick={handleOpenTaskStats} disabled={!selectedTask}>
+        통계
+      </PillActionButton>
       <PillActionButton icon={<FiPlus size={14} />} onClick={handleOpenCollection}>
         컬렉션
       </PillActionButton>

@@ -1,5 +1,7 @@
 import { TaskCollecitonRepository } from "./task-collection.repository.js";
 
+const UNCATEGORIZED_COLLECTION_NAME = "미분류";
+
 interface CreateTaskCollectionInput {
   userId: string;
   name: string;
@@ -88,7 +90,21 @@ export class TaskCollectionService {
       throw new Error("TASK_COLLECTION_NOT_FOUND");
     }
 
-    await this.repository.deleteTaskCollection(input);
+    if (normalizeCollectionName(collection.name) === normalizeCollectionName(UNCATEGORIZED_COLLECTION_NAME)) {
+      throw new Error("UNCATEGORIZED_COLLECTION_PROTECTED");
+    }
+
+    const uncategorizedCollection =
+      (await this.repository.findTaskCollectionByName(input.userId, UNCATEGORIZED_COLLECTION_NAME)) ??
+      (await this.repository.createTaskCollection({
+        userId: input.userId,
+        name: UNCATEGORIZED_COLLECTION_NAME,
+      }));
+
+    await this.repository.deleteTaskCollection({
+      ...input,
+      fallbackCollectionId: uncategorizedCollection.id,
+    });
     return true;
   }
 
@@ -223,4 +239,8 @@ export class TaskCollectionService {
 
 function normalizeTaskTitle(title: string) {
   return title.trim().replace(/\s+/g, "").toLowerCase();
+}
+
+function normalizeCollectionName(name: string) {
+  return name.trim().toLowerCase();
 }

@@ -17,7 +17,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
-import { FiCheck, FiMenu, FiPlus, FiX } from "react-icons/fi";
+import { FiCheck, FiMenu, FiPlus, FiTag, FiX } from "react-icons/fi";
+import { SelectDropbox } from "../../../components/SelectDropbox";
 import { Button } from "../../../components/ui/Button";
 import { InputField } from "../../../components/ui/InputField";
 import { useTaskCollectionMutation, useTaskCollectionQuery } from "../../../queries";
@@ -43,6 +44,7 @@ type SortableSelectedTaskRowProps = {
   task: {
     id: string;
     title: string;
+    collectionName: string;
   };
   scheduledTime: string | null;
   onRemove: (taskId: string) => void;
@@ -81,7 +83,13 @@ function SortableSelectedTaskRow({ task, scheduledTime, onRemove, onChangeTime }
           >
             <FiMenu size={12} />
           </Button>
-          <p className="m-0 truncate text-sm font-medium text-base-content/80">{task.title}</p>
+          <div className="min-w-0">
+            <p className="m-0 truncate text-sm font-medium text-base-content/80">{task.title}</p>
+            <p className="m-0 mt-0.5 truncate text-[11px] text-base-content/55">
+              <FiTag size={11} className="mr-1 inline-block" />
+              {task.collectionName}
+            </p>
+          </div>
         </div>
         <Button variant="ghost" size="xs" circle aria-label="항목 제외" className="text-error" onClick={() => onRemove(task.id)}>
           <FiX size={12} />
@@ -409,18 +417,18 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
 
           <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
             <div className="mb-2 flex items-center gap-2">
-              <select
-                className="select select-bordered h-9 min-h-9 flex-1 rounded-lg outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+              <SelectDropbox
+                className="h-9 min-h-9 flex-1 rounded-lg"
                 value={selectedCollectionId}
-                onChange={(event) => setSelectedCollectionId(event.target.value)}
-              >
-                <option value="all">전체</option>
-                {collections.map((collection) => (
-                  <option key={collection.id} value={collection.id}>
-                    {collection.name}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setSelectedCollectionId}
+                options={[
+                  { value: "all", label: "전체" },
+                  ...collections.map((collection) => ({
+                    value: collection.id,
+                    label: collection.name,
+                  })),
+                ]}
+              />
               <Button
                 variant="outline"
                 square
@@ -439,17 +447,15 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
                   {quickCreateMode === "collection" ? "컬렉션 추가" : "할일 추가"}
                 </p>
                 {quickCreateMode === "task" ? (
-                  <select
-                    className="select select-bordered mb-1.5 h-8 min-h-8 w-full rounded-lg text-xs outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+                  <SelectDropbox
+                    className="mb-1.5 h-8 min-h-8 w-full rounded-lg text-xs"
                     value={quickTaskCollectionId}
-                    onChange={(event) => setQuickTaskCollectionId(event.target.value)}
-                  >
-                    {collections.map((collection) => (
-                      <option key={collection.id} value={collection.id}>
-                        {collection.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={setQuickTaskCollectionId}
+                    options={collections.map((collection) => ({
+                      value: collection.id,
+                      label: collection.name,
+                    }))}
+                  />
                 ) : null}
                 <div className="flex items-center gap-1.5">
                   <InputField
@@ -505,7 +511,10 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
                   >
                     <div>
                       <p className="m-0 text-sm font-medium">{task.title}</p>
-                      <p className="m-0 mt-0.5 text-xs text-base-content/60">{task.collectionName}</p>
+                      <p className="m-0 mt-0.5 text-xs text-base-content/60">
+                        <FiTag size={11} className="mr-1 inline-block" />
+                        {task.collectionName}
+                      </p>
                     </div>
                     {selected ? <FiCheck size={14} /> : null}
                   </Button>

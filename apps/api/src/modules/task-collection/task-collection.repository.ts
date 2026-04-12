@@ -21,6 +21,7 @@ interface DeleteTaskInput {
 interface DeleteTaskCollectionInput {
   userId: string;
   collectionId: string;
+  fallbackCollectionId: string;
 }
 
 interface MoveTaskToCollectionInput {
@@ -124,6 +125,18 @@ export class TaskCollecitonRepository {
     });
   }
 
+  async findTaskCollectionByName(userId: string, name: string) {
+    return this.prisma.taskCollection.findFirst({
+      where: {
+        userId,
+        name,
+      },
+      orderBy: {
+        order: "asc",
+      },
+    });
+  }
+
   async findTaskTitles(userId: string, collectionId: string) {
     const rows = await this.prisma.task.findMany({
       where: {
@@ -156,13 +169,36 @@ export class TaskCollecitonRepository {
   }
 
   async deleteTaskCollection(input: DeleteTaskCollectionInput) {
+    const tasksToMove = await this.prisma.task.findMany({
+      where: {
+        userId: input.userId,
+        collectionId: input.collectionId,
+      },
+      orderBy: {
+        order: "asc",
+      },
+      select: {
+        id: true,
+      },
+    });
+    const fallbackOrderStart = await this.getNextTaskOrder({
+      userId: input.userId,
+      collectionId: input.fallbackCollectionId,
+    });
+
     await this.prisma.$transaction([
-      this.prisma.task.deleteMany({
-        where: {
-          userId: input.userId,
-          collectionId: input.collectionId
-        }
-      }),
+      ...tasksToMove.map((task, index) =>
+        this.prisma.task.updateMany({
+          where: {
+            id: task.id,
+            userId: input.userId,
+          },
+          data: {
+            collectionId: input.fallbackCollectionId,
+            order: fallbackOrderStart + index,
+          },
+        })
+      ),
       this.prisma.taskCollection.deleteMany({
         where: {
           id: input.collectionId,

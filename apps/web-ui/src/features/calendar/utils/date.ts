@@ -22,15 +22,15 @@ export function formatDateLabel(dateKey: string): string {
 
 export function getDateTextClass(date: Date, isCurrentMonth: boolean, isHoliday: boolean) {
   if (isHoliday) {
-    return isCurrentMonth ? "text-error" : "text-error/50";
+    return isCurrentMonth ? "text-error" : "text-error/65";
   }
 
   const day = date.getDay();
   if (day === 0) {
-    return isCurrentMonth ? "text-error" : "text-error/50";
+    return isCurrentMonth ? "text-error" : "text-error/65";
   }
   if (day === 6) {
-    return isCurrentMonth ? "text-info" : "text-info/50";
+    return isCurrentMonth ? "text-info" : "text-info/65";
   }
-  return isCurrentMonth ? "text-base-content" : "text-base-content/35";
+  return isCurrentMonth ? "text-base-content" : "text-base-content/55";
 }

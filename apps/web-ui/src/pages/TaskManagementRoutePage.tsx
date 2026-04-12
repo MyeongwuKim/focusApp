@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useReducer } from "react";
+import { useLocation } from "react-router-dom";
 import { TaskManagementActions } from "../features/task-management/components/TaskManagementActions";
 import { TaskManagementBody } from "../features/task-management/components/TaskManagementBody";
 import { TaskManagementFooter } from "../features/task-management/components/TaskManagementFooter";
+import { TaskManagementStatsView } from "../features/task-management/components/TaskManagementStatsView";
 import { TaskManagementModalProvider } from "../features/task-management/providers/TaskManagementModalProvider";
 import { TaskManagementContextProvider } from "../features/task-management/providers/TaskManagementContextProvider";
 import {
@@ -398,6 +400,14 @@ function TaskManagementRouteContent() {
 }
 
 export function TaskManagementRoutePage() {
+  const location = useLocation();
+  const normalizedPathname = location.pathname.replace(/\/+$/, "") || "/";
+  const isTaskStatsRoute = normalizedPathname === "/tasks/stats";
+
+  if (isTaskStatsRoute) {
+    return <TaskManagementStatsView />;
+  }
+
   return (
     <TaskManagementModalProvider>
       <TaskManagementRouteContent />

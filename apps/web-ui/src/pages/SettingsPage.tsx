@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { FiBell, FiCloud, FiSun } from "react-icons/fi";
 import { SettingsNotificationsView } from "../features/settings/components/SettingsNotificationsView";
 import { SettingsMenuItem } from "../features/settings/components/SettingsMenuItem";
 import { SettingsThemeView } from "../features/settings/components/SettingsThemeView";
 import { SettingsWeatherView } from "../features/settings/components/SettingsWeatherView";
 import type { IconType } from "react-icons";
+import { useAppNavigation } from "../providers/AppNavigationProvider";
 
 type SettingsSection = "home" | "theme" | "weather" | "notifications";
 
@@ -51,15 +52,15 @@ function resolveSettingsSection(pathname: string): SettingsSection {
 
 export function SettingsPage() {
   const location = useLocation();
-  const navigate = useNavigate();
+  const { goPage } = useAppNavigation();
   const section = useMemo(() => resolveSettingsSection(location.pathname), [location.pathname]);
 
   const goSection = (nextSection: SettingsSection) => {
     if (nextSection === "home") {
-      navigate("/settings");
+      goPage("/settings");
       return;
     }
-    navigate(`/settings/${nextSection}`);
+    goPage(`/settings/${nextSection}`);
   };
 
   return (

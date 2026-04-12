@@ -7,6 +7,8 @@ import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
 export const dailyLogTypeDefs = gql`
   type TodoItem {
     id: ID!
+    taskId: ID
+    titleSnapshot: String
     content: String!
     done: Boolean!
     order: Int!

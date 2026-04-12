@@ -11,7 +11,7 @@ import { Toast } from "./components/Toast";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ActionSheet } from "./components/ActionSheet";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
-import type { NavigateOptions } from "./providers/AppNavigationProvider";
+import type { GoPageOptions, NavigateOptions } from "./providers/AppNavigationProvider";
 import { MAIN_ROUTE } from "./routes/route-config";
 import { toast, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
@@ -28,12 +28,10 @@ const ROUTE_PATH: Record<RouteKey, string> = {
 
 function getRouteFromPath(pathname: string): RouteKey {
   const normalizedPath = pathname.replace(/\/+$/, "") || "/";
-  if (normalizedPath === ROUTE_PATH.settings || normalizedPath.startsWith(`${ROUTE_PATH.settings}/`)) {
-    return "settings";
-  }
-
-  const entry = Object.entries(ROUTE_PATH).find(([, routePath]) => normalizedPath === routePath);
-  return (entry?.[0] as RouteKey | undefined) ?? MAIN_ROUTE;
+  const matched = (Object.entries(ROUTE_PATH) as Array<[RouteKey, string]>).find(([, routePath]) => {
+    return normalizedPath === routePath || normalizedPath.startsWith(`${routePath}/`);
+  });
+  return matched?.[0] ?? MAIN_ROUTE;
 }
 
 function buildRoutePath(route: RouteKey, search?: string): string {
@@ -53,6 +51,12 @@ function buildSearchFromQuery(query?: Record<string, string>) {
     params.set(key, value);
   });
   return params.toString();
+}
+
+function buildPagePath(path: string, query?: Record<string, string>) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const search = buildSearchFromQuery(query);
+  return search ? `${normalizedPath}?${search}` : normalizedPath;
 }
 
 type LocationResolveResult = {
@@ -183,20 +187,31 @@ function App() {
     };
   }, [weatherEnabled]);
 
+  const goPage = (path: string, options?: GoPageOptions) => {
+    const nextPath = buildPagePath(path, options?.query);
+    const currentPath = `${location.pathname}${location.search}`;
+    if (currentPath === nextPath) {
+      setIsDrawerOpen(false);
+      return;
+    }
+
+    navigate(nextPath, {
+      state: options?.state,
+      replace: options?.replace,
+    });
+    setIsDrawerOpen(false);
+  };
+
   const navigateTo = (nextRoute: RouteKey, options?: NavigateOptions) => {
     if (activeRoute === nextRoute) {
       setIsDrawerOpen(false);
       return;
     }
 
-    const search = buildSearchFromQuery(options?.query);
-    navigate(buildRoutePath(nextRoute, search || undefined), {
-      state: options?.state,
-    });
-    setIsDrawerOpen(false);
+    goPage(buildRoutePath(nextRoute), options);
   };
 
-  const goOverlayBack = () => {
+  const goBack = () => {
     const historyState = window.history.state as { idx?: number } | null;
     const stackIndex = typeof historyState?.idx === "number" ? historyState.idx : 0;
 
@@ -205,7 +220,7 @@ function App() {
       return;
     }
 
-    navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
+    goPage(ROUTE_PATH[MAIN_ROUTE], { replace: true });
     setIsDrawerOpen(false);
   };
 
@@ -214,12 +229,13 @@ function App() {
       activeRoute,
       openMenu: () => setIsDrawerOpen(true),
       closeMenu: () => setIsDrawerOpen(false),
+      goPage,
+      goBack,
       navigateTo,
       goMain: () => navigateTo(MAIN_ROUTE),
       goSettings: () => navigateTo("settings"),
-      goOverlayBack,
     }),
-    [activeRoute, navigateTo, goOverlayBack]
+    [activeRoute, goBack, navigateTo, goPage]
   );
 
   const renderOverlayBody = (route: RouteKey) => {
@@ -234,11 +250,10 @@ function App() {
         return <StatsRoutePage />;
       case "calendar":
         return null;
-      default:
-        {
-          const _exhaustive: never = route;
-          return _exhaustive;
-        }
+      default: {
+        const _exhaustive: never = route;
+        return _exhaustive;
+      }
     }
   };
 
@@ -246,13 +261,11 @@ function App() {
     <AppNavigationProvider value={navigationActions}>
       <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
         <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
-          <CalendarRootPage
-            isOverlayActive={Boolean(overlayRoute)}
-          />
+          <CalendarRootPage isOverlayActive={Boolean(overlayRoute)} />
 
           {overlayRoute ? (
             <div
-              key={location.pathname}
+              key={overlayRoute}
               className="overlay-enter absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
               onTouchStart={(event) => {
                 const touch = event.touches[0];
@@ -267,14 +280,12 @@ function App() {
                 const deltaX = touch.clientX - start.x;
                 const deltaY = touch.clientY - start.y;
                 if (deltaX > 72 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                  navigate(-1);
+                  goBack();
                 }
                 overlayTouchStartRef.current = null;
               }}
             >
-              <PageHeader
-                route={overlayRoute}
-              />
+              <PageHeader route={overlayRoute} />
               {renderOverlayBody(overlayRoute)}
             </div>
           ) : null}

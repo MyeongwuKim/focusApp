@@ -17,9 +17,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
-import { FiDownload, FiMenu, FiSave, FiTrash2, FiX } from "react-icons/fi";
+import { FiDownload, FiMenu, FiSave, FiTag, FiTrash2, FiX } from "react-icons/fi";
 import type { RoutineTemplate, RoutineTemplateItem } from "../../../api/routineTemplateApi";
 import { Button } from "../../../components/ui/Button";
+import { useTaskCollectionQuery } from "../../../queries";
 import { confirm } from "../../../stores";
 
 type TodoRoutineImportModalProps = {
@@ -84,10 +85,12 @@ function areRoutineItemsEqual(left: EditableRoutineItem[], right: EditableRoutin
 
 function SortableRoutineItemRow({
   item,
+  collectionName,
   onDelete,
   editable,
 }: {
   item: EditableRoutineItem;
+  collectionName: string | null;
   onDelete: (itemId: string) => void;
   editable: boolean;
 }) {
@@ -126,9 +129,15 @@ function SortableRoutineItemRow({
         ) : null}
         <div className="min-w-0 flex-1">
           <p className="m-0 truncate">{item.content}</p>
-          <p className="m-0 mt-0.5 text-[11px] text-base-content/55">
-            {item.scheduledTimeHHmm ? `시간 ${item.scheduledTimeHHmm}` : "시간 미설정"}
-          </p>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            <p className="m-0 truncate text-[11px] text-base-content/55">
+              <FiTag size={11} className="mr-1 inline-block" />
+              {collectionName ?? "컬렉션 없음"}
+            </p>
+            <p className="m-0 truncate text-[11px] text-base-content/55">
+              {item.scheduledTimeHHmm ? `시간 ${item.scheduledTimeHHmm}` : "시간 미설정"}
+            </p>
+          </div>
         </div>
         {editable ? (
           <Button
@@ -156,6 +165,8 @@ export function TodoRoutineImportModal({
   onUpdateRoutine,
   onDeleteRoutine,
 }: TodoRoutineImportModalProps) {
+  const { taskCollectionsQuery } = useTaskCollectionQuery();
+  const collections = taskCollectionsQuery.data ?? [];
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -229,6 +240,15 @@ export function TodoRoutineImportModal({
     () => (selectedRoutine ? normalizeRoutineItems(selectedRoutine.items) : []),
     [selectedRoutine]
   );
+  const collectionNameByTaskId = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const collection of collections) {
+      for (const task of collection.tasks) {
+        mapping.set(task.id, collection.name);
+      }
+    }
+    return mapping;
+  }, [collections]);
 
   useEffect(() => {
     setEditableItems(selectedRoutineItems);
@@ -408,6 +428,7 @@ export function TodoRoutineImportModal({
                         <SortableRoutineItemRow
                           key={item.id}
                           item={item}
+                          collectionName={item.taskId ? collectionNameByTaskId.get(item.taskId) ?? null : null}
                           onDelete={handleDeleteRoutineItem}
                           editable={isEditMode}
                         />

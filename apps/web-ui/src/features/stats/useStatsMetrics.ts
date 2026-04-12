@@ -21,9 +21,38 @@ type UseStatsMetricsInput = {
   start: Date;
   end: Date;
   todayKey: string;
+  taskId?: string;
+  taskLabel?: string;
 };
 
-export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) {
+function normalizeLabel(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function matchesTask(
+  todo: { taskId?: string | null; titleSnapshot?: string | null; content: string },
+  taskId?: string,
+  taskLabel?: string
+) {
+  if (!taskId) {
+    return true;
+  }
+  if (todo.taskId === taskId) {
+    return true;
+  }
+  if (!todo.taskId && taskLabel) {
+    const target = normalizeLabel(taskLabel);
+    if (!target) {
+      return false;
+    }
+    const snapshot = normalizeLabel(todo.titleSnapshot);
+    const content = normalizeLabel(todo.content);
+    return snapshot === target || content === target;
+  }
+  return false;
+}
+
+export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel }: UseStatsMetricsInput) {
   const rangeDays = getRangeDays(start, end);
   const monthKeys = useMemo(() => getMonthKeysBetween(start, end), [start, end]);
   const { monthlyLogsQuery } = useDailyLogQuery({ monthKeys });
@@ -56,9 +85,6 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
   }, [detailDateKeys, detailQueries]);
 
   const countStats = useMemo(() => {
-    const totalTodos = filteredLogs.reduce((acc, log) => acc + log.todoCount, 0);
-    const doneTodos = filteredLogs.reduce((acc, log) => acc + log.doneCount, 0);
-
     const dailySeries: Array<{
       key: string;
       done: number;
@@ -71,7 +97,9 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
       const day = addDays(start, i);
       const key = formatDateInput(day);
       const log = filteredLogs.find((item) => item.dateKey === key);
-      const sortedTodos = [...(log?.todos ?? [])].sort((a, b) => a.order - b.order);
+      const sortedTodos = [...(log?.todos ?? [])]
+        .filter((todo) => matchesTask(todo, taskId, taskLabel))
+        .sort((a, b) => a.order - b.order);
       const doneLabels = sortedTodos.filter((todo) => todo.done).map((todo) => todo.content);
       const incompleteLabels = sortedTodos.filter((todo) => !todo.done).map((todo) => todo.content);
       dailySeries.push({
@@ -83,7 +111,9 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
       });
     }
 
+    const doneTodos = dailySeries.reduce((acc, item) => acc + item.done, 0);
     const incompleteTodos = dailySeries.reduce((acc, item) => acc + item.incomplete, 0);
+    const totalTodos = doneTodos + incompleteTodos;
 
     const monthlyMap = new Map<string, { done: number; incomplete: number; doneLabels: string[]; incompleteLabels: string[] }>();
     for (const item of dailySeries) {
@@ -127,7 +157,7 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
       monthlySeries,
       useMonthlyBar: rangeDays > 90,
     };
-  }, [filteredLogs, rangeDays, start]);
+  }, [filteredLogs, rangeDays, start, taskId, taskLabel]);
 
   const timeStats = useMemo(() => {
     const dailySeries: Array<{ key: string; focusMin: number; deviationMin: number; restMin: number }> = [];
@@ -139,10 +169,10 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
 
       let focusSeconds = 0;
       let deviationSeconds = 0;
-      let restSeconds = Math.max(detail?.restAccumulatedSeconds ?? 0, 0);
+      let restSeconds = taskId ? 0 : Math.max(detail?.restAccumulatedSeconds ?? 0, 0);
 
       const dayEndMs = parseInputDate(key).getTime() + 24 * 60 * 60 * 1000 - 1;
-      for (const todo of detail?.todos ?? []) {
+      for (const todo of detail?.todos?.filter((item) => matchesTask(item, taskId, taskLabel)) ?? []) {
         deviationSeconds += Math.max(todo.deviationSeconds ?? 0, 0);
 
         if (todo.done) {
@@ -163,7 +193,7 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
         focusSeconds += Math.max(elapsedSeconds - Math.max(todo.deviationSeconds ?? 0, 0), 0);
       }
 
-      if (detail?.restStartedAt && key === todayKey) {
+      if (!taskId && detail?.restStartedAt && key === todayKey) {
         const restStartedAtMs = toEpochMillis(detail.restStartedAt);
         if (restStartedAtMs) {
           restSeconds += Math.max(Math.floor((Date.now() - restStartedAtMs) / 1000), 0);
@@ -197,7 +227,7 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
       monthlySeries: [...monthlyMap.entries()].map(([key, value]) => ({ key, ...value })),
       useMonthlyBar: rangeDays > 90,
     };
-  }, [detailMap, rangeDays, start, todayKey]);
+  }, [detailMap, rangeDays, start, taskId, taskLabel, todayKey]);
 
   const timeBars: TimeBarDatum[] = timeStats.useMonthlyBar
     ? timeStats.monthlySeries.map((item) => ({ label: item.key.slice(5), tooltipLabel: item.key, ...item }))
@@ -244,6 +274,10 @@ export function useStatsMetrics({ start, end, todayKey }: UseStatsMetricsInput) 
       useMonthlyBar: timeStats.useMonthlyBar,
       data: timeBars,
     },
+    deviationRate:
+      timeStats.totalFocus + timeStats.totalDeviation > 0
+        ? (timeStats.totalDeviation / (timeStats.totalFocus + timeStats.totalDeviation)) * 100
+        : 0,
     isFetching:
       monthlyLogsQuery.dailyLogQueries.some((query) => query.isFetching) ||
       detailQueries.some((query) => query.isFetching),

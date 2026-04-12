@@ -24,6 +24,7 @@ type CalendarPageProps = {
       todoCount: number;
       doneCount: number;
       allDone: boolean;
+      hasMemo: boolean;
       previewBars: CalendarPreviewBar[];
       tasks: SelectedTaskItem[];
     }
@@ -65,7 +66,7 @@ export function CalendarPage({
   isActive,
   todayOpenSignal = 0,
 }: CalendarPageProps) {
-  const { navigateTo } = useAppNavigation();
+  const { goPage } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
@@ -217,7 +218,7 @@ export function CalendarPage({
     if (!selectedDateKey) {
       return;
     }
-    navigateTo("dateTasks", {
+    goPage("/date-tasks", {
       query: {
         date: selectedDateKey,
       },
@@ -267,6 +268,7 @@ export function CalendarPage({
                     const dateKey = formatDateKey(cell.date);
                     const previewBars = cell.inCurrentMonth ? logsByDate[dateKey]?.previewBars ?? [] : [];
                     const isAllDone = cell.inCurrentMonth ? (logsByDate[dateKey]?.allDone ?? false) : false;
+                    const hasMemo = cell.inCurrentMonth ? (logsByDate[dateKey]?.hasMemo ?? false) : false;
                     const isSelected = selectedDateKey === dateKey;
                     const isToday = dateKey === todayDateKey;
                     const holidayName = holidaysByDate[formatDateKey(cell.date)];
@@ -280,6 +282,7 @@ export function CalendarPage({
                         holidayName={holidayName}
                         previewBars={previewBars}
                         isAllDone={isAllDone}
+                        hasMemo={hasMemo}
                         onClick={() => {
                           if (selectedDateKey === dateKey) {
                             handleOpenTasksFromSheet();

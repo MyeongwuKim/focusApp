@@ -32,6 +32,40 @@ export function useUpsertDailyLogMemoMutation(dateKey: string) {
     mutationFn: (memo: string) => upsertDailyLogMemo({ dateKey, memo }),
     onSuccess: (data) => {
       queryClient.setQueryData(dailyLogMemoQueryKey(dateKey), data ? { ...data } : null);
+      queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), (prev: any) => {
+        if (!prev) {
+          return prev;
+        }
+        return {
+          ...prev,
+          memo: data?.memo ?? null,
+        };
+      });
+
+      queryClient.setQueriesData(
+        {
+          queryKey: ["daily-logs"],
+          exact: false,
+        },
+        (prev: any) => {
+          if (!Array.isArray(prev)) {
+            return prev;
+          }
+          return prev.map((log) =>
+            log?.dateKey === dateKey
+              ? {
+                  ...log,
+                  memo: data?.memo ?? null,
+                }
+              : log
+          );
+        }
+      );
+
+      void queryClient.invalidateQueries({
+        queryKey: ["daily-logs"],
+        exact: false,
+      });
     },
   });
 }

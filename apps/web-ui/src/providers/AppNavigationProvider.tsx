@@ -4,16 +4,24 @@ import type { RouteKey } from "../routes/types";
 export type NavigateOptions = {
   query?: Record<string, string>;
   state?: unknown;
+  replace?: boolean;
+};
+
+export type GoPageOptions = {
+  query?: Record<string, string>;
+  state?: unknown;
+  replace?: boolean;
 };
 
 export type AppNavigationActions = {
   activeRoute: RouteKey;
   openMenu: () => void;
   closeMenu: () => void;
+  goPage: (path: string, options?: GoPageOptions) => void;
+  goBack: () => void;
   navigateTo: (nextRoute: RouteKey, options?: NavigateOptions) => void;
   goMain: () => void;
   goSettings: () => void;
-  goOverlayBack: () => void;
 };
 
 const AppNavigationContext = createContext<AppNavigationActions | null>(null);

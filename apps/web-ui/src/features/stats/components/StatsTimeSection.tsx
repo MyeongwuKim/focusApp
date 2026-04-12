@@ -1,4 +1,4 @@
-import { StatsMetricCard } from "./StatsMetricCard";
+import { MetricCardGrid } from "./MetricCardGrid";
 import { StatsTimeChart } from "./StatsTimeChart";
 import type { TimeBarDatum } from "./types";
 
@@ -21,11 +21,13 @@ export function StatsTimeSection({
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold text-base-content/80">세션 시간 (분)</h3>
-      <div className="grid grid-cols-3 gap-2 md:gap-3">
-        <StatsMetricCard label="집중 시간" value={`${totalFocus}분`} />
-        <StatsMetricCard label="이탈 시간" value={`${totalDeviation}분`} />
-        <StatsMetricCard label="휴식 시간" value={`${totalRest}분`} />
-      </div>
+      <MetricCardGrid
+        items={[
+          { label: "집중 시간", value: `${totalFocus}분` },
+          { label: "이탈 시간", value: `${totalDeviation}분` },
+          { label: "휴식 시간", value: `${totalRest}분` },
+        ]}
+      />
 
       <StatsTimeChart
         title={useMonthlyBar ? "월별 집중/이탈/휴식 시간" : "일별 집중/이탈/휴식 시간"}

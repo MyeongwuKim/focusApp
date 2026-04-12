@@ -1,4 +1,3 @@
-import type { DailyLogsByMonthQuery } from "../graphql/generated.ts";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -9,11 +8,14 @@ const DAILY_LOGS_BY_MONTH_QUERY = /* GraphQL */ `
       userId
       dateKey
       monthKey
+      memo
       todoCount
       doneCount
       previewTodos
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -49,6 +51,8 @@ const DAILY_LOG_BY_DATE_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -72,6 +76,8 @@ const ADD_TODOS_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -95,6 +101,8 @@ const DELETE_TODO_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -118,6 +126,8 @@ const START_TODO_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -141,6 +151,8 @@ const PAUSE_TODO_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -164,6 +176,8 @@ const RESUME_TODO_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -187,6 +201,8 @@ const COMPLETE_TODO_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -210,6 +226,8 @@ const RESET_TODO_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -233,6 +251,8 @@ const ADD_DEVIATION_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -256,6 +276,8 @@ const UPDATE_TODO_ACTUAL_FOCUS_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -279,6 +301,8 @@ const UPDATE_TODO_SCHEDULE_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -302,6 +326,8 @@ const START_REST_SESSION_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -325,6 +351,8 @@ const STOP_REST_SESSION_QUERY = /* GraphQL */ `
       restStartedAt
       todos {
         id
+        taskId
+        titleSnapshot
         content
         done
         order
@@ -341,6 +369,8 @@ const STOP_REST_SESSION_QUERY = /* GraphQL */ `
 
 type DailyLogTodo = {
   id: string;
+  taskId: string | null;
+  titleSnapshot: string | null;
   content: string;
   done: boolean;
   order: number;
@@ -358,6 +388,27 @@ type DailyLogPayload = {
   restAccumulatedSeconds: number;
   restStartedAt: string | null;
   todos: DailyLogTodo[];
+};
+
+type DailyLogsByMonthQuery = {
+  dailyLogsByMonth: Array<{
+    id: string;
+    userId: string;
+    dateKey: string;
+    monthKey: string;
+    memo: string | null;
+    todoCount: number;
+    doneCount: number;
+    previewTodos: string[];
+    todos: Array<{
+      id: string;
+      taskId: string | null;
+      titleSnapshot: string | null;
+      content: string;
+      done: boolean;
+      order: number;
+    }>;
+  }>;
 };
 
 type DailyLogMemoQuery = {

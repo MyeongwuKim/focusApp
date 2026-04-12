@@ -1,32 +1,28 @@
+import { useEffect, useState } from "react";
 import { FiX } from "react-icons/fi";
 import { Button } from "../../../../components/ui/Button";
 import { TodoCompletedAtModal } from "../../components/TodoCompletedAtModal";
 import { TodoCompletionPanel } from "../../components/TodoCompletionPanel";
-import { TodoRoutineCreateModal } from "../../components/TodoRoutineCreateModal";
-import { TodoRoutineImportModal } from "../../components/TodoRoutineImportModal";
 import { TodoScheduleTimeModal } from "../../components/TodoScheduleTimeModal";
 import { TodoTaskPickerModal } from "../../components/TodoTaskPickerModal";
 import { MemoEditorPanel } from "../../../memo/containers/MemoEditorPanel";
 import { useDateTodosRouteContext } from "../DateTodosRouteProvider";
 
-export function DateTodosOverlays() {
+type DateTodosOverlaysProps = {
+  isTaskPickerRoute: boolean;
+  isMemoRoute: boolean;
+  closeTaskPickerRoute: () => void;
+  closeMemoRoute: () => void;
+};
+
+export function DateTodosOverlays({
+  isTaskPickerRoute,
+  isMemoRoute,
+  closeTaskPickerRoute,
+  closeMemoRoute,
+}: DateTodosOverlaysProps) {
   const {
-    isTaskPickerOpen,
-    closeTaskPicker,
     handleDateAddTasks,
-    isRoutineImportOpen,
-    closeRoutineImport,
-    isRoutineCreateOpen,
-    closeRoutineCreate,
-    routineTemplates,
-    isRoutineTemplatesLoading,
-    handleApplyRoutineTemplate,
-    handleCreateRoutineTemplate,
-    handleUpdateRoutineTemplate,
-    handleDeleteRoutineTemplate,
-    shouldRenderMemo,
-    isMemoVisible,
-    closeMemo,
     resolvedMemoDateKey,
     shouldRenderCompletionPanel,
     isCompletionPanelVisible,
@@ -38,27 +34,41 @@ export function DateTodosOverlays() {
     closeEditingScheduledStart,
     handleSaveScheduledStart,
   } = useDateTodosRouteContext();
+  const [shouldRenderMemo, setShouldRenderMemo] = useState(isMemoRoute);
+  const [isMemoVisible, setIsMemoVisible] = useState(false);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+    let timeoutId: number | null = null;
+
+    if (isMemoRoute) {
+      setShouldRenderMemo(true);
+      rafId = window.requestAnimationFrame(() => {
+        setIsMemoVisible(true);
+      });
+    } else {
+      setIsMemoVisible(false);
+      timeoutId = window.setTimeout(() => {
+        setShouldRenderMemo(false);
+      }, 240);
+    }
+
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [isMemoRoute]);
 
   return (
     <>
       <TodoTaskPickerModal
-        isOpen={isTaskPickerOpen}
-        onClose={closeTaskPicker}
+        isOpen={isTaskPickerRoute}
+        onClose={closeTaskPickerRoute}
         onApply={handleDateAddTasks}
-      />
-      <TodoRoutineImportModal
-        isOpen={isRoutineImportOpen}
-        routines={routineTemplates}
-        isLoading={isRoutineTemplatesLoading}
-        onClose={closeRoutineImport}
-        onApply={handleApplyRoutineTemplate}
-        onUpdateRoutine={handleUpdateRoutineTemplate}
-        onDeleteRoutine={handleDeleteRoutineTemplate}
-      />
-      <TodoRoutineCreateModal
-        isOpen={isRoutineCreateOpen}
-        onClose={closeRoutineCreate}
-        onCreate={handleCreateRoutineTemplate}
       />
 
       {shouldRenderMemo ? (
@@ -75,7 +85,7 @@ export function DateTodosOverlays() {
             ].join(" ")}
           >
             <header className="grid h-12 shrink-0 grid-cols-[44px_1fr_44px] items-center border-b border-base-300/80 px-2">
-              <Button variant="ghost" size="sm" circle aria-label="메모 닫기" onClick={closeMemo}>
+              <Button variant="ghost" size="sm" circle aria-label="메모 닫기" onClick={closeMemoRoute}>
                 <FiX size={18} />
               </Button>
               <h2 className="m-0 text-center text-sm font-semibold text-base-content">
@@ -94,10 +104,7 @@ export function DateTodosOverlays() {
       ) : null}
 
       {shouldRenderCompletionPanel ? (
-        <TodoCompletionPanel
-          isVisible={isCompletionPanelVisible}
-          onClose={closeCompletionPanel}
-        />
+        <TodoCompletionPanel isVisible={isCompletionPanelVisible} onClose={closeCompletionPanel} />
       ) : null}
 
       <TodoCompletedAtModal

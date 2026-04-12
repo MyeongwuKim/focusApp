@@ -147,7 +147,9 @@ export function StatsAiCommentaryCard({
     queryKey: ["stats-commentary", payload],
     queryFn: () => fetchStatsCommentary(payload),
     enabled: canUseCommentary && !isDataFetching && isVisible,
-    staleTime: 60 * 1000,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: 0,
   });
 

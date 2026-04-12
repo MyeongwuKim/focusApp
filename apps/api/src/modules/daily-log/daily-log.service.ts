@@ -127,10 +127,6 @@ export class DailyLogService {
       for (const task of tasks) {
         taskById.set(task.id, { id: task.id, title: task.title });
       }
-
-      if (taskById.size !== uniqueTaskIds.length) {
-        throw new Error("TASK_NOT_FOUND");
-      }
     }
 
     const existingTaskIdSet = new Set(
@@ -151,7 +147,8 @@ export class DailyLogService {
       }
 
       const normalizedContent = content.toLowerCase();
-      const taskId = item.taskId ?? null;
+      const rawTaskId = item.taskId ?? null;
+      const taskId = rawTaskId && taskById.has(rawTaskId) ? rawTaskId : null;
 
       if (taskId && existingTaskIdSet.has(taskId)) {
         continue;

@@ -3,6 +3,9 @@ import { FiCoffee, FiPause } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import { RestDurationBottomSheet } from "./RestDurationBottomSheet";
 
+const REST_DURATION_DEFAULT_STORAGE_KEY = "date-tasks:rest-duration-default-min";
+const REST_DURATION_ONCE_STORAGE_KEY = "date-tasks:rest-duration-once-min";
+
 type TodoProgressFooterProps = {
   summary: {
     completedCount: number;
@@ -15,11 +18,8 @@ type TodoProgressFooterProps = {
     restMinutes: number;
     active: "focus" | "rest" | null;
     restDurationPreviewMin: number | null;
-    restDurationDefaultMin: number | null;
   };
-  onToggleRest: () => void;
-  onApplyRestDurationOnce: (nextDurationMin: number | null) => void;
-  onSaveRestDurationDefault: (nextDurationMin: number | null) => void;
+  onToggleRest: (startDurationMin?: number | null) => void;
   openRestSettingsRequestId: number;
 };
 
@@ -30,15 +30,61 @@ function formatRestDurationLabel(durationMin: number | null) {
   return `${durationMin}분`;
 }
 
+function readRestDurationFromLocalStorage(
+  key: string,
+  fallback: number | null | undefined
+): number | null | undefined {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  const rawValue = window.localStorage.getItem(key);
+  if (rawValue === null) {
+    return fallback;
+  }
+  if (rawValue === "null") {
+    return null;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+function writeRestDurationToLocalStorage(key: string, value: number | null | undefined) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (value === undefined) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+
+  if (value === null) {
+    window.localStorage.setItem(key, "null");
+    return;
+  }
+
+  window.localStorage.setItem(key, String(value));
+}
+
 export function TodoProgressFooter({
   summary,
   session,
   onToggleRest,
-  onApplyRestDurationOnce,
-  onSaveRestDurationDefault,
   openRestSettingsRequestId,
 }: TodoProgressFooterProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [restDurationDefaultMin, setRestDurationDefaultMin] = useState<number | null>(
+    () => readRestDurationFromLocalStorage(REST_DURATION_DEFAULT_STORAGE_KEY, null) ?? null
+  );
+  const [restDurationOnceMin, setRestDurationOnceMin] = useState<number | null | undefined>(() =>
+    readRestDurationFromLocalStorage(REST_DURATION_ONCE_STORAGE_KEY, undefined)
+  );
 
   useEffect(() => {
     if (openRestSettingsRequestId <= 0) {
@@ -47,12 +93,23 @@ export function TodoProgressFooter({
     setIsSheetOpen(true);
   }, [openRestSettingsRequestId]);
 
+  useEffect(() => {
+    writeRestDurationToLocalStorage(REST_DURATION_DEFAULT_STORAGE_KEY, restDurationDefaultMin);
+  }, [restDurationDefaultMin]);
+
+  useEffect(() => {
+    writeRestDurationToLocalStorage(REST_DURATION_ONCE_STORAGE_KEY, restDurationOnceMin);
+  }, [restDurationOnceMin]);
+
+  const nextRestDurationMin =
+    restDurationOnceMin === undefined ? restDurationDefaultMin : restDurationOnceMin;
+
   const restDurationDescription = useMemo(() => {
     if (session.active === "rest") {
       return `휴식 제한: ${formatRestDurationLabel(session.restDurationPreviewMin)}`;
     }
-    return `다음 휴식: ${formatRestDurationLabel(session.restDurationPreviewMin)}`;
-  }, [session.active, session.restDurationPreviewMin]);
+    return `다음 휴식: ${formatRestDurationLabel(nextRestDurationMin)}`;
+  }, [nextRestDurationMin, session.active, session.restDurationPreviewMin]);
 
   return (
     <footer
@@ -102,7 +159,17 @@ export function TodoProgressFooter({
                 ? "border-warning/30 bg-warning/20 text-warning"
                 : "border-base-300 bg-base-100 text-base-content/75",
             ].join(" ")}
-            onClick={onToggleRest}
+            onClick={() => {
+              if (session.active === "rest") {
+                onToggleRest();
+                return;
+              }
+
+              onToggleRest(nextRestDurationMin);
+              if (restDurationOnceMin !== undefined) {
+                setRestDurationOnceMin(undefined);
+              }
+            }}
           >
             {session.active === "rest" ? <FiPause size={12} /> : <FiCoffee size={12} />}
             {session.active === "rest" ? "휴식 중지" : "휴식 시작"}
@@ -112,11 +179,14 @@ export function TodoProgressFooter({
 
       <RestDurationBottomSheet
         isOpen={isSheetOpen}
-        currentDurationMin={session.restDurationPreviewMin}
-        defaultDurationMin={session.restDurationDefaultMin}
+        currentDurationMin={session.active === "rest" ? session.restDurationPreviewMin : nextRestDurationMin}
+        defaultDurationMin={restDurationDefaultMin}
         onClose={() => setIsSheetOpen(false)}
-        onApplyOnce={onApplyRestDurationOnce}
-        onSaveDefault={onSaveRestDurationDefault}
+        onApplyOnce={(nextDurationMin) => setRestDurationOnceMin(nextDurationMin)}
+        onSaveDefault={(nextDurationMin) => {
+          setRestDurationDefaultMin(nextDurationMin);
+          setRestDurationOnceMin(undefined);
+        }}
       />
     </footer>
   );

@@ -59,7 +59,7 @@ function getTasksTitleFromDateKey(dateKey: string) {
 
 export function PageHeader({ route }: PageHeaderProps) {
   const location = useLocation();
-  const { openMenu, goOverlayBack, goSettings } = useAppNavigation();
+  const { openMenu, goBack, goPage } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
@@ -113,7 +113,7 @@ export function PageHeader({ route }: PageHeaderProps) {
           size="sm"
           circle
           className="absolute right-2 top-1/2 -translate-y-1/2"
-          onClick={goSettings}
+          onClick={() => goPage("/settings")}
           aria-label="옵션으로 이동"
         >
           <FiSettings size={18} />
@@ -129,7 +129,7 @@ export function PageHeader({ route }: PageHeaderProps) {
         size="sm"
         circle
         className="absolute left-2 top-1/2 -translate-y-1/2"
-        onClick={goOverlayBack}
+        onClick={goBack}
         aria-label="뒤로가기"
       >
         <FiChevronLeft size={18} />
@@ -143,7 +143,7 @@ export function PageHeader({ route }: PageHeaderProps) {
           size="sm"
           circle
           className="absolute right-2 top-1/2 -translate-y-1/2"
-          onClick={goSettings}
+          onClick={() => goPage("/settings")}
           aria-label="옵션으로 이동"
         >
           <FiSettings size={18} />

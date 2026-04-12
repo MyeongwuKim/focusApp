@@ -72,9 +72,9 @@ export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
       >
         <label className="mb-2 block text-xs font-medium text-base-content/70">연도</label>
         <SelectDropbox
-          className="select-sm mb-3 h-10"
+          className="mb-3 h-10"
           value={month.getFullYear()}
-          onChange={(event) => handleYearChange(Number(event.target.value))}
+          onValueChange={(nextYear) => handleYearChange(Number(nextYear))}
           options={years.map((year) => ({
             value: String(year),
             label: `${year}년`

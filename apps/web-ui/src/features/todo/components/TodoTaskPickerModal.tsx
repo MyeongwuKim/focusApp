@@ -16,6 +16,8 @@ type PickerTask = {
   isFavorite: boolean;
 };
 
+const UNCATEGORIZED_COLLECTION_NAME = "미분류";
+
 type TodoTaskPickerModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -29,7 +31,7 @@ type TodoTaskPickerModalProps = {
 
 export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPickerModalProps) {
   const { taskCollectionsQuery } = useTaskCollectionQuery();
-  const { setTaskFavoriteMutation } = useTaskCollectionMutation();
+  const { setTaskFavoriteMutation, createTaskCollectionMutation, addTaskMutation } = useTaskCollectionMutation();
   const { data: collections = [], isLoading } = taskCollectionsQuery;
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(false);
@@ -42,6 +44,7 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     }>
   >([]);
   const [customLabel, setCustomLabel] = useState("");
+  const [isCreatingCustomTask, setIsCreatingCustomTask] = useState(false);
 
   useEffect(() => {
     let rafId: number | null = null;
@@ -137,28 +140,74 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     });
   };
 
-  const toggleCustomSelection = (label: string) => {
-    const normalized = label.trim();
-    if (!normalized) {
-      return;
+  const ensureUncategorizedCollectionId = async () => {
+    const existing = collections.find(
+      (collection) => collection.name.trim() === UNCATEGORIZED_COLLECTION_NAME
+    );
+    if (existing) {
+      return existing.id;
     }
-    const nextKey = `custom:${normalized.toLowerCase()}`;
-    setSelectedItems((prev) => {
-      const exists = prev.some((item) => item.key === nextKey);
-      if (exists) {
-        return prev.filter((item) => item.key !== nextKey);
-      }
-      return [...prev, { key: nextKey, label: normalized }];
+
+    const created = await createTaskCollectionMutation.mutateAsync({
+      name: UNCATEGORIZED_COLLECTION_NAME,
     });
+    return created.id;
   };
 
-  const addCustomTask = () => {
+  const addCustomTask = async () => {
     const nextLabel = customLabel.trim();
-    if (!nextLabel) {
+    if (!nextLabel || isCreatingCustomTask) {
       return;
     }
-    toggleCustomSelection(nextLabel);
-    setCustomLabel("");
+
+    setIsCreatingCustomTask(true);
+    try {
+      const uncategorizedCollectionId = await ensureUncategorizedCollectionId();
+      const existingTask = taskLibrary.find(
+        (task) => task.collectionId === uncategorizedCollectionId && task.label.trim() === nextLabel
+      );
+
+      const createdTask = existingTask
+        ? null
+        : await addTaskMutation.mutateAsync({
+            collectionId: uncategorizedCollectionId,
+            title: nextLabel,
+          });
+      const nextTaskId = existingTask?.id ?? createdTask?.id;
+      const nextTaskLabel = existingTask?.label ?? createdTask?.title ?? nextLabel;
+      if (!nextTaskId) {
+        throw new Error("할일을 추가하지 못했어요.");
+      }
+
+      setSelectedItems((prev) => {
+        const key = `task:${nextTaskId}`;
+        const exists = prev.some((item) => item.key === key);
+        if (exists) {
+          return prev;
+        }
+        return [...prev, { key, label: nextTaskLabel, taskId: nextTaskId }];
+      });
+      setSelectedCategory(uncategorizedCollectionId);
+      setCustomLabel("");
+      toast.show({
+        type: "positive",
+        title: "미분류에 저장됨",
+        message: existingTask
+          ? "기존 미분류 할일을 선택 목록에 추가했어요."
+          : "새 할일을 미분류에 저장하고 선택 목록에 추가했어요.",
+        duration: 1800,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "할일 추가 중 오류가 발생했어요.";
+      toast.show({
+        type: "error",
+        title: "추가 실패",
+        message,
+        duration: 2200,
+      });
+    } finally {
+      setIsCreatingCustomTask(false);
+    }
   };
 
   const toggleFavoriteTask = (task: PickerTask) => {
@@ -295,18 +344,16 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
                   key={item.key}
                   className="rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 text-xs text-primary"
                   onClick={() =>
-                    item.taskId
-                      ? (() => {
-                          const task =
-                            taskLibrary.find((candidate) => candidate.id === item.taskId) ?? {
-                              id: item.taskId,
-                              label: item.label,
-                              collectionId: "all",
-                              isFavorite: false,
-                            };
-                          toggleTaskSelection(task);
-                        })()
-                      : toggleCustomSelection(item.label)
+                    (() => {
+                      const task =
+                        taskLibrary.find((candidate) => candidate.id === item.taskId) ?? {
+                          id: String(item.taskId),
+                          label: item.label,
+                          collectionId: "all",
+                          isFavorite: false,
+                        };
+                      toggleTaskSelection(task);
+                    })()
                   }
                 >
                   {item.label}
@@ -326,14 +373,23 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
-                  addCustomTask();
+                  void addCustomTask();
                 }
               }}
               variant="plain"
               className="h-9 w-full bg-transparent text-sm"
               placeholder="리스트에 없는 할일 직접 추가"
             />
-            <Button variant="ghost" size="xs" circle onClick={addCustomTask} aria-label="직접 할일 추가">
+            <Button
+              variant="ghost"
+              size="xs"
+              circle
+              disabled={isCreatingCustomTask}
+              onClick={() => {
+                void addCustomTask();
+              }}
+              aria-label="직접 할일 추가"
+            >
               <FiPlus size={14} />
             </Button>
           </div>

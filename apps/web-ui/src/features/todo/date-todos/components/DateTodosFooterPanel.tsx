@@ -1,18 +1,16 @@
+import { useState } from "react";
 import { TodoProgressFooter } from "../../components/TodoProgressFooter";
 import { TodoQuickActions } from "../../components/TodoQuickActions";
 import { useDateTodosRouteContext } from "../DateTodosRouteProvider";
 
 export function DateTodosFooterPanel() {
+  const [openRestSettingsRequestId, setOpenRestSettingsRequestId] = useState(0);
   const {
     openMemo,
     openTaskPicker,
-    openRestSettings,
     summary,
     session,
     toggleRestSession,
-    handleApplyRestDurationOnce,
-    handleSaveRestDurationDefault,
-    openRestSettingsRequestId,
   } = useDateTodosRouteContext();
 
   return (
@@ -20,14 +18,12 @@ export function DateTodosFooterPanel() {
       <TodoQuickActions
         onOpenMemo={openMemo}
         onOpenTaskPicker={openTaskPicker}
-        onOpenRestSettings={openRestSettings}
+        onOpenRestSettings={() => setOpenRestSettingsRequestId((prev) => prev + 1)}
       />
       <TodoProgressFooter
         summary={summary}
         session={session}
         onToggleRest={toggleRestSession}
-        onApplyRestDurationOnce={handleApplyRestDurationOnce}
-        onSaveRestDurationDefault={handleSaveRestDurationDefault}
         openRestSettingsRequestId={openRestSettingsRequestId}
       />
     </div>

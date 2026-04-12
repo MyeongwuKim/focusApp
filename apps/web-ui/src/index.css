@@ -63,6 +63,8 @@
   html {
     font-size: calc(16px * var(--ui-scale));
     overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   html,
@@ -137,7 +139,7 @@
   .toast-layer {
     pointer-events: none;
     position: fixed;
-    inset: auto 0 max(1rem, env(safe-area-inset-bottom)) 0;
+    inset: auto 0 max(4.75rem, calc(env(safe-area-inset-bottom) + 3.75rem)) 0;
     z-index: 60;
     display: flex;
     justify-content: center;
@@ -318,6 +320,61 @@
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  .calendar-date-cell .calendar-date-number {
+    font-size: var(--calendar-date-number-size, clamp(0.78rem, 2.2vw, 0.92rem));
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    white-space: nowrap;
+    overflow: visible;
+  }
+
+  .calendar-date-cell .calendar-date-icon-wrap {
+    gap: var(--calendar-icon-gap, 1px);
+    line-height: 0;
+  }
+
+  .calendar-date-cell .calendar-date-icon {
+    padding: var(--calendar-icon-padding, 1px);
+  }
+
+  .calendar-date-cell .calendar-date-icon-svg {
+    width: var(--calendar-icon-size, clamp(6px, 1.6vw, 8px));
+    height: var(--calendar-icon-size, clamp(6px, 1.6vw, 8px));
+    flex: 0 0 auto;
+  }
+
+  [data-theme="black"] .calendar-date-cell .calendar-date-bar {
+    background: color-mix(in oklab, var(--color-primary) 30%, var(--color-base-200) 70%);
+    color: color-mix(in oklab, var(--color-base-content) 92%, white 8%);
+  }
+
+  [data-theme="black"] .calendar-date-cell .calendar-date-more {
+    color: color-mix(in oklab, var(--color-base-content) 85%, white 15%);
+  }
+
+  [data-theme="black"] .calendar-date-cell .calendar-date-holiday {
+    color: color-mix(in oklab, var(--color-error) 80%, white 20%);
+  }
+
+  [data-theme="black"] .calendar-date-cell .calendar-date-icon {
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 25%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-base-content) 10%, transparent);
+  }
+
+  [data-theme="black"] .calendar-date-cell .calendar-date-icon--memo {
+    background: color-mix(in oklab, var(--color-base-100) 94%, transparent);
+    color: var(--color-info);
+    border-color: color-mix(in oklab, var(--color-info) 45%, transparent);
+  }
+
+  [data-theme="black"] .calendar-date-cell .calendar-date-icon--done {
+    background: color-mix(in oklab, var(--color-base-100) 94%, transparent);
+    color: var(--color-success);
+    border-color: color-mix(in oklab, var(--color-success) 45%, transparent);
   }
 
   .memo-editor .ProseMirror p.is-editor-empty:first-child::before {

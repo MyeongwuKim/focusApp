@@ -93,6 +93,7 @@ export const taskCollectionTypeDefs = gql`
 
 const taskCollectionErrorMapping = {
   TASK_COLLECTION_NOT_FOUND: { message: "태스크 컬렉션을 찾을 수 없어요." },
+  UNCATEGORIZED_COLLECTION_PROTECTED: { message: "미분류 컬렉션은 삭제할 수 없어요." },
   TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." },
   TASK_TITLE_REQUIRED: { message: "태스크 제목을 입력해 주세요." },
   TASK_TITLE_DUPLICATED: { message: "같은 컬렉션에 동일한 제목의 태스크가 이미 있어요." },

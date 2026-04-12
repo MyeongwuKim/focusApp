@@ -13,6 +13,18 @@ type CalendarRootPageProps = {
   isOverlayActive: boolean;
 };
 
+function hasMeaningfulMemoContent(memo?: string | null) {
+  if (!memo) {
+    return false;
+  }
+
+  const text = memo
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+  return text.length > 0;
+}
+
 export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
@@ -40,6 +52,7 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         todoCount: log.todoCount,
         doneCount: log.doneCount,
         allDone: log.todoCount > 0 && log.doneCount === log.todoCount,
+        hasMemo: hasMeaningfulMemoContent(log.memo),
         previewBars: sortedTodos.map((todo) => ({
           id: todo.id,
           label: todo.content,
@@ -56,6 +69,7 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         todoCount: number;
         doneCount: number;
         allDone: boolean;
+        hasMemo: boolean;
         previewBars: { id: string; label: string }[];
         tasks: { label: string; done: boolean }[];
       }
