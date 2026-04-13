@@ -5,6 +5,7 @@ import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
 import { CalendarRootPage } from "./pages/CalendarRootPage";
 import { TaskManagementRoutePage } from "./pages/TaskManagementRoutePage";
 import { StatsRoutePage } from "./pages/StatsRoutePage";
+import { LoginPage } from "./pages/LoginPage";
 import { DrawerMenu } from "./components/DrawerMenu";
 import { PageHeader } from "./components/PageHeader";
 import { Toast } from "./components/Toast";
@@ -16,8 +17,11 @@ import { MAIN_ROUTE } from "./routes/route-config";
 import { toast, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import { fetchCurrentWeather, SEOUL_COORDINATES, type Coordinates } from "./utils/weather";
+import { useAuthStore } from "./stores";
 
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
+const LOGIN_ROUTE_PATH = "/login";
+const AUTH_CALLBACK_ROUTE_PATH = "/auth/callback";
 const ROUTE_PATH: Record<RouteKey, string> = {
   calendar: "/calendar",
   tasks: "/tasks",
@@ -127,10 +131,36 @@ function getCurrentCoordinates(timeoutMs = 5000): Promise<LocationResolveResult>
   });
 }
 
+function getCallbackParam(name: string, routeSearch: string): string | null {
+  const fromRouteSearch = new URLSearchParams(routeSearch).get(name);
+  if (fromRouteSearch) {
+    return fromRouteSearch;
+  }
+
+  const fromWindowSearch = new URLSearchParams(window.location.search).get(name);
+  if (fromWindowSearch) {
+    return fromWindowSearch;
+  }
+
+  const hash = window.location.hash ?? "";
+  const hashQueryIndex = hash.indexOf("?");
+  if (hashQueryIndex >= 0) {
+    const hashQuery = hash.slice(hashQueryIndex + 1);
+    return new URLSearchParams(hashQuery).get(name);
+  }
+
+  return null;
+}
+
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const activeRoute = getRouteFromPath(location.pathname);
+  const authToken = useAuthStore((state) => state.token);
+  const setAuthToken = useAuthStore((state) => state.setAuthToken);
+  const isLoggedIn = Boolean(authToken);
+  const isLoginRoute = location.pathname === LOGIN_ROUTE_PATH;
+  const isAuthCallbackRoute = location.pathname === AUTH_CALLBACK_ROUTE_PATH;
   const overlayRoute = activeRoute === MAIN_ROUTE ? null : activeRoute;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -138,15 +168,48 @@ function App() {
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
 
   useEffect(() => {
+    if (isAuthCallbackRoute) {
+      const token = getCallbackParam("token", location.search);
+      if (token) {
+        setAuthToken(token);
+        if (window.location.protocol === "file:") {
+          window.history.replaceState(null, "", "#/calendar");
+        } else {
+          window.history.replaceState(null, "", `${window.location.origin}/#/calendar`);
+        }
+        navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
+        return;
+      }
+
+      navigate(LOGIN_ROUTE_PATH, { replace: true });
+      return;
+    }
+
+    if (!isLoggedIn && !isLoginRoute) {
+      navigate(LOGIN_ROUTE_PATH, { replace: true });
+      return;
+    }
+
+    if (isLoggedIn && (location.pathname === "/" || isLoginRoute)) {
+      navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
+      return;
+    }
+
     if (location.pathname === "/") {
       navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
       return;
     }
 
-    if (activeRoute === MAIN_ROUTE && location.pathname !== ROUTE_PATH[MAIN_ROUTE]) {
+    if (
+      isLoggedIn &&
+      !isLoginRoute &&
+      !isAuthCallbackRoute &&
+      activeRoute === MAIN_ROUTE &&
+      location.pathname !== ROUTE_PATH[MAIN_ROUTE]
+    ) {
       navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
     }
-  }, [activeRoute, location.pathname, navigate]);
+  }, [activeRoute, isAuthCallbackRoute, isLoggedIn, isLoginRoute, location.pathname, navigate]);
 
   useEffect(() => {
     if (!weatherEnabled) {
@@ -256,6 +319,20 @@ function App() {
       }
     }
   };
+
+  if (!isLoggedIn && isLoginRoute) {
+    return <LoginPage />;
+  }
+
+  if (isAuthCallbackRoute) {
+    return (
+      <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
+        <section className="app-shell mx-auto flex h-full w-full items-center justify-center border border-base-300 bg-base-100/95">
+          <p className="text-sm text-base-content/70">로그인 처리 중...</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <AppNavigationProvider value={navigationActions}>

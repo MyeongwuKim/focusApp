@@ -66,8 +66,18 @@ export class TaskCollectionService {
     return this.repository.findTaskCollections(userId);
   }
 
-  createTaskCollection(input: CreateTaskCollectionInput) {
-    return this.repository.createTaskCollection(input);
+  async createTaskCollection(input: CreateTaskCollectionInput) {
+    const name = input.name.trim();
+    if (!name) {
+      throw new Error("TASK_COLLECTION_NAME_REQUIRED");
+    }
+
+    await this.assertCollectionNameNotDuplicated(input.userId, name);
+
+    return this.repository.createTaskCollection({
+      ...input,
+      name,
+    });
   }
 
   addTask(input: AddTaskInput) {
@@ -190,6 +200,8 @@ export class TaskCollectionService {
       throw new Error("TASK_COLLECTION_NAME_REQUIRED");
     }
 
+    await this.assertCollectionNameNotDuplicated(input.userId, name, input.collectionId);
+
     return this.repository.renameTaskCollection({
       ...input,
       name,
@@ -234,6 +246,23 @@ export class TaskCollectionService {
       ...input,
       title
     });
+  }
+
+  private async assertCollectionNameNotDuplicated(
+    userId: string,
+    name: string,
+    excludeCollectionId?: string
+  ) {
+    const normalizedName = normalizeCollectionName(name);
+    const collectionNames = await this.repository.findTaskCollectionNames(userId);
+    const duplicated = collectionNames.some(
+      (collection) =>
+        collection.id !== excludeCollectionId &&
+        normalizeCollectionName(collection.name) === normalizedName
+    );
+    if (duplicated) {
+      throw new Error("TASK_COLLECTION_NAME_DUPLICATED");
+    }
   }
 }
 

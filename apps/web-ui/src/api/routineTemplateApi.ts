@@ -1,3 +1,4 @@
+import { buildAuthHeaders } from "./authHeaders";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -113,9 +114,7 @@ type DeleteRoutineTemplateMutationResponse = {
 async function postGraphql<T>(query: string, variables?: Record<string, unknown>) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({ query, variables }),
   });
 

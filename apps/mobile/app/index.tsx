@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   NativeModules,
   StyleSheet,
   View,
@@ -23,6 +24,16 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function isLoopbackHost(host: string) {
+  const normalized = host.trim().toLowerCase();
+  return (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '::1' ||
+    normalized === '[::1]'
+  );
+}
+
 function resolveHybridApiOrigin() {
   const envOrigin = process.env.EXPO_PUBLIC_API_ORIGIN ?? process.env.EXPO_PUBLIC_API_BASE_URL;
   if (envOrigin?.trim()) {
@@ -34,7 +45,7 @@ function resolveHybridApiOrigin() {
   if (scriptUrl) {
     const hostMatch = scriptUrl.match(/^[a-z]+:\/\/([^/:?#]+)/i);
     const host = hostMatch?.[1];
-    if (host) {
+    if (host && !isLoopbackHost(host)) {
       return `http://${host}:4000`;
     }
   }
@@ -44,17 +55,68 @@ function resolveHybridApiOrigin() {
       (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost) ??
     null;
   const expoHost = expoHostUri?.split(':')[0];
-  if (expoHost) {
+  if (expoHost && !isLoopbackHost(expoHost)) {
     return `http://${expoHost}:4000`;
   }
 
   return 'http://localhost:4000';
 }
 
+function readCallbackValue(url: URL, key: string) {
+  const fromSearch = url.searchParams.get(key);
+  if (fromSearch) {
+    return fromSearch;
+  }
+
+  const hash = url.hash ?? '';
+  const hashQueryIndex = hash.indexOf('?');
+  if (hashQueryIndex >= 0) {
+    const hashQuery = hash.slice(hashQueryIndex + 1);
+    return new URLSearchParams(hashQuery).get(key);
+  }
+
+  return null;
+}
+
+function resolveAuthCallbackHashFromUrl(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    const looksLikeAuthCallback =
+      parsed.protocol === 'mobile:' ||
+      rawUrl.includes('/auth/callback') ||
+      parsed.hash.includes('/auth/callback') ||
+      (parsed.protocol === 'file:' && parsed.pathname.endsWith('/index.html'));
+    if (!looksLikeAuthCallback) {
+      return null;
+    }
+
+    const token = readCallbackValue(parsed, 'token');
+    if (!token) {
+      return null;
+    }
+
+    const userId = readCallbackValue(parsed, 'userId');
+    const error = readCallbackValue(parsed, 'error');
+    const params = new URLSearchParams();
+    params.set('token', token);
+    if (userId) {
+      params.set('userId', userId);
+    }
+    if (error) {
+      params.set('error', error);
+    }
+
+    return `#/auth/callback?${params.toString()}`;
+  } catch {
+    return null;
+  }
+}
+
 export default function WebViewScreen() {
   const pendingNotificationPathRef = useRef<string | null>(null);
   const isWebViewReadyRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
 
   const navigateWebViewByTargetPath = (targetPath: string) => {
     if (!targetPath.startsWith('/')) {
@@ -78,6 +140,7 @@ export default function WebViewScreen() {
     onNavigate: navigateWebViewByTargetPath,
   });
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
+  const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
   const { width, fontScale } = useWindowDimensions();
   const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
@@ -217,6 +280,7 @@ export default function WebViewScreen() {
 
         console.log('Prepared local web-ui file:', fileUri);
         setLocalFileUri(fileUri);
+        setWebViewUri(fileUri);
       } catch (error) {
         console.log('Failed to prepare local web-ui file:', error);
         Alert.alert('WebView Error', 'Failed to prepare local web-ui file.');
@@ -229,14 +293,32 @@ export default function WebViewScreen() {
   }, []);
 
   useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (webViewRef.current && canGoBack) {
+        webViewRef.current.goBack();
+        return true;
+      }
+      return false;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [canGoBack]);
+
+  useEffect(() => {
     if (!localFileUri || !webViewRef.current) {
       return;
     }
 
-    webViewRef.current.injectJavaScript(applyScaleScript);
-  }, [localFileUri, applyScaleScript]);
+    if (!webViewUri) {
+      setWebViewUri(localFileUri);
+    }
 
-  const source = localFileUri ? { uri: localFileUri } : null;
+    webViewRef.current.injectJavaScript(applyScaleScript);
+  }, [localFileUri, webViewUri, applyScaleScript]);
+
+  const source = webViewUri ? { uri: webViewUri } : null;
 
   const handleMessage = async (event: WebViewMessageEvent) => {
     const { data } = event.nativeEvent;
@@ -274,6 +356,7 @@ export default function WebViewScreen() {
             originWhitelist={['*']}
             javaScriptEnabled
             domStorageEnabled
+            allowsBackForwardNavigationGestures
             bounces={false}
             overScrollMode="never"
             injectedJavaScriptBeforeContentLoaded={injectedBeforeContentLoaded}
@@ -281,12 +364,41 @@ export default function WebViewScreen() {
             allowFileAccess
             allowFileAccessFromFileURLs
             allowUniversalAccessFromFileURLs
+            onShouldStartLoadWithRequest={(request) => {
+              console.log('WebView should start request:', request.url);
+
+              if (request.url.startsWith('mobile://')) {
+                const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
+                if (callbackHash && localFileUri) {
+                  const nextLocalUri = `${localFileUri}${callbackHash}`;
+                  setWebViewUri(nextLocalUri);
+                }
+                return false;
+              }
+
+              if (
+                request.url.startsWith('file://') &&
+                request.url.includes('#/auth/callback') &&
+                request.url.includes('token=')
+              ) {
+                return true;
+              }
+
+              const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
+              if (!callbackHash || !localFileUri) {
+                return true;
+              }
+
+              const nextLocalUri = `${localFileUri}${callbackHash}`;
+              setWebViewUri(nextLocalUri);
+              return false;
+            }}
             onLoadStart={() => {
-              console.log('WebView load start:', source.uri);
+              console.log('WebView load start:', source?.uri);
               isWebViewReadyRef.current = false;
             }}
             onLoadEnd={() => {
-              console.log('WebView load end:', source.uri);
+              console.log('WebView load end:', source?.uri);
               isWebViewReadyRef.current = true;
               if (webViewRef.current) {
                 webViewRef.current.injectJavaScript(applyScaleScript);
@@ -302,6 +414,9 @@ export default function WebViewScreen() {
             }}
             onLoadProgress={(event) => {
               console.log('WebView load progress:', event.nativeEvent.progress);
+            }}
+            onNavigationStateChange={(navState) => {
+              setCanGoBack(navState.canGoBack);
             }}
             onMessage={handleMessage}
             onHttpError={(event) => {

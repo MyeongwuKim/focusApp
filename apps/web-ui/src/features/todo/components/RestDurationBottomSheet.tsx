@@ -31,6 +31,7 @@ export function RestDurationBottomSheet({
 }: RestDurationBottomSheetProps) {
   const [draftDurationMin, setDraftDurationMin] = useState<number | null>(currentDurationMin);
   const [customMinutesInput, setCustomMinutesInput] = useState("");
+  const [isCustomSelected, setIsCustomSelected] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -38,19 +39,19 @@ export function RestDurationBottomSheet({
     }
     setDraftDurationMin(currentDurationMin);
     if (currentDurationMin !== null && !PRESET_REST_DURATIONS.includes(currentDurationMin)) {
+      setIsCustomSelected(true);
       setCustomMinutesInput(String(currentDurationMin));
       return;
     }
+    setIsCustomSelected(false);
     setCustomMinutesInput("");
   }, [currentDurationMin, isOpen]);
 
-  const applyCustomMinutes = () => {
-    const nextValue = Number.parseInt(customMinutesInput.trim(), 10);
-    if (!Number.isFinite(nextValue) || nextValue <= 0) {
-      return;
-    }
-    setDraftDurationMin(Math.min(nextValue, 999));
-  };
+  const parsedCustomMinutes = Number.parseInt(customMinutesInput.trim(), 10);
+  const resolvedCustomDurationMin =
+    Number.isFinite(parsedCustomMinutes) && parsedCustomMinutes > 0 ? Math.min(parsedCustomMinutes, 999) : null;
+  const resolvedDurationMin = isCustomSelected ? resolvedCustomDurationMin : draftDurationMin;
+  const isSubmitDisabled = isCustomSelected && resolvedCustomDurationMin === null;
 
   if (!isOpen) {
     return null;
@@ -77,21 +78,42 @@ export function RestDurationBottomSheet({
             <Button
               key={duration === null ? "unlimited" : duration}
               size="sm"
-              variant={draftDurationMin === duration ? "primary" : "ghost"}
+              variant={!isCustomSelected && draftDurationMin === duration ? "primary" : "ghost"}
               className={[
                 "h-8 min-h-8 rounded-full px-3 text-xs",
-                draftDurationMin === duration
+                !isCustomSelected && draftDurationMin === duration
                   ? "border-primary/55 bg-primary/16 text-primary"
                   : "border border-base-300/80 bg-base-100 text-base-content/72",
               ].join(" ")}
-              onClick={() => setDraftDurationMin(duration)}
+              onClick={() => {
+                setIsCustomSelected(false);
+                setDraftDurationMin(duration);
+              }}
             >
               {formatRestDurationLabel(duration)}
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant={isCustomSelected ? "primary" : "ghost"}
+            className={[
+              "h-8 min-h-8 rounded-full px-3 text-xs",
+              isCustomSelected
+                ? "border-primary/55 bg-primary/16 text-primary"
+                : "border border-base-300/80 bg-base-100 text-base-content/72",
+            ].join(" ")}
+            onClick={() => {
+              setIsCustomSelected(true);
+              if (draftDurationMin !== null && !PRESET_REST_DURATIONS.includes(draftDurationMin)) {
+                setCustomMinutesInput(String(draftDurationMin));
+              }
+            }}
+          >
+            커스텀
+          </Button>
         </div>
 
-        <div className="mt-2 flex items-center gap-2 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+        <div className="mt-2 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
           <InputField
             type="number"
             min={1}
@@ -100,20 +122,22 @@ export function RestDurationBottomSheet({
             inputMode="numeric"
             value={customMinutesInput}
             onChange={(event) => setCustomMinutesInput(event.target.value)}
-            className="input-sm h-9 min-h-9 w-full border-base-300 bg-base-100"
+            disabled={!isCustomSelected}
+            className={[
+              "input-sm h-9 min-h-9 w-full border-base-300 bg-base-100",
+              !isCustomSelected ? "cursor-not-allowed opacity-50" : "",
+            ].join(" ")}
             placeholder="커스텀 분 입력 (예: 45)"
           />
-          <Button size="sm" className="h-9 min-h-9 rounded-full px-3 text-xs" onClick={applyCustomMinutes}>
-            적용
-          </Button>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Button
             size="sm"
             className="h-9 min-h-9 rounded-full border border-base-300 bg-base-100 text-xs"
+            disabled={isSubmitDisabled}
             onClick={() => {
-              onApplyOnce(draftDurationMin);
+              onApplyOnce(resolvedDurationMin ?? null);
               onClose();
             }}
           >
@@ -123,8 +147,9 @@ export function RestDurationBottomSheet({
             size="sm"
             variant="primary"
             className="h-9 min-h-9 rounded-full text-xs"
+            disabled={isSubmitDisabled}
             onClick={() => {
-              onSaveDefault(draftDurationMin);
+              onSaveDefault(resolvedDurationMin ?? null);
               onClose();
             }}
           >

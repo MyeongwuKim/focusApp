@@ -140,8 +140,8 @@ export async function registerStatsCommentaryRoute(app: FastifyInstance) {
     const parsed = requestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
-        message: "Invalid request body",
-        issues: parsed.error.issues.map((issue) => issue.message),
+        message: "요청 본문 형식이 올바르지 않아요.",
+        issues: parsed.error.issues.map(() => "입력 값을 다시 확인해 주세요."),
       });
     }
 
@@ -153,21 +153,21 @@ export async function registerStatsCommentaryRoute(app: FastifyInstance) {
       const code = (error as { code?: ServiceErrorCode })?.code;
       if (code === "OPENAI_KEY_MISSING") {
         return reply.code(503).send({
-          message: "OPENAI_API_KEY is missing on server",
+          message: "서버 OpenAI API 키가 설정되지 않았어요.",
         });
       }
       if (code === "OPENAI_REQUEST_FAILED") {
         return reply.code(502).send({
-          message: error instanceof Error ? error.message : "OpenAI request failed",
+          message: "통계 코멘트 생성 요청에 실패했어요.",
         });
       }
       if (code === "OPENAI_EMPTY_RESPONSE") {
         return reply.code(502).send({
-          message: "OpenAI returned empty commentary",
+          message: "통계 코멘트 응답이 비어 있어요.",
         });
       }
       return reply.code(500).send({
-        message: "Failed to generate stats commentary",
+        message: "통계 코멘트 생성 중 오류가 발생했어요.",
       });
     }
   });

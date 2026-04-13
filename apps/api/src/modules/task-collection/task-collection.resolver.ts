@@ -98,6 +98,7 @@ const taskCollectionErrorMapping = {
   TASK_TITLE_REQUIRED: { message: "태스크 제목을 입력해 주세요." },
   TASK_TITLE_DUPLICATED: { message: "같은 컬렉션에 동일한 제목의 태스크가 이미 있어요." },
   TASK_COLLECTION_NAME_REQUIRED: { message: "컬렉션 이름을 입력해 주세요." },
+  TASK_COLLECTION_NAME_DUPLICATED: { message: "같은 이름의 컬렉션이 이미 있어요." },
 };
 
 export const taskCollectionResolvers = {
@@ -113,12 +114,16 @@ export const taskCollectionResolvers = {
       args: { input: { name: string; order?: number | null } },
       context: GraphQLContext
     ) => {
-      const service = createTaskCollectionService(context);
-      return service.createTaskCollection({
-        userId: getUserId(context),
-        name: args.input.name,
-        order: args.input.order,
-      });
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.createTaskCollection({
+          userId: getUserId(context),
+          name: args.input.name,
+          order: args.input.order,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
     },
     addTask: async (
       _parent: unknown,

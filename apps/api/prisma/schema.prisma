@@ -11,9 +11,23 @@ model User {
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   email     String    @unique
   name      String?
+  accounts  Account[]
   sessions  Session[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+model Account {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  provider       String
+  providerUserId String
+  userId         String   @db.ObjectId
+  user           User     @relation(fields: [userId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@index([userId, provider])
 }
 
 model Session {
@@ -21,8 +35,11 @@ model Session {
   token     String   @unique
   userId    String   @db.ObjectId
   user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId, expiresAt])
 }
 
 model DailyLog {

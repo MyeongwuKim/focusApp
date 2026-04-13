@@ -2,6 +2,7 @@ import type {
   AddTaskInput,
   CreateTaskCollectionInput,
 } from "../graphql/generated.ts";
+import { buildAuthHeaders } from "./authHeaders";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -125,9 +126,7 @@ export const deleteTaskCollectionQuery = /* GraphQL */ `
 export async function fetchTaskCollections() {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: TASK_COLLECTIONS_QUERY,
     }),
@@ -219,9 +218,7 @@ type TaskCollectionsPayload = {
 export async function addTaskCollection(input: CreateTaskCollectionInput) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: addTaskCollectionQuery,
       variables: {
@@ -249,9 +246,7 @@ export async function addTaskCollection(input: CreateTaskCollectionInput) {
 export async function addTask(input: AddTaskInput) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: addTaskQuery,
       variables: {
@@ -280,9 +275,7 @@ export async function addTask(input: AddTaskInput) {
 export async function deleteTask(input: { taskId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: deleteTaskQuery,
       variables: {
@@ -305,9 +298,7 @@ export async function deleteTask(input: { taskId: string }) {
 export async function moveTaskToCollection(input: { taskId: string; collectionId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: moveTaskToCollectionQuery,
       variables: {
@@ -335,9 +326,7 @@ export async function moveTaskToCollection(input: { taskId: string; collectionId
 export async function reorderTaskCollections(input: { collectionIds: string[] }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: reorderTaskCollectionsQuery,
       variables: {
@@ -360,9 +349,7 @@ export async function reorderTaskCollections(input: { collectionIds: string[] })
 export async function reorderTasks(input: { taskIds: string[] }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: reorderTasksQuery,
       variables: {
@@ -385,9 +372,7 @@ export async function reorderTasks(input: { taskIds: string[] }) {
 export async function renameTask(input: { taskId: string; title: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: renameTaskQuery,
       variables: {
@@ -415,9 +400,7 @@ export async function renameTask(input: { taskId: string; title: string }) {
 export async function renameTaskCollection(input: { collectionId: string; name: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: renameTaskCollectionQuery,
       variables: {
@@ -445,9 +428,7 @@ export async function renameTaskCollection(input: { collectionId: string; name: 
 export async function deleteTaskCollection(input: { collectionId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: deleteTaskCollectionQuery,
       variables: {
@@ -470,9 +451,7 @@ export async function deleteTaskCollection(input: { collectionId: string }) {
 export async function setTaskFavorite(input: { taskId: string; isFavorite: boolean }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: setTaskFavoriteQuery,
       variables: {

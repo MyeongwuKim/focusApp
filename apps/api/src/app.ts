@@ -3,6 +3,7 @@ import fastifyApollo, { fastifyApolloDrainPlugin } from "@as-integrations/fastif
 import Fastify from "fastify";
 import { buildContext, type GraphQLContext } from "./graphql/context.js";
 import { resolvers, typeDefs } from "./graphql/schema.js";
+import { registerAuthRoute } from "./modules/auth/auth.route.js";
 import { registerStatsCommentaryRoute } from "./modules/stats/stats-commentary.route.js";
 
 export async function createApp() {
@@ -27,10 +28,14 @@ export async function createApp() {
   await apollo.start();
 
   app.addHook("onSend", async (request, reply, payload) => {
-    if (request.url.startsWith("/graphql") || request.url.startsWith("/api/")) {
+    if (
+      request.url.startsWith("/graphql") ||
+      request.url.startsWith("/api/") ||
+      request.url.startsWith("/auth/")
+    ) {
       reply
         .header("Access-Control-Allow-Origin", "*")
-        .header("Access-Control-Allow-Methods", "POST,OPTIONS")
+        .header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         .header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
     return payload;
@@ -39,6 +44,15 @@ export async function createApp() {
   await app.register(fastifyApollo(apollo), {
     path: "/graphql",
     context: async (request, reply) => buildContext(request, reply),
+  });
+
+  app.options("/auth/logout", async (_request, reply) => {
+    return reply
+      .code(204)
+      .header("Access-Control-Allow-Origin", "*")
+      .header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+      .header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+      .send();
   });
 
   app.options("/api/stats/commentary", async (_request, reply) => {
@@ -51,6 +65,7 @@ export async function createApp() {
   });
 
   await registerStatsCommentaryRoute(app);
+  await registerAuthRoute(app);
 
   return app;
 }

@@ -137,6 +137,18 @@ export class TaskCollecitonRepository {
     });
   }
 
+  findTaskCollectionNames(userId: string) {
+    return this.prisma.taskCollection.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+  }
+
   async findTaskTitles(userId: string, collectionId: string) {
     const rows = await this.prisma.task.findMany({
       where: {

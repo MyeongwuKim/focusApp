@@ -1,3 +1,4 @@
+import { buildAuthHeaders } from "./authHeaders";
 import { getApiOrigin } from "./graphqlEndpoint";
 
 export type StatsCommentaryPayload = {
@@ -27,9 +28,7 @@ export type StatsCommentaryPayload = {
 export async function fetchStatsCommentary(payload: StatsCommentaryPayload) {
   const response = await fetch(`${getApiOrigin()}/api/stats/commentary`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify(payload),
   });
 

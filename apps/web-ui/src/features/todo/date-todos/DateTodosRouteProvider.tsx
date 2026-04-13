@@ -159,6 +159,7 @@ function mapDailyLogTodosToTaskItems(
 
 export function DateTodosRouteProvider({
   dateKey,
+  restFinishedRequested = false,
   onOpenMemo,
   onOpenTaskPicker,
   onOpenRoutineImport,
@@ -166,6 +167,7 @@ export function DateTodosRouteProvider({
   children,
 }: {
   dateKey: string | null;
+  restFinishedRequested?: boolean;
   onOpenMemo?: () => void;
   onOpenTaskPicker?: () => void;
   onOpenRoutineImport?: () => void;
@@ -192,6 +194,8 @@ export function DateTodosRouteProvider({
 
   const wasAllDoneRef = useRef(false);
   const completionWatchReadyRef = useRef(false);
+  const pendingRestFinishedAutoStopRef = useRef(false);
+  const restFinishedAutoStopInFlightRef = useRef(false);
 
   const { dailyLogByDateQuery: dailyLogQuery } = useDailyLogQuery({ dateKey });
   const { routineTemplatesQuery } = useRoutineTemplateQuery();
@@ -239,6 +243,8 @@ export function DateTodosRouteProvider({
       setIsCompletionPanelOpen(false);
       wasAllDoneRef.current = false;
       completionWatchReadyRef.current = false;
+      pendingRestFinishedAutoStopRef.current = false;
+      restFinishedAutoStopInFlightRef.current = false;
       setHydratedDateKey(null);
       return;
     }
@@ -248,8 +254,17 @@ export function DateTodosRouteProvider({
     setIsCompletionPanelOpen(false);
     wasAllDoneRef.current = false;
     completionWatchReadyRef.current = false;
+    pendingRestFinishedAutoStopRef.current = false;
+    restFinishedAutoStopInFlightRef.current = false;
     setHydratedDateKey(null);
   }, [dateKey]);
+
+  useEffect(() => {
+    if (!dateKey || !restFinishedRequested) {
+      return;
+    }
+    pendingRestFinishedAutoStopRef.current = true;
+  }, [dateKey, restFinishedRequested]);
 
   useEffect(() => {
     if (!dateKey || !dailyLogQuery.isSuccess) {
@@ -454,6 +469,35 @@ export function DateTodosRouteProvider({
       window.clearTimeout(timerId);
     };
   }, [activeRestDurationMin, dateKey, isRestActive, restStartedAtMs]);
+
+  useEffect(() => {
+    if (!dateKey || !pendingRestFinishedAutoStopRef.current || restFinishedAutoStopInFlightRef.current) {
+      return;
+    }
+
+    if (!dailyLogQuery.isSuccess || !hydratedDateKey || hydratedDateKey !== dateKey) {
+      return;
+    }
+
+    if (!isRestActive) {
+      pendingRestFinishedAutoStopRef.current = false;
+      return;
+    }
+
+    restFinishedAutoStopInFlightRef.current = true;
+    void (async () => {
+      try {
+        const nextLog = await stopRestSessionRef.current({ dateKey });
+        applyDailyLog(nextLog);
+        setActiveRestDurationMin(null);
+        cancelNativeRestNotification(dateKey);
+      } catch {
+        // 다음 렌더 주기에서 자동 재시도
+      } finally {
+        restFinishedAutoStopInFlightRef.current = false;
+      }
+    })();
+  }, [dailyLogQuery.isSuccess, dateKey, hydratedDateKey, isRestActive]);
 
   const {
     handleDateTaskAction,

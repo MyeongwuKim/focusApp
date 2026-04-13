@@ -1,3 +1,4 @@
+import { buildAuthHeaders } from "./authHeaders";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -480,9 +481,7 @@ type StopRestSessionMutation = {
 export async function fetchDailyLogsByMonth(monthKey: string) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: DAILY_LOGS_BY_MONTH_QUERY,
       variables: { monthKey },
@@ -503,9 +502,7 @@ export async function fetchDailyLogsByMonth(monthKey: string) {
 export async function fetchDailyLogMemo(dateKey: string) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: DAILY_LOG_QUERY,
       variables: { dateKey },
@@ -527,9 +524,7 @@ export async function fetchDailyLogMemo(dateKey: string) {
 export async function upsertDailyLogMemo(input: { dateKey: string; memo: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: UPSERT_DAILY_LOG_QUERY,
       variables: { input },
@@ -555,9 +550,7 @@ export async function upsertDailyLogMemo(input: { dateKey: string; memo: string 
 export async function fetchDailyLogByDate(dateKey: string) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: DAILY_LOG_BY_DATE_QUERY,
       variables: { dateKey },
@@ -587,9 +580,7 @@ export async function addTodosToDailyLog(input: {
 }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: ADD_TODOS_QUERY,
       variables: { input },
@@ -615,9 +606,7 @@ export async function addTodosToDailyLog(input: {
 export async function deleteTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: DELETE_TODO_QUERY,
       variables: { input },
@@ -643,9 +632,7 @@ export async function deleteTodoFromDailyLog(input: { dateKey: string; todoId: s
 export async function startTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: START_TODO_QUERY,
       variables: { input },
@@ -671,9 +658,7 @@ export async function startTodoFromDailyLog(input: { dateKey: string; todoId: st
 export async function pauseTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: PAUSE_TODO_QUERY,
       variables: { input },
@@ -699,9 +684,7 @@ export async function pauseTodoFromDailyLog(input: { dateKey: string; todoId: st
 export async function resumeTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: RESUME_TODO_QUERY,
       variables: { input },
@@ -727,9 +710,7 @@ export async function resumeTodoFromDailyLog(input: { dateKey: string; todoId: s
 export async function completeTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: COMPLETE_TODO_QUERY,
       variables: { input },
@@ -755,9 +736,7 @@ export async function completeTodoFromDailyLog(input: { dateKey: string; todoId:
 export async function resetTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: RESET_TODO_QUERY,
       variables: { input },
@@ -787,9 +766,7 @@ export async function addTodoDeviationToDailyLog(input: {
 }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: ADD_DEVIATION_QUERY,
       variables: { input },
@@ -819,9 +796,7 @@ export async function updateTodoActualFocusFromDailyLog(input: {
 }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: UPDATE_TODO_ACTUAL_FOCUS_QUERY,
       variables: { input },
@@ -851,9 +826,7 @@ export async function updateTodoScheduleFromDailyLog(input: {
 }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: UPDATE_TODO_SCHEDULE_QUERY,
       variables: { input },
@@ -879,9 +852,7 @@ export async function updateTodoScheduleFromDailyLog(input: {
 export async function startRestSession(input: { dateKey: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: START_REST_SESSION_QUERY,
       variables: { input },
@@ -907,9 +878,7 @@ export async function startRestSession(input: { dateKey: string }) {
 export async function stopRestSession(input: { dateKey: string }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildAuthHeaders(),
     body: JSON.stringify({
       query: STOP_REST_SESSION_QUERY,
       variables: { input },

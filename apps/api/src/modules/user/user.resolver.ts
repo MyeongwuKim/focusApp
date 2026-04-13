@@ -47,7 +47,7 @@ const userResolvers = {
         return await userService.createUser(args.input);
       } catch (error) {
         rethrowMappedGraphQLError(error, {
-          EMAIL_ALREADY_EXISTS: { message: "Email already exists" }
+          EMAIL_ALREADY_EXISTS: { message: "이미 사용 중인 이메일이에요." }
         });
       }
     },

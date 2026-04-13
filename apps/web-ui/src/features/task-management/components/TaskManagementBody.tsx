@@ -19,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FiEdit3, FiTrash2 } from "react-icons/fi";
-import { actionSheet } from "../../../stores";
+import { actionSheet, confirm } from "../../../stores";
 import {
   useTaskManagementActions,
   useTaskManagementData,
@@ -287,6 +287,19 @@ export function TaskManagementBody() {
       onRenameTask(taskId, nextName);
     }
     if (selected === "delete") {
+      const confirmed = await confirm({
+        title: "할일을 삭제할까요?",
+        message: "삭제하면 이 할일의 누적 집중시간/이탈시간 기록도 함께 사라져요.",
+        buttons: [
+          { label: "취소", value: "cancel", tone: "neutral" },
+          { label: "삭제", value: "delete", tone: "danger" },
+        ],
+      });
+
+      if (confirmed !== "delete") {
+        return;
+      }
+
       void onDeleteTask(taskId);
     }
   };
@@ -316,7 +329,7 @@ export function TaskManagementBody() {
           description:
             collectionId === "collection-default"
               ? "기본 컬렉션은 삭제할 수 없습니다."
-              : "컬렉션을 삭제하고 할일은 기본 컬렉션으로 이동합니다.",
+              : "컬렉션 삭제 시 할일은 미분류로 이동합니다.",
           disabled: collectionId === "collection-default",
         },
       ],
@@ -334,6 +347,19 @@ export function TaskManagementBody() {
       onRenameCollection(collectionId, nextName);
     }
     if (selected === "delete") {
+      const confirmed = await confirm({
+        title: "컬렉션을 삭제할까요?",
+        message: "삭제하면 포함된 할일 아이템은 미분류 컬렉션으로 이동해요.",
+        buttons: [
+          { label: "취소", value: "cancel", tone: "neutral" },
+          { label: "삭제", value: "delete", tone: "danger" },
+        ],
+      });
+
+      if (confirmed !== "delete") {
+        return;
+      }
+
       void onDeleteCollection(collectionId);
     }
   };

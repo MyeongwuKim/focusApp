@@ -1,9 +1,12 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DRAWER_ROUTES } from "../routes/route-config";
 import type { RouteKey } from "../routes/types";
 import { FiArchive, FiBarChart2, FiLogOut, FiSettings } from "react-icons/fi";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
-import { toast } from "../stores";
+import { logout } from "../api/authApi";
+import { fetchMe } from "../api/userApi";
+import { toast, useAuthStore } from "../stores";
 import { Button } from "./ui/Button";
 
 type DrawerMenuProps = {
@@ -17,8 +20,28 @@ const ROUTE_ICON: Partial<Record<RouteKey, ReactNode>> = {
 };
 
 export function DrawerMenu({ isOpen }: DrawerMenuProps) {
-  const { activeRoute, closeMenu, navigateTo } = useAppNavigation();
-  const accountId = "guest";
+  const { activeRoute, closeMenu, navigateTo, goPage } = useAppNavigation();
+  const token = useAuthStore((state) => state.token);
+  const authUser = useAuthStore((state) => state.user);
+  const setAuthUser = useAuthStore((state) => state.setAuthUser);
+  const hasToken = Boolean(token);
+  const meQuery = useQuery({
+    queryKey: ["me"],
+    queryFn: fetchMe,
+    enabled: isOpen && hasToken,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+    meta: {
+      skipGlobalErrorToast: true,
+    },
+  });
+  useEffect(() => {
+    if (meQuery.data) {
+      setAuthUser(meQuery.data);
+    }
+  }, [meQuery.data, setAuthUser]);
+
+  const accountEmail = authUser?.email ?? meQuery.data?.email ?? "guest";
 
   return (
     <div
@@ -45,8 +68,8 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
         aria-hidden={!isOpen}
       >
         <div className="mb-3">
-          <p className="m-0 text-xs font-medium uppercase tracking-wide text-base-content/55">ID</p>
-          <h2 className="mt-1 text-base font-semibold text-base-content">{accountId}</h2>
+          <p className="m-0 text-xs font-medium uppercase tracking-wide text-base-content/55">ACCOUNT</p>
+          <p className="mt-1 text-sm font-medium text-base-content/80 break-all">{accountEmail}</p>
         </div>
         <div className="mb-3 h-px w-full bg-base-300/90" />
 
@@ -75,14 +98,11 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
           <Button
             variant="ghost"
             className="justify-start gap-2.5 text-error"
-            onClick={() => {
+            onClick={async () => {
+              await logout();
               closeMenu();
-              toast.show({
-                type: "positive",
-                title: "로그아웃",
-                message: "로그아웃 기능은 곧 연결할게요.",
-                duration: 1800,
-              });
+              goPage("/login", { replace: true });
+              toast.positive("로그아웃 되었어요.", "로그아웃");
             }}
           >
             <span className="inline-flex h-4 w-4 items-center justify-center">

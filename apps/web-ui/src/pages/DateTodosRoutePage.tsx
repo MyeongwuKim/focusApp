@@ -13,7 +13,9 @@ import { useAppNavigation } from "../providers/AppNavigationProvider";
 export function DateTodosRoutePage() {
   const location = useLocation();
   const { goBack, goPage } = useAppNavigation();
-  const dateKey = useMemo(() => new URLSearchParams(location.search).get("date"), [location.search]);
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const dateKey = searchParams.get("date");
+  const restFinishedRequested = searchParams.get("restFinished") === "1";
   const normalizedPathname = location.pathname.replace(/\/+$/, "") || "/";
   const isRoutineImportRoute = normalizedPathname === "/date-tasks/routines";
   const isRoutineCreateRoute = normalizedPathname === "/date-tasks/routines/new";
@@ -45,6 +47,7 @@ export function DateTodosRoutePage() {
   return (
     <DateTodosRouteProvider
       dateKey={dateKey}
+      restFinishedRequested={restFinishedRequested}
       onOpenMemo={openMemoRoute}
       onOpenTaskPicker={openTaskPickerRoute}
       onOpenRoutineImport={openRoutineImportRoute}
