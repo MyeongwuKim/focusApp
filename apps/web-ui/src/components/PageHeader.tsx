@@ -78,7 +78,7 @@ export function PageHeader({ route }: PageHeaderProps) {
 
   if (route === MAIN_ROUTE) {
     return (
-      <header className="relative mb-2 flex h-12 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
+      <header className="relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
         <Button
           variant="ghost"
           size="sm"
@@ -123,7 +123,7 @@ export function PageHeader({ route }: PageHeaderProps) {
   }
 
   return (
-    <header className="relative mb-2 flex h-12 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
+    <header className="relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
       <Button
         variant="ghost"
         size="sm"

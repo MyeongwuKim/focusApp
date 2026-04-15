@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import { buildContext, type GraphQLContext } from "./graphql/context.js";
 import { resolvers, typeDefs } from "./graphql/schema.js";
 import { registerAuthRoute } from "./modules/auth/auth.route.js";
+import { registerNotificationBatchRoute } from "./modules/notification-batch/notification-batch.route.js";
 import { registerStatsCommentaryRoute } from "./modules/stats/stats-commentary.route.js";
 
 export async function createApp() {
@@ -36,7 +37,7 @@ export async function createApp() {
       reply
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        .header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        .header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-batch-secret");
     }
     return payload;
   });
@@ -64,7 +65,17 @@ export async function createApp() {
       .send();
   });
 
+  app.options("/api/notifications/batch/run", async (_request, reply) => {
+    return reply
+      .code(204)
+      .header("Access-Control-Allow-Origin", "*")
+      .header("Access-Control-Allow-Methods", "POST,OPTIONS")
+      .header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-batch-secret")
+      .send();
+  });
+
   await registerStatsCommentaryRoute(app);
+  await registerNotificationBatchRoute(app);
   await registerAuthRoute(app);
 
   return app;

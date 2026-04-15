@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { useCallback, useEffect, useRef } from "react";
-import { Alert, Platform } from "react-native";
+import { Platform } from "react-native";
 
 const REST_NOTIFICATION_CHANNEL_ID = "rest-reminder";
 const DEFAULT_REST_NOTIFICATION_TITLE = "휴식 시간 종료";
@@ -9,6 +10,7 @@ const BRIDGE_NOTIFICATION_TYPES = {
   schedule: "REST_NOTIFICATION_SCHEDULE",
   cancel: "REST_NOTIFICATION_CANCEL",
   requestPermission: "REST_NOTIFICATION_PERMISSION_REQUEST",
+  requestPushToken: "REST_PUSH_TOKEN_REQUEST",
 } as const;
 
 let notificationHandlerInitialized = false;
@@ -78,39 +80,19 @@ async function ensureNotificationChannelIfNeeded() {
   });
 }
 
-async function maybeRequestNotificationPermissionWithIntro() {
-  const current = await Notifications.getPermissionsAsync();
-  if (current.granted) {
-    return true;
-  }
-
-  const isUndetermined =
-    current.status === Notifications.PermissionStatus.UNDETERMINED ||
-    current.ios?.status === Notifications.IosAuthorizationStatus.NOT_DETERMINED;
-  if (!isUndetermined || !current.canAskAgain) {
-    return false;
-  }
-
-  return await new Promise<boolean>((resolve) => {
-    Alert.alert("집중 알림 설정", "집중을 도와드릴 수 있게 휴식 종료/리마인드 알림을 보내도 될까요?", [
-      {
-        text: "나중에",
-        style: "cancel",
-        onPress: () => resolve(false),
-      },
-      {
-        text: "좋아요",
-        onPress: async () => {
-          const granted = await ensureNotificationPermission();
-          resolve(granted);
-        },
-      },
-    ]);
-  });
-}
-
 type UseRestNotificationBridgeInput = {
   onNavigate: (path: string) => void;
+};
+
+type RestNotificationPermissionSnapshot = {
+  granted: boolean;
+  canAskAgain: boolean;
+  status: string;
+};
+
+type RestExpoPushTokenSnapshot = {
+  pushToken: string | null;
+  platform: "ios" | "android" | "unknown";
 };
 
 type RestNotificationSchedulePayload = {
@@ -127,29 +109,6 @@ export function useRestNotificationBridge({ onNavigate }: UseRestNotificationBri
 
   useEffect(() => {
     ensureNotificationHandler();
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      maybeRequestNotificationPermissionWithIntro()
-        .then((granted) => {
-          if (cancelled || !granted) {
-            return;
-          }
-          ensureNotificationChannelIfNeeded().catch((error) => {
-            console.log("Failed to ensure notification channel:", error);
-          });
-        })
-        .catch((error) => {
-          console.log("Failed to show notification intro:", error);
-        });
-    }, 450);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
   }, []);
 
   const handleNotificationResponseNavigation = useCallback(
@@ -281,6 +240,10 @@ export function useRestNotificationBridge({ onNavigate }: UseRestNotificationBri
         return true;
       }
 
+      if (type === BRIDGE_NOTIFICATION_TYPES.requestPushToken) {
+        return true;
+      }
+
       if (type === BRIDGE_NOTIFICATION_TYPES.schedule) {
         const payload = asRecord(record.payload);
         await scheduleRestNotification({
@@ -305,7 +268,87 @@ export function useRestNotificationBridge({ onNavigate }: UseRestNotificationBri
     [cancelRestNotification, scheduleRestNotification]
   );
 
+  const requestRestNotificationPermission = useCallback(async () => {
+    const granted = await ensureNotificationPermission();
+    if (granted) {
+      await ensureNotificationChannelIfNeeded();
+    }
+    return granted;
+  }, []);
+
+  const getRestNotificationPermissionStatus = useCallback(async () => {
+    const current = await Notifications.getPermissionsAsync();
+    return current.granted || current.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  }, []);
+
+  const getRestNotificationPermissionSnapshot = useCallback(async (): Promise<RestNotificationPermissionSnapshot> => {
+    const current = await Notifications.getPermissionsAsync();
+    const granted = current.granted || current.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+    return {
+      granted,
+      canAskAgain: current.canAskAgain,
+      status: current.status,
+    };
+  }, []);
+
+  const getRestExpoPushTokenSnapshot = useCallback(async (): Promise<RestExpoPushTokenSnapshot> => {
+    const permission = await ensureNotificationPermission();
+    const platform = Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "unknown";
+    if (!permission) {
+      return {
+        pushToken: null,
+        platform,
+      };
+    }
+
+    const projectId = resolveExpoProjectId();
+
+    if (!projectId) {
+      console.log(
+        'Failed to get Expo push token: missing projectId. Add expo.extra.eas.projectId (or expo.extra.easProjectId) in app.json.'
+      );
+      return {
+        pushToken: null,
+        platform,
+      };
+    }
+
+    try {
+      const tokenResponse = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined
+      );
+      return {
+        pushToken: tokenResponse.data ?? null,
+        platform,
+      };
+    } catch (error) {
+      console.log("Failed to get Expo push token:", error);
+      return {
+        pushToken: null,
+        platform,
+      };
+    }
+  }, []);
+
   return {
     handleRestNotificationBridgeMessage,
+    requestRestNotificationPermission,
+    getRestNotificationPermissionStatus,
+    getRestNotificationPermissionSnapshot,
+    getRestExpoPushTokenSnapshot,
   };
+}
+
+function resolveExpoProjectId() {
+  const extra = (Constants?.expoConfig?.extra ?? {}) as {
+    eas?: { projectId?: string };
+    easProjectId?: string;
+  };
+
+  return (
+    extra.eas?.projectId?.trim() ||
+    extra.easProjectId?.trim() ||
+    Constants?.easConfig?.projectId?.trim() ||
+    null
+  );
 }

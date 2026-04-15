@@ -489,7 +489,7 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
                 </div>
               </div>
             ) : null}
-            <div className="no-scrollbar h-72 space-y-1.5 overflow-y-auto pr-0.5">
+            <div className="no-scrollbar h-56 space-y-1.5 overflow-y-auto pr-0.5 md:h-72">
               {isTaskLoading ? (
                 <p className="m-0 px-1 py-2 text-sm text-base-content/60">할일 불러오는 중...</p>
               ) : null}
@@ -527,7 +527,7 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
             <p className="m-0 mb-2 text-xs font-semibold text-base-content/75">
               선택한 할일 ({selectedTaskIds.length})
             </p>
-            <div className="no-scrollbar max-h-56 space-y-1.5 overflow-y-auto pr-0.5">
+            <div className="no-scrollbar max-h-44 space-y-1.5 overflow-y-auto pr-0.5 md:max-h-56">
               {selectedTasks.length === 0 ? (
                 <p className="m-0 px-1 py-2 text-sm text-base-content/60">
                   위 목록에서 루틴에 넣을 할일을 선택해 주세요.

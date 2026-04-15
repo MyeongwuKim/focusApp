@@ -9,6 +9,14 @@ import {
   routineTemplateResolvers,
   routineTemplateTypeDefs,
 } from "../modules/routine-template/routine-template.resolver.js";
+import {
+  notificationSettingsResolvers,
+  notificationSettingsTypeDefs,
+} from "../modules/notification-settings/notification-settings.resolver.js";
+import {
+  pushDeviceTokenResolvers,
+  pushDeviceTokenTypeDefs,
+} from "../modules/push-device-token/push-device-token.resolver.js";
 
 type ResolverRecord = Record<string, Record<string, unknown>>;
 
@@ -40,11 +48,15 @@ export const typeDefs = [
   userTypeDefs,
   taskCollectionTypeDefs,
   routineTemplateTypeDefs,
+  notificationSettingsTypeDefs,
+  pushDeviceTokenTypeDefs,
 ];
 
 export const resolvers = mergeResolvers(
   dailyLogResolvers,
   userResolvers,
   taskCollectionResolvers,
-  routineTemplateResolvers
+  routineTemplateResolvers,
+  notificationSettingsResolvers,
+  pushDeviceTokenResolvers
 );

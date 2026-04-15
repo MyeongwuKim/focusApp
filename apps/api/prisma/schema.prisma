@@ -102,6 +102,38 @@ model RoutineTemplate {
   @@index([userId, name])
 }
 
+model NotificationSettings {
+  id                       String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                   String   @unique
+  pushEnabled              Boolean  @default(false)
+  intervalMinutes          Int      @default(60)
+  activeStartTime          String   @default("09:00")
+  activeEndTime            String   @default("23:00")
+  dayMode                  String   @default("weekday")
+  typeRestEnd              Boolean  @default(true)
+  typeIncomplete           Boolean  @default(true)
+  typeFocusStart           Boolean  @default(true)
+  tone                     String   @default("soft")
+  systemPermission         String?
+  lastFocusReminderSentAt  DateTime?
+  lastEmptyTodoReminderDate String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+model PushDeviceToken {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  pushToken String   @unique
+  platform  String
+  isActive  Boolean  @default(true)
+  lastSeenAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive])
+}
+
 type DailyTaskEntry {
   id                 String
   taskId             String?

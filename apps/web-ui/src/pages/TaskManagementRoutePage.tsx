@@ -16,7 +16,7 @@ import { toast } from "../stores";
 
 const DEFAULT_COLLECTION_ID = "collection-default";
 
-function TaskManagementRouteContent() {
+function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: boolean }) {
   const [state, dispatch] = useReducer(
     taskManagementDataReducer,
     createInitialTaskManagementDataState(DEFAULT_COLLECTION_ID)
@@ -360,42 +360,66 @@ function TaskManagementRouteContent() {
   }, [tasks, dispatch]);
 
   return (
-    <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4">
-      <TaskManagementContextProvider
-        data={{
-          tasks,
-          collections,
-          selectedCollectionId,
-          selectedTaskId,
-        }}
-        meta={{
-          selectedTaskLabel,
-          selectedTaskLastUsedAt,
-          recentUsedAt,
-        }}
-        actions={{
-          onSelectCollection: (collectionId) =>
-            dispatch({ type: "SELECT_COLLECTION", payload: collectionId }),
-          onSelectTask: (taskId) => dispatch({ type: "SELECT_TASK", payload: taskId }),
-          onRenameTask: handleRenameTask,
-          onDeleteTask: handleDeleteTask,
-          onRenameCollection: handleRenameCollection,
-          onDeleteCollection: handleDeleteCollection,
-          onMoveTaskToCollection: handleMoveTaskToCollection,
-          onReorderVisibleTasks: handleReorderVisibleTasks,
-          onReorderCollections: handleReorderCollections,
-          onCreateCollection: handleCreateCollection,
-          onCreateTask: handleCreateTask,
-        }}
+    <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        aria-hidden={isTaskStatsRoute}
+        className={[
+          "absolute inset-0 transition-all duration-300 ease-out",
+          isTaskStatsRoute
+            ? "-translate-x-6 opacity-0 pointer-events-none"
+            : "translate-x-0 opacity-100 pointer-events-auto",
+        ].join(" ")}
       >
-        <TaskManagementBody />
+        <section className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4">
+          <TaskManagementContextProvider
+            data={{
+              tasks,
+              collections,
+              selectedCollectionId,
+              selectedTaskId,
+            }}
+            meta={{
+              selectedTaskLabel,
+              selectedTaskLastUsedAt,
+              recentUsedAt,
+            }}
+            actions={{
+              onSelectCollection: (collectionId) =>
+                dispatch({ type: "SELECT_COLLECTION", payload: collectionId }),
+              onSelectTask: (taskId) => dispatch({ type: "SELECT_TASK", payload: taskId }),
+              onRenameTask: handleRenameTask,
+              onDeleteTask: handleDeleteTask,
+              onRenameCollection: handleRenameCollection,
+              onDeleteCollection: handleDeleteCollection,
+              onMoveTaskToCollection: handleMoveTaskToCollection,
+              onReorderVisibleTasks: handleReorderVisibleTasks,
+              onReorderCollections: handleReorderCollections,
+              onCreateCollection: handleCreateCollection,
+              onCreateTask: handleCreateTask,
+            }}
+          >
+            <TaskManagementBody />
 
-        <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5">
-          <TaskManagementActions />
-          <TaskManagementFooter />
-        </div>
-      </TaskManagementContextProvider>
-    </section>
+            <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5">
+              <TaskManagementActions />
+              <TaskManagementFooter />
+            </div>
+          </TaskManagementContextProvider>
+        </section>
+      </div>
+
+      <div
+        aria-hidden={!isTaskStatsRoute}
+        className={[
+          "absolute inset-0 transition-all duration-300 ease-out",
+          isTaskStatsRoute
+            ? "translate-x-0 opacity-100 pointer-events-auto"
+            : "translate-x-6 opacity-0 pointer-events-none",
+        ].join(" ")}
+      >
+        <TaskManagementStatsView />
+      </div>
+    </div>
   );
 }
 
@@ -404,13 +428,9 @@ export function TaskManagementRoutePage() {
   const normalizedPathname = location.pathname.replace(/\/+$/, "") || "/";
   const isTaskStatsRoute = normalizedPathname === "/tasks/stats";
 
-  if (isTaskStatsRoute) {
-    return <TaskManagementStatsView />;
-  }
-
   return (
     <TaskManagementModalProvider>
-      <TaskManagementRouteContent />
+      <TaskManagementRouteContent isTaskStatsRoute={isTaskStatsRoute} />
     </TaskManagementModalProvider>
   );
 }

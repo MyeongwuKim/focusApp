@@ -375,9 +375,9 @@ export function TodoRoutineImportModal({
           </Button>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[10.5rem_minmax(0,1fr)] gap-2 p-2 md:grid-cols-[12rem_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 md:grid-cols-[12rem_minmax(0,1fr)]">
           <div className="min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
-            <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
+            <div className="no-scrollbar max-h-40 space-y-1.5 overflow-y-auto pr-0.5 md:h-full md:max-h-none">
               {isLoading ? (
                 <p className="m-0 px-1 py-2 text-sm text-base-content/60">루틴 불러오는 중...</p>
               ) : null}
@@ -412,7 +412,7 @@ export function TodoRoutineImportModal({
                 편집 모드: 드래그로 순서 변경, 휴지통으로 항목 삭제
               </div>
             ) : null}
-            <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
+            <div className="no-scrollbar max-h-[40svh] space-y-1.5 overflow-y-auto pr-0.5 md:h-full md:max-h-none">
               {selectedRoutine ? (
                 <DndContext
                   sensors={sensors}

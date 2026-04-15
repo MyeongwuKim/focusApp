@@ -64,7 +64,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div key={section} className="settings-view-forward">
+    <div key={section} className="settings-view-forward min-h-0 h-full overflow-y-auto">
       {section === "home" ? (
         <section className="space-y-4 rounded-2xl border border-base-300 bg-base-200/50 p-4">
           <div className="space-y-2">

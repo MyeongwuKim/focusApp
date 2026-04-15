@@ -17,6 +17,13 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
   BATCH_API_SECRET: z.string().min(1).optional(),
+  NOTIFICATION_BATCH_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  NOTIFICATION_BATCH_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
+  NOTIFICATION_BATCH_TIMEZONE: z.string().min(1).default("Asia/Seoul"),
+  EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

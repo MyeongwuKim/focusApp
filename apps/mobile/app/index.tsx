@@ -3,7 +3,12 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Linking,
   NativeModules,
+  PermissionsAndroid,
+  Pressable,
+  Text,
+  Platform,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -19,6 +24,24 @@ import { useRestNotificationBridge } from '../src/features/notifications/hooks/u
 const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
 const MAX_SCALE = 1.08;
+const PERMISSION_INTRO_FILE_URI = `${
+  FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ''
+}native-permission-intro-v2.json`;
+
+type NativePermissionState = 'granted' | 'denied' | 'undetermined';
+type PermissionStep = 'notification' | 'location';
+type LocationPermissionSnapshot = {
+  granted: boolean;
+  canAskAgain: boolean;
+  status: NativePermissionState;
+};
+type GeolocationLike = {
+  getCurrentPosition: (
+    success: () => void,
+    failure: () => void,
+    options?: { enableHighAccuracy?: boolean; timeout?: number; maximumAge?: number }
+  ) => void;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -112,11 +135,145 @@ function resolveAuthCallbackHashFromUrl(rawUrl: string): string | null {
   }
 }
 
+async function hasSeenNativePermissionIntro() {
+  try {
+    const info = await FileSystem.getInfoAsync(PERMISSION_INTRO_FILE_URI);
+    return info.exists;
+  } catch {
+    return false;
+  }
+}
+
+async function markNativePermissionIntroAsSeen() {
+  try {
+    await FileSystem.writeAsStringAsync(
+      PERMISSION_INTRO_FILE_URI,
+      JSON.stringify({ seenAt: new Date().toISOString() }),
+      { encoding: FileSystem.EncodingType.UTF8 }
+    );
+  } catch (error) {
+    console.log('Failed to store native permission intro state:', error);
+  }
+}
+
+function loadExpoLocationModule() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const loadedModule = require('expo-location') as {
+      getForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
+      requestForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
+    };
+    return loadedModule;
+  } catch {
+    return null;
+  }
+}
+
+async function getLocationPermissionState(): Promise<NativePermissionState> {
+  const expoLocation = loadExpoLocationModule();
+  if (expoLocation?.getForegroundPermissionsAsync) {
+    try {
+      const result = await expoLocation.getForegroundPermissionsAsync();
+      if (result.granted || result.status === 'granted') {
+        return 'granted';
+      }
+      if (result.status === 'denied') {
+        return 'denied';
+      }
+      return 'undetermined';
+    } catch (error) {
+      console.log('Failed to check location permission via expo-location:', error);
+      return 'undetermined';
+    }
+  }
+
+  if (Platform.OS === 'android') {
+    try {
+      const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      return granted ? 'granted' : 'undetermined';
+    } catch (error) {
+      console.log('Failed to check Android location permission:', error);
+      return 'undetermined';
+    }
+  }
+
+  return 'undetermined';
+}
+
+async function requestLocationPermission(): Promise<boolean> {
+  const expoLocation = loadExpoLocationModule();
+  if (expoLocation?.requestForegroundPermissionsAsync) {
+    try {
+      const result = await expoLocation.requestForegroundPermissionsAsync();
+      return result.granted || result.status === 'granted';
+    } catch (error) {
+      console.log('Failed to request location permission via expo-location:', error);
+      return false;
+    }
+  }
+
+  if (Platform.OS === 'android') {
+    try {
+      const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      return result === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (error) {
+      console.log('Failed to request Android location permission:', error);
+      return false;
+    }
+  }
+
+  const geolocation = (globalThis.navigator as { geolocation?: GeolocationLike } | undefined)?.geolocation;
+  if (geolocation?.getCurrentPosition) {
+    return await new Promise<boolean>((resolve) => {
+      geolocation.getCurrentPosition(
+        () => resolve(true),
+        () => resolve(false),
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }
+      );
+    });
+  }
+
+  return false;
+}
+
+async function getLocationPermissionSnapshot(): Promise<LocationPermissionSnapshot> {
+  const expoLocation = loadExpoLocationModule();
+  if (expoLocation?.getForegroundPermissionsAsync) {
+    try {
+      const result = await expoLocation.getForegroundPermissionsAsync();
+      const granted = Boolean(result.granted || result.status === 'granted');
+      const status: NativePermissionState =
+        result.status === 'granted' ? 'granted' : result.status === 'denied' ? 'denied' : 'undetermined';
+      return {
+        granted,
+        canAskAgain: Boolean((result as { canAskAgain?: boolean }).canAskAgain),
+        status,
+      };
+    } catch (error) {
+      console.log('Failed to read location permission snapshot via expo-location:', error);
+    }
+  }
+
+  const status = await getLocationPermissionState();
+  return {
+    granted: status === 'granted',
+    canAskAgain: status !== 'denied',
+    status,
+  };
+}
+
 export default function WebViewScreen() {
   const pendingNotificationPathRef = useRef<string | null>(null);
   const isWebViewReadyRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
+  const [isPermissionIntroReady, setIsPermissionIntroReady] = useState(false);
+  const [isPermissionIntroVisible, setIsPermissionIntroVisible] = useState(false);
+  const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
+  const [isRequestingLocationPermission, setIsRequestingLocationPermission] = useState(false);
+  const [isNotificationGranted, setIsNotificationGranted] = useState(false);
+  const [locationPermissionState, setLocationPermissionState] = useState<NativePermissionState>('undetermined');
+  const [permissionStep, setPermissionStep] = useState<PermissionStep>('notification');
 
   const navigateWebViewByTargetPath = (targetPath: string) => {
     if (!targetPath.startsWith('/')) {
@@ -136,7 +293,13 @@ export default function WebViewScreen() {
     pendingNotificationPathRef.current = null;
   };
 
-  const { handleRestNotificationBridgeMessage } = useRestNotificationBridge({
+  const {
+    handleRestNotificationBridgeMessage,
+    requestRestNotificationPermission,
+    getRestNotificationPermissionStatus,
+    getRestNotificationPermissionSnapshot,
+    getRestExpoPushTokenSnapshot,
+  } = useRestNotificationBridge({
     onNavigate: navigateWebViewByTargetPath,
   });
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
@@ -249,6 +412,96 @@ export default function WebViewScreen() {
   );
 
   useEffect(() => {
+    let cancelled = false;
+
+    const initializePermissionIntro = async () => {
+      try {
+        const [hasSeenIntro, notificationGranted, currentLocationPermissionState] = await Promise.all([
+          hasSeenNativePermissionIntro(),
+          getRestNotificationPermissionStatus(),
+          getLocationPermissionState(),
+        ]);
+        if (cancelled) {
+          return;
+        }
+
+        setIsNotificationGranted(notificationGranted);
+        setLocationPermissionState(currentLocationPermissionState);
+
+        const allGranted = notificationGranted && currentLocationPermissionState === 'granted';
+        if (hasSeenIntro || allGranted) {
+          if (!hasSeenIntro) {
+            await markNativePermissionIntroAsSeen();
+          }
+          if (!cancelled) {
+            setIsPermissionIntroVisible(false);
+          }
+        } else {
+          setPermissionStep(notificationGranted ? 'location' : 'notification');
+          setIsPermissionIntroVisible(true);
+        }
+      } catch (error) {
+        console.log('Failed to initialize native permission intro:', error);
+        if (!cancelled) {
+          setIsPermissionIntroVisible(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsPermissionIntroReady(true);
+        }
+      }
+    };
+
+    initializePermissionIntro();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getRestNotificationPermissionStatus]);
+
+  const closePermissionIntro = async () => {
+    await markNativePermissionIntroAsSeen();
+    setIsPermissionIntroVisible(false);
+  };
+
+  const handleRequestNotificationPermission = async () => {
+    setIsRequestingNotificationPermission(true);
+    try {
+      const granted = await requestRestNotificationPermission();
+      setIsNotificationGranted(granted);
+      if (!granted) {
+        await Linking.openSettings().catch((error) => {
+          console.log('Failed to open settings from notification permission handler:', error);
+        });
+      }
+      setPermissionStep('location');
+    } catch (error) {
+      console.log('Failed to request notification permission from intro screen:', error);
+    } finally {
+      setIsRequestingNotificationPermission(false);
+    }
+  };
+
+  const handleRequestLocationPermission = async () => {
+    setIsRequestingLocationPermission(true);
+    try {
+      const granted = await requestLocationPermission();
+      const nextState = granted ? 'granted' : await getLocationPermissionState();
+      setLocationPermissionState(nextState);
+      if (!granted) {
+        await Linking.openSettings().catch((error) => {
+          console.log('Failed to open settings from location permission handler:', error);
+        });
+      }
+      await closePermissionIntro();
+    } catch (error) {
+      console.log('Failed to request location permission from intro screen:', error);
+    } finally {
+      setIsRequestingLocationPermission(false);
+    }
+  };
+
+  useEffect(() => {
     const prepareLocalHtmlFile = async () => {
       try {
         const baseDir = `${FileSystem.cacheDirectory}web-ui/`;
@@ -329,6 +582,70 @@ export default function WebViewScreen() {
         console.log('[WebView debug]', parsedData.type, parsedData.payload);
         return;
       }
+      if (parsedData?.type === 'REST_NOTIFICATION_PERMISSION_STATUS_REQUEST') {
+        const requestId =
+          typeof parsedData?.requestId === 'string' && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        const snapshot = await getRestNotificationPermissionSnapshot();
+        const bridgeMessage = {
+          type: 'REST_NOTIFICATION_PERMISSION_STATUS_RESULT',
+          requestId,
+          payload: snapshot,
+        };
+        webViewRef.current?.injectJavaScript(
+          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+            bridgeMessage
+          )} })); true;`
+        );
+        return;
+      }
+
+      if (parsedData?.type === 'REST_APP_OPEN_SETTINGS') {
+        await Linking.openSettings().catch((error) => {
+          console.log('Failed to open settings from web bridge:', error);
+        });
+        return;
+      }
+
+      if (parsedData?.type === 'REST_LOCATION_PERMISSION_STATUS_REQUEST') {
+        const requestId =
+          typeof parsedData?.requestId === 'string' && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        const snapshot = await getLocationPermissionSnapshot();
+        const bridgeMessage = {
+          type: 'REST_LOCATION_PERMISSION_STATUS_RESULT',
+          requestId,
+          payload: snapshot,
+        };
+        webViewRef.current?.injectJavaScript(
+          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+            bridgeMessage
+          )} })); true;`
+        );
+        return;
+      }
+
+      if (parsedData?.type === 'REST_PUSH_TOKEN_REQUEST') {
+        const requestId =
+          typeof parsedData?.requestId === 'string' && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        const snapshot = await getRestExpoPushTokenSnapshot();
+        const bridgeMessage = {
+          type: 'REST_PUSH_TOKEN_RESULT',
+          requestId,
+          payload: snapshot,
+        };
+        webViewRef.current?.injectJavaScript(
+          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+            bridgeMessage
+          )} })); true;`
+        );
+        return;
+      }
+
       const isHandledBridgeMessage = await handleRestNotificationBridgeMessage(parsedData);
       if (isHandledBridgeMessage) {
         return;
@@ -341,6 +658,8 @@ export default function WebViewScreen() {
     }
   };
 
+  const showPermissionIntro = isPermissionIntroReady && isPermissionIntroVisible;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {isPreparingLocalFile ? (
@@ -348,7 +667,12 @@ export default function WebViewScreen() {
           <ActivityIndicator size="small" />
         </View>
       ) : null}
-      {source ? (
+      {!isPermissionIntroReady ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" />
+        </View>
+      ) : null}
+      {source && !showPermissionIntro ? (
         <View style={styles.webViewContainer}>
           <WebView
             ref={webViewRef}
@@ -440,6 +764,84 @@ export default function WebViewScreen() {
           <NativeWeatherLayer />
         </View>
       ) : null}
+      {showPermissionIntro ? (
+        <View style={styles.permissionIntroOverlay}>
+          <View style={styles.permissionIntroCard}>
+            {permissionStep === 'notification' ? (
+              <View style={styles.permissionTextWrap}>
+                <Text style={styles.permissionRowTitle}>푸시 알림 권한 설정</Text>
+                <Text style={styles.permissionRowDescription}>
+                  리마인드를 더 잘 도와드릴 수 있도록{'\n'}
+                  푸시 알림을 켜둘까요?
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.permissionTextWrap}>
+                <Text style={styles.permissionRowTitle}>위치 권한 설정</Text>
+                <Text style={styles.permissionRowDescription}>
+                  캘린더에 날씨 효과를 보여드리기 위해{'\n'}
+                  위치 권한이 필요해요.
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.permissionFooterActions}>
+              {permissionStep === 'notification' ? (
+                <>
+                  <Pressable
+                    style={styles.permissionGhostButton}
+                    onPress={() => {
+                      setPermissionStep('location');
+                    }}
+                  >
+                    <Text style={styles.permissionGhostButtonText}>아니요, 다음에요</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.permissionPrimaryButton}
+                    onPress={handleRequestNotificationPermission}
+                    disabled={isRequestingNotificationPermission}
+                  >
+                    <Text style={styles.permissionPrimaryButtonText}>
+                      {isRequestingNotificationPermission ? '요청 중' : '좋아요, 할게요'}
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Pressable
+                    style={styles.permissionGhostButton}
+                    onPress={() => {
+                      void closePermissionIntro();
+                    }}
+                  >
+                    <Text style={styles.permissionGhostButtonText}>아니요, 다음에요</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.permissionPrimaryButton}
+                    onPress={handleRequestLocationPermission}
+                    disabled={isRequestingLocationPermission}
+                  >
+                    <Text style={styles.permissionPrimaryButtonText}>
+                      {isRequestingLocationPermission ? '요청 중' : '좋아요, 할게요'}
+                    </Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+
+            <Pressable
+              style={styles.permissionSettingsLink}
+              onPress={() => {
+                Linking.openSettings().catch((error) => {
+                  console.log('Failed to open settings from permission intro:', error);
+                });
+              }}
+            >
+              <Text style={styles.permissionSettingsLinkText}>권한은 설정에서 언제든 다시 변경할 수 있어요</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -455,5 +857,84 @@ const styles = StyleSheet.create({
   },
   webViewContainer: {
     flex: 1,
+  },
+  permissionIntroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    paddingHorizontal: 20,
+    backgroundColor: '#F4F8FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permissionIntroCard: {
+    width: '100%',
+    maxWidth: 430,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DCE8FF',
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 18,
+    shadowColor: '#2F5FCB',
+    shadowOpacity: 0.13,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  },
+  permissionTextWrap: {
+    gap: 8,
+  },
+  permissionRowTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#14326F',
+    letterSpacing: -0.3,
+  },
+  permissionRowDescription: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#3F5D99',
+  },
+  permissionFooterActions: {
+    marginTop: 22,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  permissionGhostButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#CFDBF8',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#F6F9FF',
+  },
+  permissionGhostButtonText: {
+    color: '#395A9A',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  permissionPrimaryButton: {
+    flex: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#1F5FFF',
+  },
+  permissionPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  permissionSettingsLink: {
+    marginTop: 14,
+    alignSelf: 'center',
+  },
+  permissionSettingsLinkText: {
+    color: '#49669F',
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

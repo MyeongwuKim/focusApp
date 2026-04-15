@@ -14,10 +14,12 @@ import { ActionSheet } from "./components/ActionSheet";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { GoPageOptions, NavigateOptions } from "./providers/AppNavigationProvider";
 import { MAIN_ROUTE } from "./routes/route-config";
-import { toast, useWeatherStore } from "./stores";
+import { toast, useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import { fetchCurrentWeather, SEOUL_COORDINATES, type Coordinates } from "./utils/weather";
-import { useAuthStore } from "./stores";
+import { getNativeExpoPushToken, getNotificationPermissionStatus } from "./utils/notifications";
+import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
+import { updateNotificationSettings } from "./api/notificationSettingsApi";
 
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 const LOGIN_ROUTE_PATH = "/login";
@@ -165,6 +167,7 @@ function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const weatherFallbackNotifiedRef = useRef(false);
+  const syncedNotificationAuthTokenRef = useRef<string | null>(null);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
 
   useEffect(() => {
@@ -250,6 +253,59 @@ function App() {
     };
   }, [weatherEnabled]);
 
+  useEffect(() => {
+    if (!isLoggedIn || !authToken) {
+      syncedNotificationAuthTokenRef.current = null;
+      return;
+    }
+    if (syncedNotificationAuthTokenRef.current === authToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncNotificationPermissionAndToken = async () => {
+      try {
+        const permission = await getNotificationPermissionStatus();
+        if (cancelled) {
+          return;
+        }
+
+        await updateNotificationSettings({
+          systemPermission: permission.status,
+        });
+
+        if (!permission.granted) {
+          syncedNotificationAuthTokenRef.current = authToken;
+          return;
+        }
+
+        const snapshot = await getNativeExpoPushToken();
+        if (cancelled) {
+          return;
+        }
+        if (!snapshot.pushToken) {
+          syncedNotificationAuthTokenRef.current = authToken;
+          return;
+        }
+
+        await registerPushDeviceToken({
+          pushToken: snapshot.pushToken,
+          platform: snapshot.platform,
+        });
+        syncedNotificationAuthTokenRef.current = authToken;
+      } catch (error) {
+        console.warn("Failed to sync notification permission/token after login", error);
+      }
+    };
+
+    void syncNotificationPermissionAndToken();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, isLoggedIn]);
+
   const goPage = (path: string, options?: GoPageOptions) => {
     const nextPath = buildPagePath(path, options?.query);
     const currentPath = `${location.pathname}${location.search}`;
@@ -271,7 +327,11 @@ function App() {
       return;
     }
 
-    goPage(buildRoutePath(nextRoute), options);
+    const replace = options?.replace ?? false;
+    goPage(buildRoutePath(nextRoute), {
+      ...options,
+      replace,
+    });
   };
 
   const goBack = () => {
@@ -320,7 +380,7 @@ function App() {
     }
   };
 
-  if (!isLoggedIn && isLoginRoute) {
+  if (!isLoggedIn && !isAuthCallbackRoute) {
     return <LoginPage />;
   }
 
@@ -363,7 +423,9 @@ function App() {
               }}
             >
               <PageHeader route={overlayRoute} />
-              {renderOverlayBody(overlayRoute)}
+              <div className="min-h-0 flex flex-1 flex-col">
+                {renderOverlayBody(overlayRoute)}
+              </div>
             </div>
           ) : null}
         </section>
