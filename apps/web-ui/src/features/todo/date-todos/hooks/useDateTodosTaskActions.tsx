@@ -1,6 +1,7 @@
 import { type MutableRefObject } from "react";
 import { FiCheckCircle, FiClock, FiRotateCcw, FiTrash2 } from "react-icons/fi";
 import { actionSheet, confirm, toast } from "../../../../stores";
+import { getUserFacingErrorMessage } from "../../../../utils/errorMessage";
 import { formatDateKey } from "../../../../utils/holidays";
 import type { TaskItem } from "../../types";
 
@@ -108,7 +109,7 @@ export function useDateTodosTaskActions({
           const nextLog = await pauseTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
         } catch (error) {
-          const message = error instanceof Error ? error.message : "할일 상태 업데이트 중 오류가 발생했어요.";
+          const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
           toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
         }
       })();
@@ -158,7 +159,7 @@ export function useDateTodosTaskActions({
           applyDailyLog(nextLog);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "할일 상태 업데이트 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
         toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
       }
     })();
@@ -208,7 +209,7 @@ export function useDateTodosTaskActions({
         duration: 1800,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "집중 시간 수정 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "집중 시간 수정 중 오류가 발생했어요.");
       toast.show({
         type: "error",
         title: "수정 실패",
@@ -276,7 +277,7 @@ export function useDateTodosTaskActions({
         duration: 1800,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "시작시간 저장 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "시작시간 저장 중 오류가 발생했어요.");
       toast.show({
         type: "error",
         title: "설정 실패",
@@ -322,6 +323,7 @@ export function useDateTodosTaskActions({
 
     const canCompleteFromMenu = target.status === "overdue";
     const canReset = target.status === "in_progress" || target.status === "paused" || target.status === "done";
+    const canClearSchedule = Boolean(target.scheduledStartAt);
     const resetLabel = "초기화";
     const resetDescription =
       target.status === "done" ? "시작 전 상태로 되돌립니다." : "진행 기록을 초기화하고 시작 전 상태로 되돌립니다.";
@@ -359,6 +361,17 @@ export function useDateTodosTaskActions({
           icon: <FiClock size={14} />,
           description: "알림 예정 시간을 설정합니다.",
         },
+        ...(canClearSchedule
+          ? [
+              {
+                label: "시작시간 해제",
+                value: "clear_schedule",
+                tone: "muted" as const,
+                icon: <FiClock size={14} />,
+                description: "설정한 시작시간을 제거합니다.",
+              },
+            ]
+          : []),
         {
           label: "삭제",
           value: "delete",
@@ -389,7 +402,7 @@ export function useDateTodosTaskActions({
           duration: 1800,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "할일 상태 업데이트 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
         toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
       }
       return;
@@ -411,6 +424,36 @@ export function useDateTodosTaskActions({
         initialDate.getMinutes()
       ).padStart(2, "0")}`;
       setEditingScheduledStart({ taskId, initialTime });
+      return;
+    }
+
+    if (result === "clear_schedule") {
+      if (!dateKey) {
+        return;
+      }
+
+      try {
+        const nextLog = await updateTodoSchedule({
+          dateKey,
+          todoId: taskId,
+          scheduledStartAt: null,
+        });
+        applyDailyLog(nextLog);
+        toast.show({
+          type: "positive",
+          title: "시작시간 해제됨",
+          message: "설정한 시작시간을 제거했어요.",
+          duration: 1800,
+        });
+      } catch (error) {
+        const message = getUserFacingErrorMessage(error, "시작시간 해제 중 오류가 발생했어요.");
+        toast.show({
+          type: "error",
+          title: "해제 실패",
+          message,
+          duration: 2200,
+        });
+      }
       return;
     }
 
@@ -444,7 +487,7 @@ export function useDateTodosTaskActions({
           duration: 1800,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "할일 삭제 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "할일 삭제 중 오류가 발생했어요.");
         toast.show({ type: "error", title: "삭제 실패", message, duration: 2200 });
       }
     }

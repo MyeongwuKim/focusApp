@@ -1,12 +1,6 @@
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { toast } from "./stores";
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return "요청 처리 중 오류가 발생했어요.";
-}
+import { getUserFacingErrorMessage } from "./utils/errorMessage";
 
 type GlobalErrorMeta = {
   skipGlobalErrorToast?: boolean;
@@ -21,7 +15,7 @@ export const queryClient = new QueryClient({
         return;
       }
 
-      toast.error(getErrorMessage(error), meta.globalErrorTitle ?? "요청 실패");
+      toast.error(getUserFacingErrorMessage(error), meta.globalErrorTitle ?? "요청 실패");
     },
   }),
   mutationCache: new MutationCache({
@@ -31,7 +25,7 @@ export const queryClient = new QueryClient({
         return;
       }
 
-      toast.error(getErrorMessage(error), meta.globalErrorTitle ?? "요청 실패");
+      toast.error(getUserFacingErrorMessage(error), meta.globalErrorTitle ?? "요청 실패");
     },
   }),
   defaultOptions: {

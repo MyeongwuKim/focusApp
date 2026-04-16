@@ -1,46 +1,80 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system/legacy";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  type AppStateStatus,
   BackHandler,
   Linking,
   NativeModules,
   PermissionsAndroid,
-  Pressable,
-  Text,
   Platform,
   StyleSheet,
   View,
   useWindowDimensions,
-} from 'react-native';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system/legacy';
-import Constants from 'expo-constants';
-import { embeddedWebUiFiles } from '../src/features/webui/embeddedWebUiBundle';
-import { NativeWeatherLayer } from '../src/features/weather/components/NativeWeatherLayer';
-import { useRestNotificationBridge } from '../src/features/notifications/hooks/useRestNotificationBridge';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import { useRestNotificationBridge } from "../src/features/notifications/hooks/useRestNotificationBridge";
+import {
+  PermissionIntroModal,
+  type PermissionIntroStep,
+} from "../src/features/permissions/components/PermissionIntroModal";
+import {
+  readNativeTodoSession,
+  type NativeTodoSession,
+  writeNativeTodoSession,
+} from "../src/features/todo/nativeTodoSessionStorage";
+import { NativeWeatherLayer } from "../src/features/weather/components/NativeWeatherLayer";
+import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
 
 const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
 const MAX_SCALE = 1.08;
 const PERMISSION_INTRO_FILE_URI = `${
-  FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ''
+  FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
 }native-permission-intro-v2.json`;
 
-type NativePermissionState = 'granted' | 'denied' | 'undetermined';
-type PermissionStep = 'notification' | 'location';
+type NativePermissionState = "granted" | "denied" | "undetermined";
 type LocationPermissionSnapshot = {
   granted: boolean;
   canAskAgain: boolean;
   status: NativePermissionState;
 };
+type NativeCoordinates = {
+  latitude: number;
+  longitude: number;
+};
+type LocationCoordinatesSnapshot = LocationPermissionSnapshot & {
+  coordinates: NativeCoordinates | null;
+};
 type GeolocationLike = {
   getCurrentPosition: (
-    success: () => void,
-    failure: () => void,
+    success: (position: { coords?: { latitude?: number; longitude?: number } }) => void,
+    failure: (error?: unknown) => void,
     options?: { enableHighAccuracy?: boolean; timeout?: number; maximumAge?: number }
   ) => void;
+};
+
+type TodoSessionSyncPayload = {
+  active?: boolean;
+  dateKey?: string | null;
+  todoId?: string | null;
+  startedAt?: string | null;
+  sessionId?: string | null;
+  syncedAtMs?: number;
+};
+
+type TodoSessionRecoveryPayload = {
+  dateKey: string;
+  todoId: string;
+  startedAt: string;
+  sessionId: string;
+  backgroundEnteredAtMs: number;
+  resumedAtMs: number;
+  elapsedSeconds: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -50,17 +84,17 @@ function clamp(value: number, min: number, max: number) {
 function isLoopbackHost(host: string) {
   const normalized = host.trim().toLowerCase();
   return (
-    normalized === 'localhost' ||
-    normalized === '127.0.0.1' ||
-    normalized === '::1' ||
-    normalized === '[::1]'
+    normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]"
   );
 }
 
 function resolveHybridApiOrigin() {
   const envOrigin = process.env.EXPO_PUBLIC_API_ORIGIN ?? process.env.EXPO_PUBLIC_API_BASE_URL;
   if (envOrigin?.trim()) {
-    const cleaned = envOrigin.trim().replace(/\/graphql\/?$/i, '').replace(/\/+$/, '');
+    const cleaned = envOrigin
+      .trim()
+      .replace(/\/graphql\/?$/i, "")
+      .replace(/\/+$/, "");
     return cleaned;
   }
 
@@ -74,15 +108,15 @@ function resolveHybridApiOrigin() {
   }
 
   const expoHostUri =
-    ((Constants.expoConfig as { hostUri?: string } | null)?.hostUri ??
-      (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost) ??
+    (Constants.expoConfig as { hostUri?: string } | null)?.hostUri ??
+    (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost ??
     null;
-  const expoHost = expoHostUri?.split(':')[0];
+  const expoHost = expoHostUri?.split(":")[0];
   if (expoHost && !isLoopbackHost(expoHost)) {
     return `http://${expoHost}:4000`;
   }
 
-  return 'http://localhost:4000';
+  return "http://localhost:4000";
 }
 
 function readCallbackValue(url: URL, key: string) {
@@ -91,8 +125,8 @@ function readCallbackValue(url: URL, key: string) {
     return fromSearch;
   }
 
-  const hash = url.hash ?? '';
-  const hashQueryIndex = hash.indexOf('?');
+  const hash = url.hash ?? "";
+  const hashQueryIndex = hash.indexOf("?");
   if (hashQueryIndex >= 0) {
     const hashQuery = hash.slice(hashQueryIndex + 1);
     return new URLSearchParams(hashQuery).get(key);
@@ -105,28 +139,28 @@ function resolveAuthCallbackHashFromUrl(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
     const looksLikeAuthCallback =
-      parsed.protocol === 'mobile:' ||
-      rawUrl.includes('/auth/callback') ||
-      parsed.hash.includes('/auth/callback') ||
-      (parsed.protocol === 'file:' && parsed.pathname.endsWith('/index.html'));
+      parsed.protocol === "mobile:" ||
+      rawUrl.includes("/auth/callback") ||
+      parsed.hash.includes("/auth/callback") ||
+      (parsed.protocol === "file:" && parsed.pathname.endsWith("/index.html"));
     if (!looksLikeAuthCallback) {
       return null;
     }
 
-    const token = readCallbackValue(parsed, 'token');
+    const token = readCallbackValue(parsed, "token");
     if (!token) {
       return null;
     }
 
-    const userId = readCallbackValue(parsed, 'userId');
-    const error = readCallbackValue(parsed, 'error');
+    const userId = readCallbackValue(parsed, "userId");
+    const error = readCallbackValue(parsed, "error");
     const params = new URLSearchParams();
-    params.set('token', token);
+    params.set("token", token);
     if (userId) {
-      params.set('userId', userId);
+      params.set("userId", userId);
     }
     if (error) {
-      params.set('error', error);
+      params.set("error", error);
     }
 
     return `#/auth/callback?${params.toString()}`;
@@ -152,14 +186,14 @@ async function markNativePermissionIntroAsSeen() {
       { encoding: FileSystem.EncodingType.UTF8 }
     );
   } catch (error) {
-    console.log('Failed to store native permission intro state:', error);
+    console.log("Failed to store native permission intro state:", error);
   }
 }
 
 function loadExpoLocationModule() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const loadedModule = require('expo-location') as {
+    const loadedModule = require("expo-location") as {
       getForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
       requestForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
     };
@@ -174,30 +208,30 @@ async function getLocationPermissionState(): Promise<NativePermissionState> {
   if (expoLocation?.getForegroundPermissionsAsync) {
     try {
       const result = await expoLocation.getForegroundPermissionsAsync();
-      if (result.granted || result.status === 'granted') {
-        return 'granted';
+      if (result.granted || result.status === "granted") {
+        return "granted";
       }
-      if (result.status === 'denied') {
-        return 'denied';
+      if (result.status === "denied") {
+        return "denied";
       }
-      return 'undetermined';
+      return "undetermined";
     } catch (error) {
-      console.log('Failed to check location permission via expo-location:', error);
-      return 'undetermined';
+      console.log("Failed to check location permission via expo-location:", error);
+      return "undetermined";
     }
   }
 
-  if (Platform.OS === 'android') {
+  if (Platform.OS === "android") {
     try {
       const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-      return granted ? 'granted' : 'undetermined';
+      return granted ? "granted" : "undetermined";
     } catch (error) {
-      console.log('Failed to check Android location permission:', error);
-      return 'undetermined';
+      console.log("Failed to check Android location permission:", error);
+      return "undetermined";
     }
   }
 
-  return 'undetermined';
+  return "undetermined";
 }
 
 async function requestLocationPermission(): Promise<boolean> {
@@ -205,19 +239,19 @@ async function requestLocationPermission(): Promise<boolean> {
   if (expoLocation?.requestForegroundPermissionsAsync) {
     try {
       const result = await expoLocation.requestForegroundPermissionsAsync();
-      return result.granted || result.status === 'granted';
+      return result.granted || result.status === "granted";
     } catch (error) {
-      console.log('Failed to request location permission via expo-location:', error);
+      console.log("Failed to request location permission via expo-location:", error);
       return false;
     }
   }
 
-  if (Platform.OS === 'android') {
+  if (Platform.OS === "android") {
     try {
       const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
       return result === PermissionsAndroid.RESULTS.GRANTED;
     } catch (error) {
-      console.log('Failed to request Android location permission:', error);
+      console.log("Failed to request Android location permission:", error);
       return false;
     }
   }
@@ -241,24 +275,86 @@ async function getLocationPermissionSnapshot(): Promise<LocationPermissionSnapsh
   if (expoLocation?.getForegroundPermissionsAsync) {
     try {
       const result = await expoLocation.getForegroundPermissionsAsync();
-      const granted = Boolean(result.granted || result.status === 'granted');
+      const granted = Boolean(result.granted || result.status === "granted");
       const status: NativePermissionState =
-        result.status === 'granted' ? 'granted' : result.status === 'denied' ? 'denied' : 'undetermined';
+        result.status === "granted" ? "granted" : result.status === "denied" ? "denied" : "undetermined";
       return {
         granted,
         canAskAgain: Boolean((result as { canAskAgain?: boolean }).canAskAgain),
         status,
       };
     } catch (error) {
-      console.log('Failed to read location permission snapshot via expo-location:', error);
+      console.log("Failed to read location permission snapshot via expo-location:", error);
     }
   }
 
   const status = await getLocationPermissionState();
   return {
-    granted: status === 'granted',
-    canAskAgain: status !== 'denied',
+    granted: status === "granted",
+    canAskAgain: status !== "denied",
     status,
+  };
+}
+
+async function getCurrentLocationCoordinates(): Promise<NativeCoordinates | null> {
+  const expoLocation = loadExpoLocationModule() as {
+    getCurrentPositionAsync?: (options?: {
+      accuracy?: number;
+      timeout?: number;
+      maximumAge?: number;
+    }) => Promise<{ coords?: { latitude?: number; longitude?: number } }>;
+  } | null;
+
+  if (expoLocation?.getCurrentPositionAsync) {
+    try {
+      const result = await expoLocation.getCurrentPositionAsync({
+        timeout: 8000,
+      });
+      const latitude = result?.coords?.latitude;
+      const longitude = result?.coords?.longitude;
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        return { latitude, longitude };
+      }
+    } catch (error) {
+      console.log("Failed to read current position via expo-location:", error);
+    }
+  }
+
+  const geolocation = (globalThis.navigator as { geolocation?: GeolocationLike } | undefined)?.geolocation;
+  if (!geolocation?.getCurrentPosition) {
+    return null;
+  }
+
+  return await new Promise<NativeCoordinates | null>((resolve) => {
+    geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = position?.coords?.latitude;
+        const longitude = position?.coords?.longitude;
+        if (typeof latitude === "number" && typeof longitude === "number") {
+          resolve({ latitude, longitude });
+          return;
+        }
+        resolve(null);
+      },
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
+    );
+  });
+}
+
+async function getLocationCoordinatesSnapshot(): Promise<LocationCoordinatesSnapshot> {
+  const permission = await getLocationPermissionSnapshot();
+  if (!permission.granted) {
+    return {
+      ...permission,
+      coordinates: null,
+    };
+  }
+
+  const coordinates = await getCurrentLocationCoordinates();
+  return {
+    ...permission,
+    coordinates,
   };
 }
 
@@ -272,11 +368,15 @@ export default function WebViewScreen() {
   const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
   const [isRequestingLocationPermission, setIsRequestingLocationPermission] = useState(false);
   const [isNotificationGranted, setIsNotificationGranted] = useState(false);
-  const [locationPermissionState, setLocationPermissionState] = useState<NativePermissionState>('undetermined');
-  const [permissionStep, setPermissionStep] = useState<PermissionStep>('notification');
+  const [locationPermissionState, setLocationPermissionState] =
+    useState<NativePermissionState>("undetermined");
+  const [permissionStep, setPermissionStep] = useState<PermissionIntroStep>("notification");
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const nativeTodoSessionRef = useRef<NativeTodoSession | null>(null);
+  const pendingTodoSessionRecoveryRef = useRef<TodoSessionRecoveryPayload | null>(null);
 
   const navigateWebViewByTargetPath = (targetPath: string) => {
-    if (!targetPath.startsWith('/')) {
+    if (!targetPath.startsWith("/")) {
       return;
     }
 
@@ -292,6 +392,46 @@ export default function WebViewScreen() {
     );
     pendingNotificationPathRef.current = null;
   };
+
+  const dispatchNativeBridgeEvent = useCallback(
+    (message: { type: string; payload?: Record<string, unknown> }) => {
+      if (!webViewRef.current || !isWebViewReadyRef.current) {
+        return;
+      }
+
+      const bridgeMessage = JSON.stringify(message);
+      webViewRef.current.injectJavaScript(
+        `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${bridgeMessage} })); true;`
+      );
+    },
+    []
+  );
+
+  const persistNativeTodoSession = useCallback(async (session: NativeTodoSession | null) => {
+    nativeTodoSessionRef.current = session;
+    await writeNativeTodoSession(session);
+  }, []);
+
+  const dispatchPendingTodoSessionRecovery = useCallback(async () => {
+    const pending = pendingTodoSessionRecoveryRef.current;
+    if (!pending || !isWebViewReadyRef.current) {
+      return;
+    }
+
+    dispatchNativeBridgeEvent({
+      type: "RN_TODO_SESSION_RECOVERY",
+      payload: pending,
+    });
+    pendingTodoSessionRecoveryRef.current = null;
+
+    const current = nativeTodoSessionRef.current;
+    if (current && current.sessionId === pending.sessionId && current.backgroundEnteredAtMs !== null) {
+      await persistNativeTodoSession({
+        ...current,
+        backgroundEnteredAtMs: null,
+      });
+    }
+  }, [dispatchNativeBridgeEvent, persistNativeTodoSession]);
 
   const {
     handleRestNotificationBridgeMessage,
@@ -347,15 +487,25 @@ export default function WebViewScreen() {
       `(() => {
         const root = document.documentElement;
         root.style.setProperty('--ui-scale', '${uiScale.toFixed(3)}');
-        root.style.setProperty('--calendar-cell-min-h', '${calendarLayoutVars.cellMinHeightRem.toFixed(3)}rem');
+        root.style.setProperty('--calendar-cell-min-h', '${calendarLayoutVars.cellMinHeightRem.toFixed(
+          3
+        )}rem');
         root.style.setProperty('--calendar-top-row-h', '${calendarLayoutVars.topRowHeightRem.toFixed(3)}rem');
         root.style.setProperty('--calendar-icon-size', '${calendarLayoutVars.iconSizePx}px');
         root.style.setProperty('--calendar-icon-padding', '${calendarLayoutVars.iconPaddingPx}px');
         root.style.setProperty('--calendar-icon-gap', '${calendarLayoutVars.iconGapPx}px');
-        root.style.setProperty('--calendar-icon-slot-single-w', '${calendarLayoutVars.iconSlotSingleWidthPx}px');
-        root.style.setProperty('--calendar-icon-slot-double-w', '${calendarLayoutVars.iconSlotDoubleWidthPx}px');
-        root.style.setProperty('--calendar-date-slot-w', '${calendarLayoutVars.dateSlotWidthCh.toFixed(2)}ch');
-        root.style.setProperty('--calendar-date-number-size', '${calendarLayoutVars.numberFontRem.toFixed(3)}rem');
+        root.style.setProperty('--calendar-icon-slot-single-w', '${
+          calendarLayoutVars.iconSlotSingleWidthPx
+        }px');
+        root.style.setProperty('--calendar-icon-slot-double-w', '${
+          calendarLayoutVars.iconSlotDoubleWidthPx
+        }px');
+        root.style.setProperty('--calendar-date-slot-w', '${calendarLayoutVars.dateSlotWidthCh.toFixed(
+          2
+        )}ch');
+        root.style.setProperty('--calendar-date-number-size', '${calendarLayoutVars.numberFontRem.toFixed(
+          3
+        )}rem');
       })(); true;`,
     [calendarLayoutVars, uiScale]
   );
@@ -414,6 +564,40 @@ export default function WebViewScreen() {
   useEffect(() => {
     let cancelled = false;
 
+    const hydrateNativeTodoSession = async () => {
+      const stored = await readNativeTodoSession();
+      if (cancelled || !stored) {
+        return;
+      }
+
+      nativeTodoSessionRef.current = stored;
+      if (stored.backgroundEnteredAtMs === null) {
+        return;
+      }
+
+      const resumedAtMs = Date.now();
+      pendingTodoSessionRecoveryRef.current = {
+        dateKey: stored.dateKey,
+        todoId: stored.todoId,
+        startedAt: stored.startedAt,
+        sessionId: stored.sessionId,
+        backgroundEnteredAtMs: stored.backgroundEnteredAtMs,
+        resumedAtMs,
+        elapsedSeconds: Math.max(Math.floor((resumedAtMs - stored.backgroundEnteredAtMs) / 1000), 0),
+      };
+      await dispatchPendingTodoSessionRecovery();
+    };
+
+    void hydrateNativeTodoSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatchPendingTodoSessionRecovery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const initializePermissionIntro = async () => {
       try {
         const [hasSeenIntro, notificationGranted, currentLocationPermissionState] = await Promise.all([
@@ -428,7 +612,7 @@ export default function WebViewScreen() {
         setIsNotificationGranted(notificationGranted);
         setLocationPermissionState(currentLocationPermissionState);
 
-        const allGranted = notificationGranted && currentLocationPermissionState === 'granted';
+        const allGranted = notificationGranted && currentLocationPermissionState === "granted";
         if (hasSeenIntro || allGranted) {
           if (!hasSeenIntro) {
             await markNativePermissionIntroAsSeen();
@@ -437,11 +621,11 @@ export default function WebViewScreen() {
             setIsPermissionIntroVisible(false);
           }
         } else {
-          setPermissionStep(notificationGranted ? 'location' : 'notification');
+          setPermissionStep(notificationGranted ? "location" : "notification");
           setIsPermissionIntroVisible(true);
         }
       } catch (error) {
-        console.log('Failed to initialize native permission intro:', error);
+        console.log("Failed to initialize native permission intro:", error);
         if (!cancelled) {
           setIsPermissionIntroVisible(true);
         }
@@ -471,12 +655,12 @@ export default function WebViewScreen() {
       setIsNotificationGranted(granted);
       if (!granted) {
         await Linking.openSettings().catch((error) => {
-          console.log('Failed to open settings from notification permission handler:', error);
+          console.log("Failed to open settings from notification permission handler:", error);
         });
       }
-      setPermissionStep('location');
+      setPermissionStep("location");
     } catch (error) {
-      console.log('Failed to request notification permission from intro screen:', error);
+      console.log("Failed to request notification permission from intro screen:", error);
     } finally {
       setIsRequestingNotificationPermission(false);
     }
@@ -486,16 +670,16 @@ export default function WebViewScreen() {
     setIsRequestingLocationPermission(true);
     try {
       const granted = await requestLocationPermission();
-      const nextState = granted ? 'granted' : await getLocationPermissionState();
+      const nextState = granted ? "granted" : await getLocationPermissionState();
       setLocationPermissionState(nextState);
       if (!granted) {
         await Linking.openSettings().catch((error) => {
-          console.log('Failed to open settings from location permission handler:', error);
+          console.log("Failed to open settings from location permission handler:", error);
         });
       }
       await closePermissionIntro();
     } catch (error) {
-      console.log('Failed to request location permission from intro screen:', error);
+      console.log("Failed to request location permission from intro screen:", error);
     } finally {
       setIsRequestingLocationPermission(false);
     }
@@ -509,7 +693,7 @@ export default function WebViewScreen() {
 
         for (const file of embeddedWebUiFiles) {
           const targetUri = `${baseDir}${file.path}`;
-          const targetDir = targetUri.slice(0, targetUri.lastIndexOf('/') + 1);
+          const targetDir = targetUri.slice(0, targetUri.lastIndexOf("/") + 1);
 
           await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true });
           await FileSystem.writeAsStringAsync(targetUri, file.contentBase64, {
@@ -520,23 +704,23 @@ export default function WebViewScreen() {
         let currentHtml = await FileSystem.readAsStringAsync(fileUri, {
           encoding: FileSystem.EncodingType.UTF8,
         });
-        currentHtml = currentHtml.replace(/\s+crossorigin(?=[\s>])/gi, '');
+        currentHtml = currentHtml.replace(/\s+crossorigin(?=[\s>])/gi, "");
         await FileSystem.writeAsStringAsync(fileUri, currentHtml, {
           encoding: FileSystem.EncodingType.UTF8,
         });
 
         const indexInfo = await FileSystem.getInfoAsync(fileUri);
         if (!indexInfo.exists) {
-          Alert.alert('WebView Error', `index.html not found at ${fileUri}`);
+          Alert.alert("WebView Error", `index.html not found at ${fileUri}`);
           return;
         }
 
-        console.log('Prepared local web-ui file:', fileUri);
+        console.log("Prepared local web-ui file:", fileUri);
         setLocalFileUri(fileUri);
         setWebViewUri(fileUri);
       } catch (error) {
-        console.log('Failed to prepare local web-ui file:', error);
-        Alert.alert('WebView Error', 'Failed to prepare local web-ui file.');
+        console.log("Failed to prepare local web-ui file:", error);
+        Alert.alert("WebView Error", "Failed to prepare local web-ui file.");
       } finally {
         setIsPreparingLocalFile(false);
       }
@@ -546,7 +730,7 @@ export default function WebViewScreen() {
   }, []);
 
   useEffect(() => {
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (webViewRef.current && canGoBack) {
         webViewRef.current.goBack();
         return true;
@@ -558,6 +742,62 @@ export default function WebViewScreen() {
       subscription.remove();
     };
   }, [canGoBack]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const previousState = appStateRef.current;
+      appStateRef.current = nextState;
+
+      if (previousState === nextState) {
+        return;
+      }
+
+      dispatchNativeBridgeEvent({
+        type: "RN_APP_STATE_CHANGED",
+        payload: {
+          state: nextState,
+          previousState,
+          isActive: nextState === "active",
+        },
+      });
+
+      const currentSession = nativeTodoSessionRef.current;
+      if (!currentSession) {
+        return;
+      }
+
+      if (nextState === "inactive" || nextState === "background") {
+        if (currentSession.backgroundEnteredAtMs !== null) {
+          return;
+        }
+        void persistNativeTodoSession({
+          ...currentSession,
+          backgroundEnteredAtMs: Date.now(),
+        });
+        return;
+      }
+
+      if (nextState !== "active" || currentSession.backgroundEnteredAtMs === null) {
+        return;
+      }
+
+      const resumedAtMs = Date.now();
+      pendingTodoSessionRecoveryRef.current = {
+        dateKey: currentSession.dateKey,
+        todoId: currentSession.todoId,
+        startedAt: currentSession.startedAt,
+        sessionId: currentSession.sessionId,
+        backgroundEnteredAtMs: currentSession.backgroundEnteredAtMs,
+        resumedAtMs,
+        elapsedSeconds: Math.max(Math.floor((resumedAtMs - currentSession.backgroundEnteredAtMs) / 1000), 0),
+      };
+      void dispatchPendingTodoSessionRecovery();
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [dispatchNativeBridgeEvent, dispatchPendingTodoSessionRecovery, persistNativeTodoSession]);
 
   useEffect(() => {
     if (!localFileUri || !webViewRef.current) {
@@ -579,17 +819,47 @@ export default function WebViewScreen() {
     try {
       const parsedData = JSON.parse(data);
       if (parsedData?.__wvDebug) {
-        console.log('[WebView debug]', parsedData.type, parsedData.payload);
+        console.log("[WebView debug]", parsedData.type, parsedData.payload);
         return;
       }
-      if (parsedData?.type === 'REST_NOTIFICATION_PERMISSION_STATUS_REQUEST') {
+      if (parsedData?.type === "REST_TODO_SESSION_SYNC") {
+        const payload = (parsedData?.payload ?? {}) as TodoSessionSyncPayload;
+        if (!payload.active) {
+          pendingTodoSessionRecoveryRef.current = null;
+          await persistNativeTodoSession(null);
+          return;
+        }
+
+        if (
+          typeof payload.dateKey !== "string" ||
+          typeof payload.todoId !== "string" ||
+          typeof payload.startedAt !== "string" ||
+          typeof payload.sessionId !== "string"
+        ) {
+          return;
+        }
+
+        const previous = nativeTodoSessionRef.current;
+        const shouldKeepBackgroundEnteredAt =
+          previous?.sessionId === payload.sessionId ? previous.backgroundEnteredAtMs : null;
+        await persistNativeTodoSession({
+          dateKey: payload.dateKey,
+          todoId: payload.todoId,
+          startedAt: payload.startedAt,
+          sessionId: payload.sessionId,
+          syncedAtMs: typeof payload.syncedAtMs === "number" ? payload.syncedAtMs : Date.now(),
+          backgroundEnteredAtMs: shouldKeepBackgroundEnteredAt,
+        });
+        return;
+      }
+      if (parsedData?.type === "REST_NOTIFICATION_PERMISSION_STATUS_REQUEST") {
         const requestId =
-          typeof parsedData?.requestId === 'string' && parsedData.requestId.trim()
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
             ? parsedData.requestId
             : null;
         const snapshot = await getRestNotificationPermissionSnapshot();
         const bridgeMessage = {
-          type: 'REST_NOTIFICATION_PERMISSION_STATUS_RESULT',
+          type: "REST_NOTIFICATION_PERMISSION_STATUS_RESULT",
           requestId,
           payload: snapshot,
         };
@@ -601,21 +871,21 @@ export default function WebViewScreen() {
         return;
       }
 
-      if (parsedData?.type === 'REST_APP_OPEN_SETTINGS') {
+      if (parsedData?.type === "REST_APP_OPEN_SETTINGS") {
         await Linking.openSettings().catch((error) => {
-          console.log('Failed to open settings from web bridge:', error);
+          console.log("Failed to open settings from web bridge:", error);
         });
         return;
       }
 
-      if (parsedData?.type === 'REST_LOCATION_PERMISSION_STATUS_REQUEST') {
+      if (parsedData?.type === "REST_LOCATION_PERMISSION_STATUS_REQUEST") {
         const requestId =
-          typeof parsedData?.requestId === 'string' && parsedData.requestId.trim()
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
             ? parsedData.requestId
             : null;
         const snapshot = await getLocationPermissionSnapshot();
         const bridgeMessage = {
-          type: 'REST_LOCATION_PERMISSION_STATUS_RESULT',
+          type: "REST_LOCATION_PERMISSION_STATUS_RESULT",
           requestId,
           payload: snapshot,
         };
@@ -627,14 +897,33 @@ export default function WebViewScreen() {
         return;
       }
 
-      if (parsedData?.type === 'REST_PUSH_TOKEN_REQUEST') {
+      if (parsedData?.type === "REST_LOCATION_COORDINATES_REQUEST") {
         const requestId =
-          typeof parsedData?.requestId === 'string' && parsedData.requestId.trim()
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        const snapshot = await getLocationCoordinatesSnapshot();
+        const bridgeMessage = {
+          type: "REST_LOCATION_COORDINATES_RESULT",
+          requestId,
+          payload: snapshot,
+        };
+        webViewRef.current?.injectJavaScript(
+          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+            bridgeMessage
+          )} })); true;`
+        );
+        return;
+      }
+
+      if (parsedData?.type === "REST_PUSH_TOKEN_REQUEST") {
+        const requestId =
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
             ? parsedData.requestId
             : null;
         const snapshot = await getRestExpoPushTokenSnapshot();
         const bridgeMessage = {
-          type: 'REST_PUSH_TOKEN_RESULT',
+          type: "REST_PUSH_TOKEN_RESULT",
           requestId,
           payload: snapshot,
         };
@@ -650,18 +939,18 @@ export default function WebViewScreen() {
       if (isHandledBridgeMessage) {
         return;
       }
-      console.log('Message from web-ui:', parsedData);
-      Alert.alert('Message from Web', JSON.stringify(parsedData));
+      console.log("Message from web-ui:", parsedData);
+      Alert.alert("Message from Web", JSON.stringify(parsedData));
     } catch (error) {
-      console.log('Failed to parse web message:', data, error);
-      console.log('[WebView raw message]', data);
+      console.log("Failed to parse web message:", data, error);
+      console.log("[WebView raw message]", data);
     }
   };
 
   const showPermissionIntro = isPermissionIntroReady && isPermissionIntroVisible;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       {isPreparingLocalFile ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" />
@@ -677,7 +966,7 @@ export default function WebViewScreen() {
           <WebView
             ref={webViewRef}
             source={source}
-            originWhitelist={['*']}
+            originWhitelist={["*"]}
             javaScriptEnabled
             domStorageEnabled
             allowsBackForwardNavigationGestures
@@ -689,9 +978,9 @@ export default function WebViewScreen() {
             allowFileAccessFromFileURLs
             allowUniversalAccessFromFileURLs
             onShouldStartLoadWithRequest={(request) => {
-              console.log('WebView should start request:', request.url);
+              console.log("WebView should start request:", request.url);
 
-              if (request.url.startsWith('mobile://')) {
+              if (request.url.startsWith("mobile://")) {
                 const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
                 if (callbackHash && localFileUri) {
                   const nextLocalUri = `${localFileUri}${callbackHash}`;
@@ -701,9 +990,9 @@ export default function WebViewScreen() {
               }
 
               if (
-                request.url.startsWith('file://') &&
-                request.url.includes('#/auth/callback') &&
-                request.url.includes('token=')
+                request.url.startsWith("file://") &&
+                request.url.includes("#/auth/callback") &&
+                request.url.includes("token=")
               ) {
                 return true;
               }
@@ -718,15 +1007,24 @@ export default function WebViewScreen() {
               return false;
             }}
             onLoadStart={() => {
-              console.log('WebView load start:', source?.uri);
+              console.log("WebView load start:", source?.uri);
               isWebViewReadyRef.current = false;
             }}
             onLoadEnd={() => {
-              console.log('WebView load end:', source?.uri);
+              console.log("WebView load end:", source?.uri);
               isWebViewReadyRef.current = true;
               if (webViewRef.current) {
                 webViewRef.current.injectJavaScript(applyScaleScript);
               }
+              dispatchNativeBridgeEvent({
+                type: "RN_APP_STATE_CHANGED",
+                payload: {
+                  state: appStateRef.current,
+                  previousState: appStateRef.current,
+                  isActive: appStateRef.current === "active",
+                },
+              });
+              void dispatchPendingTodoSessionRecovery();
               const pendingTargetPath = pendingNotificationPathRef.current;
               if (pendingTargetPath) {
                 const hashPath = `#${pendingTargetPath}`;
@@ -737,22 +1035,22 @@ export default function WebViewScreen() {
               }
             }}
             onLoadProgress={(event) => {
-              console.log('WebView load progress:', event.nativeEvent.progress);
+              console.log("WebView load progress:", event.nativeEvent.progress);
             }}
             onNavigationStateChange={(navState) => {
               setCanGoBack(navState.canGoBack);
             }}
             onMessage={handleMessage}
             onHttpError={(event) => {
-              console.log('WebView HTTP error:', event.nativeEvent.statusCode, event.nativeEvent.description);
+              console.log("WebView HTTP error:", event.nativeEvent.statusCode, event.nativeEvent.description);
             }}
             onContentProcessDidTerminate={() => {
-              console.log('WebView content process terminated');
+              console.log("WebView content process terminated");
             }}
             onError={(event) => {
-              const msg = event.nativeEvent.description || 'Unknown WebView error';
-              console.log('WebView error:', msg);
-              Alert.alert('WebView Error', msg);
+              const msg = event.nativeEvent.description || "Unknown WebView error";
+              console.log("WebView error:", msg);
+              Alert.alert("WebView Error", msg);
             }}
             startInLoadingState
             renderLoading={() => (
@@ -765,82 +1063,22 @@ export default function WebViewScreen() {
         </View>
       ) : null}
       {showPermissionIntro ? (
-        <View style={styles.permissionIntroOverlay}>
-          <View style={styles.permissionIntroCard}>
-            {permissionStep === 'notification' ? (
-              <View style={styles.permissionTextWrap}>
-                <Text style={styles.permissionRowTitle}>푸시 알림 권한 설정</Text>
-                <Text style={styles.permissionRowDescription}>
-                  리마인드를 더 잘 도와드릴 수 있도록{'\n'}
-                  푸시 알림을 켜둘까요?
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.permissionTextWrap}>
-                <Text style={styles.permissionRowTitle}>위치 권한 설정</Text>
-                <Text style={styles.permissionRowDescription}>
-                  캘린더에 날씨 효과를 보여드리기 위해{'\n'}
-                  위치 권한이 필요해요.
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.permissionFooterActions}>
-              {permissionStep === 'notification' ? (
-                <>
-                  <Pressable
-                    style={styles.permissionGhostButton}
-                    onPress={() => {
-                      setPermissionStep('location');
-                    }}
-                  >
-                    <Text style={styles.permissionGhostButtonText}>아니요, 다음에요</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.permissionPrimaryButton}
-                    onPress={handleRequestNotificationPermission}
-                    disabled={isRequestingNotificationPermission}
-                  >
-                    <Text style={styles.permissionPrimaryButtonText}>
-                      {isRequestingNotificationPermission ? '요청 중' : '좋아요, 할게요'}
-                    </Text>
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <Pressable
-                    style={styles.permissionGhostButton}
-                    onPress={() => {
-                      void closePermissionIntro();
-                    }}
-                  >
-                    <Text style={styles.permissionGhostButtonText}>아니요, 다음에요</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.permissionPrimaryButton}
-                    onPress={handleRequestLocationPermission}
-                    disabled={isRequestingLocationPermission}
-                  >
-                    <Text style={styles.permissionPrimaryButtonText}>
-                      {isRequestingLocationPermission ? '요청 중' : '좋아요, 할게요'}
-                    </Text>
-                  </Pressable>
-                </>
-              )}
-            </View>
-
-            <Pressable
-              style={styles.permissionSettingsLink}
-              onPress={() => {
-                Linking.openSettings().catch((error) => {
-                  console.log('Failed to open settings from permission intro:', error);
-                });
-              }}
-            >
-              <Text style={styles.permissionSettingsLinkText}>권한은 설정에서 언제든 다시 변경할 수 있어요</Text>
-            </Pressable>
-          </View>
-        </View>
+        <PermissionIntroModal
+          step={permissionStep}
+          isRequestingNotificationPermission={isRequestingNotificationPermission}
+          isRequestingLocationPermission={isRequestingLocationPermission}
+          onMoveToLocationStep={() => setPermissionStep("location")}
+          onRequestNotificationPermission={handleRequestNotificationPermission}
+          onRequestLocationPermission={handleRequestLocationPermission}
+          onClose={() => {
+            void closePermissionIntro();
+          }}
+          onOpenSettings={() => {
+            Linking.openSettings().catch((error) => {
+              console.log("Failed to open settings from permission intro:", error);
+            });
+          }}
+        />
       ) : null}
     </SafeAreaView>
   );
@@ -852,89 +1090,10 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   webViewContainer: {
     flex: 1,
-  },
-  permissionIntroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    paddingHorizontal: 20,
-    backgroundColor: '#F4F8FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  permissionIntroCard: {
-    width: '100%',
-    maxWidth: 430,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#DCE8FF',
-    paddingHorizontal: 18,
-    paddingTop: 22,
-    paddingBottom: 18,
-    shadowColor: '#2F5FCB',
-    shadowOpacity: 0.13,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 6,
-  },
-  permissionTextWrap: {
-    gap: 8,
-  },
-  permissionRowTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#14326F',
-    letterSpacing: -0.3,
-  },
-  permissionRowDescription: {
-    fontSize: 15,
-    lineHeight: 24,
-    color: '#3F5D99',
-  },
-  permissionFooterActions: {
-    marginTop: 22,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  permissionGhostButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#CFDBF8',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#F6F9FF',
-  },
-  permissionGhostButtonText: {
-    color: '#395A9A',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  permissionPrimaryButton: {
-    flex: 1,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#1F5FFF',
-  },
-  permissionPrimaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 14,
-  },
-  permissionSettingsLink: {
-    marginTop: 14,
-    alignSelf: 'center',
-  },
-  permissionSettingsLinkText: {
-    color: '#49669F',
-    fontSize: 13,
-    fontWeight: '500',
   },
 });

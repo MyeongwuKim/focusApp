@@ -18,11 +18,12 @@ type MePayload = {
   } | null;
 };
 
-export async function fetchMe() {
+export async function fetchMe(options?: { signal?: AbortSignal }) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({ query: ME_QUERY }),
+    signal: options?.signal,
   });
 
   if (!response.ok) {

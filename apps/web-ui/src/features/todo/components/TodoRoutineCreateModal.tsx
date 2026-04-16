@@ -23,6 +23,7 @@ import { Button } from "../../../components/ui/Button";
 import { InputField } from "../../../components/ui/InputField";
 import { useTaskCollectionMutation, useTaskCollectionQuery } from "../../../queries";
 import { actionSheet, toast } from "../../../stores";
+import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 
 type RoutineDraftItem = {
   taskId?: string | null;
@@ -363,7 +364,7 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
       setQuickCreateMode(null);
       setQuickName("");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "추가 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "추가 중 오류가 발생했어요.");
       toast.show({
         type: "error",
         title: "추가 실패",

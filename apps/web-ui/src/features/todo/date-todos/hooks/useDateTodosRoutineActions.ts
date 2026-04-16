@@ -1,5 +1,6 @@
 import type { RoutineTemplate } from "../../../../api/routineTemplateApi";
 import { toast } from "../../../../stores";
+import { getUserFacingErrorMessage } from "../../../../utils/errorMessage";
 
 type CreateRoutineTemplateInput = {
   name: string;
@@ -167,7 +168,7 @@ export function useDateTodosRoutineActions({
         duration: 1800,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "루틴 저장 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "루틴 저장 중 오류가 발생했어요.");
       toast.show({
         type: "error",
         title: "루틴 저장 실패",
@@ -217,7 +218,7 @@ export function useDateTodosRoutineActions({
         duration: 1800,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "루틴 수정 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "루틴 수정 중 오류가 발생했어요.");
       toast.show({
         type: "error",
         title: "루틴 수정 실패",
@@ -237,7 +238,7 @@ export function useDateTodosRoutineActions({
         duration: 1800,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "루틴 삭제 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "루틴 삭제 중 오류가 발생했어요.");
       toast.show({
         type: "error",
         title: "루틴 삭제 실패",

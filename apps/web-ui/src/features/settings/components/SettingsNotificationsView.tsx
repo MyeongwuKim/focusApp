@@ -7,34 +7,37 @@ import {
 } from "../../../utils/notifications";
 import { SettingsDetailShell } from "./SettingsDetailShell";
 import { SegmentedToggle } from "../../../components/SegmentedToggle";
+import { TimePickerBottomSheet } from "../../../components/TimePickerBottomSheet";
 import {
   useNotificationSettingsMutation,
   useNotificationSettingsQuery,
   usePushDeviceTokenMutation,
 } from "../../../queries";
 import { toast } from "../../../stores";
+import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 
 type ReminderIntervalOption = "1" | "30" | "60" | "90" | "120";
 type ActiveDayMode = "weekday" | "everyday";
 type PreviewTone = "soft" | "balanced" | "firm";
 type NotificationTypeKey = "restEnd" | "incomplete" | "focusStart";
+type TimePickerTarget = "start" | "end";
 
 type NotificationTypeState = Record<NotificationTypeKey, boolean>;
 
 const PREVIEW_COPY: Record<PreviewTone, Record<NotificationTypeKey, string>> = {
   soft: {
     restEnd: "휴식이 끝났어요. 천천히 다시 집중해볼까요?",
-    incomplete: "아직 남은 작업이 있어요. 가볍게 이어가볼까요?",
+    incomplete: "아직 진행하지 않은 작업이 있어요. 가볍게 시작해볼까요?",
     focusStart: "집중 시간이에요. 오늘 목표부터 차분히 시작해볼까요?",
   },
   balanced: {
     restEnd: "휴식이 끝났어요. 지금 다시 집중을 시작해보세요.",
-    incomplete: "미완료 작업이 있어요. 지금 정리하면 흐름을 유지할 수 있어요.",
+    incomplete: "아직 진행 중인 작업이 남아 있어요. 지금 이어가면 흐름을 유지할 수 있어요.",
     focusStart: "집중 시작 시간입니다. 우선순위 작업부터 진행해보세요.",
   },
   firm: {
     restEnd: "휴식 종료. 지금 바로 작업으로 복귀해 주세요.",
-    incomplete: "미완료 작업이 남아 있습니다. 지금 정리해 주세요.",
+    incomplete: "진행 중인 작업이 남아 있습니다. 지금 바로 시작해 주세요.",
     focusStart: "집중 시작 시간입니다. 즉시 핵심 작업을 시작해 주세요.",
   },
 };
@@ -50,6 +53,7 @@ export function SettingsNotificationsView() {
   const [reminderInterval, setReminderInterval] = useState<ReminderIntervalOption>("60");
   const [activeStartTime, setActiveStartTime] = useState("09:00");
   const [activeEndTime, setActiveEndTime] = useState("23:00");
+  const [timePickerTarget, setTimePickerTarget] = useState<TimePickerTarget | null>(null);
   const [activeDayMode, setActiveDayMode] = useState<ActiveDayMode>("weekday");
   const [previewTone, setPreviewTone] = useState<PreviewTone>("soft");
   const [notificationTypes, setNotificationTypes] = useState<NotificationTypeState>({
@@ -175,7 +179,7 @@ export function SettingsNotificationsView() {
           lastSavedPayloadRef.current = serialized;
         },
         (error: unknown) => {
-          const message = error instanceof Error ? error.message : "알림 설정 저장 중 오류가 발생했어요.";
+          const message = getUserFacingErrorMessage(error, "알림 설정 저장 중 오류가 발생했어요.");
           toast.error(message, "저장 실패");
         }
       );
@@ -225,7 +229,7 @@ export function SettingsNotificationsView() {
         });
         lastRegisteredPushTokenRef.current = snapshot.pushToken;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "푸쉬 토큰 등록 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "푸쉬 토큰 등록 중 오류가 발생했어요.");
         toast.error(message, "토큰 등록 실패");
         hasTriedPushTokenRegistrationRef.current = false;
       }
@@ -289,20 +293,24 @@ export function SettingsNotificationsView() {
 
         <div className={`space-y-2 rounded-lg border border-base-300/60 bg-base-200/20 p-3 ${disabledClassName}`}>
           <p className="m-0 text-sm font-medium text-base-content/90">알림 활성화 시간대</p>
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              type="time"
-              className="input input-bordered input-sm w-28"
-              value={activeStartTime}
-              onChange={(event) => setActiveStartTime(event.target.value)}
-            />
-            <span className="text-sm text-base-content/60">~</span>
-            <input
-              type="time"
-              className="input input-bordered input-sm w-28"
-              value={activeEndTime}
-              onChange={(event) => setActiveEndTime(event.target.value)}
-            />
+          <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+            <button
+              type="button"
+              className="input input-bordered input-sm flex h-9 min-h-9 w-full min-w-0 items-center justify-between bg-base-100 px-3 text-left text-sm font-medium"
+              onClick={() => setTimePickerTarget("start")}
+            >
+              <span>{activeStartTime}</span>
+              <span className="text-xs text-base-content/45">시작</span>
+            </button>
+            <span className="px-1 text-sm text-base-content/60">~</span>
+            <button
+              type="button"
+              className="input input-bordered input-sm flex h-9 min-h-9 w-full min-w-0 items-center justify-between bg-base-100 px-3 text-left text-sm font-medium"
+              onClick={() => setTimePickerTarget("end")}
+            >
+              <span>{activeEndTime}</span>
+              <span className="text-xs text-base-content/45">종료</span>
+            </button>
           </div>
         </div>
 
@@ -347,7 +355,7 @@ export function SettingsNotificationsView() {
               options={[
                 { value: "soft", label: "포근한 톤" },
                 { value: "balanced", label: "기본 톤" },
-                { value: "firm", label: "집중 톤" },
+                { value: "firm", label: "단호한 톤" },
               ]}
               onChange={setPreviewTone}
             />
@@ -445,6 +453,19 @@ export function SettingsNotificationsView() {
           </div>
         </div>
       </div>
+      <TimePickerBottomSheet
+        isOpen={timePickerTarget !== null}
+        title={timePickerTarget === "start" ? "시작 시간 선택" : "종료 시간 선택"}
+        initialValue={timePickerTarget === "start" ? activeStartTime : activeEndTime}
+        onClose={() => setTimePickerTarget(null)}
+        onApply={(next) => {
+          if (timePickerTarget === "start") {
+            setActiveStartTime(next);
+            return;
+          }
+          setActiveEndTime(next);
+        }}
+      />
     </SettingsDetailShell>
   );
 }

@@ -254,6 +254,9 @@
     width: min(23rem, 100%);
     border-radius: 20px;
     padding: 1rem;
+    box-shadow:
+      0 18px 44px rgba(2, 8, 23, 0.24),
+      0 2px 8px rgba(2, 8, 23, 0.1);
     animation: toast-rise-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
@@ -304,6 +307,9 @@
     width: min(30rem, 100%);
     border-radius: 20px;
     padding: 0.85rem;
+    box-shadow:
+      0 18px 44px rgba(2, 8, 23, 0.24),
+      0 2px 8px rgba(2, 8, 23, 0.1);
     transform: translateY(0%);
     transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
     animation: action-sheet-rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -311,6 +317,139 @@
 
   .action-sheet-panel--leaving {
     transform: translateY(112%);
+  }
+
+  .time-picker-sheet-overlay {
+    justify-content: stretch;
+    padding: 0;
+  }
+
+  .time-picker-sheet-panel {
+    width: 100%;
+    max-width: none;
+    border-radius: 20px 20px 0 0;
+    border-bottom-width: 0;
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom));
+  }
+
+  .time-picker-wheel {
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+
+  .time-picker-wheel > div {
+    touch-action: pan-y;
+    will-change: transform;
+  }
+
+  .time-picker-wheel-grid {
+    gap: 0.25rem;
+  }
+
+  .time-picker-wheel-grid [data-rwp] {
+    width: 100%;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: pan-y;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 18%,
+      black 43%,
+      transparent 47%,
+      transparent 53%,
+      black 57%,
+      black 82%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 18%,
+      black 43%,
+      transparent 47%,
+      transparent 53%,
+      black 57%,
+      black 82%,
+      transparent 100%
+    );
+  }
+
+  .time-picker-wheel-option {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    font-weight: 500;
+    color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+    transition: color 160ms ease;
+    letter-spacing: -0.01em;
+  }
+
+  .time-picker-wheel-highlight-wrapper {
+    background: color-mix(in oklab, var(--color-base-100) 96%, transparent);
+    border-radius: 0.5rem;
+  }
+
+  .time-picker-wheel-highlight-item {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--color-base-content);
+    letter-spacing: -0.012em;
+  }
+
+  [data-theme="black"] .confirm-overlay,
+  [data-theme="night"] .confirm-overlay,
+  [data-theme="dracula"] .confirm-overlay,
+  [data-theme="dim"] .confirm-overlay,
+  [data-theme="sunset"] .confirm-overlay,
+  [data-theme="forest"] .confirm-overlay,
+  [data-theme="luxury"] .confirm-overlay,
+  [data-theme="coffee"] .confirm-overlay,
+  [data-theme="synthwave"] .confirm-overlay,
+  [data-theme="business"] .confirm-overlay,
+  [data-theme="black"] .action-sheet-overlay,
+  [data-theme="night"] .action-sheet-overlay,
+  [data-theme="dracula"] .action-sheet-overlay,
+  [data-theme="dim"] .action-sheet-overlay,
+  [data-theme="sunset"] .action-sheet-overlay,
+  [data-theme="forest"] .action-sheet-overlay,
+  [data-theme="luxury"] .action-sheet-overlay,
+  [data-theme="coffee"] .action-sheet-overlay,
+  [data-theme="synthwave"] .action-sheet-overlay,
+  [data-theme="business"] .action-sheet-overlay {
+    background: rgba(2, 6, 23, 0.48);
+    backdrop-filter: blur(3px);
+  }
+
+  [data-theme="black"] .confirm-modal,
+  [data-theme="night"] .confirm-modal,
+  [data-theme="dracula"] .confirm-modal,
+  [data-theme="dim"] .confirm-modal,
+  [data-theme="sunset"] .confirm-modal,
+  [data-theme="forest"] .confirm-modal,
+  [data-theme="luxury"] .confirm-modal,
+  [data-theme="coffee"] .confirm-modal,
+  [data-theme="synthwave"] .confirm-modal,
+  [data-theme="business"] .confirm-modal,
+  [data-theme="black"] .action-sheet-panel,
+  [data-theme="night"] .action-sheet-panel,
+  [data-theme="dracula"] .action-sheet-panel,
+  [data-theme="dim"] .action-sheet-panel,
+  [data-theme="sunset"] .action-sheet-panel,
+  [data-theme="forest"] .action-sheet-panel,
+  [data-theme="luxury"] .action-sheet-panel,
+  [data-theme="coffee"] .action-sheet-panel,
+  [data-theme="synthwave"] .action-sheet-panel,
+  [data-theme="business"] .action-sheet-panel {
+    border-color: color-mix(in oklab, var(--color-base-content) 26%, transparent);
+    box-shadow:
+      0 28px 72px rgba(0, 0, 0, 0.62),
+      0 0 0 1px color-mix(in oklab, var(--color-base-content) 14%, transparent),
+      inset 0 1px 0 color-mix(in oklab, white 10%, transparent);
   }
 
   .no-scrollbar {

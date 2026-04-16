@@ -13,6 +13,7 @@ import {
 } from "../features/task-management/state/taskManagementDataReducer";
 import { useTaskCollectionMutation, useTaskCollectionQuery } from "../queries";
 import { toast } from "../stores";
+import { getUserFacingErrorMessage } from "../utils/errorMessage";
 
 const DEFAULT_COLLECTION_ID = "collection-default";
 
@@ -96,7 +97,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
       });
       toast.positive("컬렉션이 추가되었습니다.", "추가됨");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "컬렉션 추가 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "컬렉션 추가 중 오류가 발생했어요.");
       toast.error(message, "추가 실패");
     }
   };
@@ -109,7 +110,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
       }
       toast.positive("할일이 삭제되었습니다.", "삭제됨");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "할일 삭제 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "할일 삭제 중 오류가 발생했어요.");
       toast.error(message, "삭제 실패");
     }
   };
@@ -122,7 +123,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
       }
       toast.positive("컬렉션이 삭제되었습니다.", "삭제됨");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "컬렉션 삭제 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "컬렉션 삭제 중 오류가 발생했어요.");
       toast.error(message, "삭제 실패");
     }
   };
@@ -139,7 +140,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
         title: trimmedLabel,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "할일 추가 중 오류가 발생했어요.";
+      const message = getUserFacingErrorMessage(error, "할일 추가 중 오류가 발생했어요.");
       toast.error(message, "추가 실패");
       return;
     }
@@ -177,7 +178,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
           type: "MOVE_TASK_TO_COLLECTION",
           payload: { taskId, collectionId: previousCollectionId },
         });
-        const message = error instanceof Error ? error.message : "할일 이동 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "할일 이동 중 오류가 발생했어요.");
         toast.error(message, "이동 실패");
       }
     })();
@@ -203,7 +204,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
         });
       } catch (error) {
         dispatch({ type: "REPLACE_TASKS", payload: previousTasks });
-        const message = error instanceof Error ? error.message : "할일 순서 변경 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "할일 순서 변경 중 오류가 발생했어요.");
         toast.error(message, "순서 변경 실패");
       }
     })();
@@ -229,7 +230,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
         });
       } catch (error) {
         dispatch({ type: "REPLACE_COLLECTIONS", payload: previousCollections });
-        const message = error instanceof Error ? error.message : "컬렉션 순서 변경 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "컬렉션 순서 변경 중 오류가 발생했어요.");
         toast.error(message, "순서 변경 실패");
       }
     })();
@@ -278,7 +279,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
           type: "RENAME_TASK",
           payload: { taskId, label: targetTask.label },
         });
-        const message = error instanceof Error ? error.message : "할일 이름 변경 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "할일 이름 변경 중 오류가 발생했어요.");
         toast.error(message, "변경 실패");
       }
     })();
@@ -324,7 +325,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
           type: "RENAME_COLLECTION",
           payload: { collectionId, name: targetCollection.name },
         });
-        const message = error instanceof Error ? error.message : "컬렉션 이름 변경 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "컬렉션 이름 변경 중 오류가 발생했어요.");
         toast.error(message, "변경 실패");
       }
     })();

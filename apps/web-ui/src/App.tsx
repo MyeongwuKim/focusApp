@@ -17,9 +17,17 @@ import { MAIN_ROUTE } from "./routes/route-config";
 import { toast, useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import { fetchCurrentWeather, SEOUL_COORDINATES, type Coordinates } from "./utils/weather";
-import { getNativeExpoPushToken, getNotificationPermissionStatus } from "./utils/notifications";
+import {
+  getNativeExpoPushToken,
+  getNativeLocationCoordinates,
+  getNotificationPermissionStatus,
+} from "./utils/notifications";
 import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
 import { updateNotificationSettings } from "./api/notificationSettingsApi";
+import { addTodoDeviationToDailyLog, fetchDailyLogByDate } from "./api/dailyLogApi";
+import { formatDateKey } from "./utils/holidays";
+import { fetchMe } from "./api/userApi";
+import { getUserFacingErrorMessage } from "./utils/errorMessage";
 
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 const LOGIN_ROUTE_PATH = "/login";
@@ -72,6 +80,33 @@ type LocationResolveResult = {
 };
 
 function getCurrentCoordinates(timeoutMs = 5000): Promise<LocationResolveResult> {
+  return getNativeLocationCoordinates()
+    .then((snapshot) => {
+      if (!snapshot) {
+        return null;
+      }
+      if (snapshot.coordinates) {
+        return {
+          coordinates: snapshot.coordinates,
+          source: "device" as const,
+        };
+      }
+      return {
+        coordinates: SEOUL_COORDINATES,
+        source: "fallback" as const,
+        reason:
+          snapshot.status === "denied"
+            ? ("denied" as const)
+            : snapshot.status === "unsupported"
+            ? ("unsupported" as const)
+            : ("unavailable" as const),
+      };
+    })
+    .then((nativeResult) => {
+      if (nativeResult) {
+        return nativeResult;
+      }
+
   if (typeof navigator === "undefined" || !navigator.geolocation) {
     return Promise.resolve({
       coordinates: SEOUL_COORDINATES,
@@ -131,6 +166,7 @@ function getCurrentCoordinates(timeoutMs = 5000): Promise<LocationResolveResult>
       { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 10 * 60 * 1000 }
     );
   });
+    });
 }
 
 function getCallbackParam(name: string, routeSearch: string): string | null {
@@ -165,9 +201,15 @@ function App() {
   const isAuthCallbackRoute = location.pathname === AUTH_CALLBACK_ROUTE_PATH;
   const overlayRoute = activeRoute === MAIN_ROUTE ? null : activeRoute;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [backendBootState, setBackendBootState] = useState<"idle" | "checking" | "ready" | "error">("idle");
+  const [backendBootError, setBackendBootError] = useState<string | null>(null);
+  const [backendBootRetryKey, setBackendBootRetryKey] = useState(0);
   const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const weatherFallbackNotifiedRef = useRef(false);
   const syncedNotificationAuthTokenRef = useRef<string | null>(null);
+  const backgroundEnteredAtMsRef = useRef<number | null>(null);
+  const backgroundSyncInFlightRef = useRef(false);
+  const skipNextNativeForegroundFlushRef = useRef(false);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
 
   useEffect(() => {
@@ -215,6 +257,51 @@ function App() {
   }, [activeRoute, isAuthCallbackRoute, isLoggedIn, isLoginRoute, location.pathname, navigate]);
 
   useEffect(() => {
+    if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+      setBackendBootState("idle");
+      setBackendBootError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      abortController.abort();
+    }, 7000);
+
+    setBackendBootState("checking");
+    setBackendBootError(null);
+
+    void (async () => {
+      try {
+        const me = await fetchMe({ signal: abortController.signal });
+        if (cancelled) {
+          return;
+        }
+        if (!me) {
+          setAuthToken(null);
+          return;
+        }
+        setBackendBootState("ready");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setBackendBootState("error");
+        setBackendBootError(getUserFacingErrorMessage(error, "서버 연결에 실패했어요."));
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      abortController.abort();
+    };
+  }, [backendBootRetryKey, isAuthCallbackRoute, isLoggedIn, isLoginRoute, setAuthToken]);
+
+  useEffect(() => {
     if (!weatherEnabled) {
       useWeatherStore.getState().setWeather(null);
       return;
@@ -252,6 +339,169 @@ function App() {
       window.clearInterval(intervalId);
     };
   }, [weatherEnabled]);
+
+  useEffect(() => {
+    const hasNativeWebViewBridge =
+      typeof window !== "undefined" &&
+      Boolean((window as Window & { ReactNativeWebView?: { postMessage?: (message: string) => void } })
+        .ReactNativeWebView);
+
+    const markBackgroundEntered = () => {
+      if (backgroundEnteredAtMsRef.current === null) {
+        backgroundEnteredAtMsRef.current = Date.now();
+      }
+    };
+
+    const flushDeviationIfNeeded = async () => {
+      const backgroundEnteredAtMs = backgroundEnteredAtMsRef.current;
+      if (backgroundEnteredAtMs === null || backgroundSyncInFlightRef.current) {
+        return;
+      }
+
+      backgroundSyncInFlightRef.current = true;
+      try {
+        const elapsedSeconds = Math.floor((Date.now() - backgroundEnteredAtMs) / 1000);
+        const todayKey = formatDateKey(new Date());
+        if (elapsedSeconds > 0) {
+          const todayLog = await fetchDailyLogByDate(todayKey);
+          const inProgressTodo = todayLog?.todos?.find(
+            (todo) => !todo.done && Boolean(todo.startedAt) && !todo.pausedAt && !todo.completedAt
+          );
+          if (!inProgressTodo) {
+            return;
+          }
+
+          await addTodoDeviationToDailyLog({
+            dateKey: todayKey,
+            todoId: inProgressTodo.id,
+            seconds: elapsedSeconds,
+          });
+        }
+      } catch (error) {
+        console.log("Failed to add deviation on app foreground:", error);
+      } finally {
+        backgroundEnteredAtMsRef.current = null;
+        backgroundSyncInFlightRef.current = false;
+      }
+    };
+
+    const handleNativeAppStateChanged = async (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        type?: string;
+        payload?: {
+          state?: string;
+        };
+      }>;
+      const detail = customEvent.detail;
+      if (detail?.type !== "RN_APP_STATE_CHANGED") {
+        return;
+      }
+      if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+        return;
+      }
+
+      const nextState = detail.payload?.state;
+      if (nextState === "inactive" || nextState === "background") {
+        markBackgroundEntered();
+        return;
+      }
+
+      if (nextState !== "active") {
+        return;
+      }
+      if (skipNextNativeForegroundFlushRef.current) {
+        skipNextNativeForegroundFlushRef.current = false;
+        return;
+      }
+      await flushDeviationIfNeeded();
+    };
+
+    const handleNativeTodoSessionRecovery = async (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        type?: string;
+        payload?: {
+          dateKey?: string;
+          todoId?: string;
+          elapsedSeconds?: number;
+        };
+      }>;
+      const detail = customEvent.detail;
+      if (detail?.type !== "RN_TODO_SESSION_RECOVERY") {
+        return;
+      }
+      if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+        return;
+      }
+
+      const dateKey = detail.payload?.dateKey;
+      const todoId = detail.payload?.todoId;
+      const elapsedSeconds =
+        typeof detail.payload?.elapsedSeconds === "number"
+          ? Math.max(Math.floor(detail.payload.elapsedSeconds), 0)
+          : 0;
+      if (!dateKey || !todoId || elapsedSeconds <= 0) {
+        return;
+      }
+
+      skipNextNativeForegroundFlushRef.current = true;
+      backgroundEnteredAtMsRef.current = null;
+
+      try {
+        const targetLog = await fetchDailyLogByDate(dateKey);
+        const targetTodo = targetLog?.todos?.find((todo) => todo.id === todoId);
+        if (!targetTodo || targetTodo.done || targetTodo.completedAt) {
+          return;
+        }
+
+        await addTodoDeviationToDailyLog({
+          dateKey,
+          todoId,
+          seconds: elapsedSeconds,
+        });
+      } catch (error) {
+        console.log("Failed to restore deviation from native todo session:", error);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (hasNativeWebViewBridge) {
+        return;
+      }
+      if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+        return;
+      }
+
+      if (document.visibilityState === "hidden") {
+        markBackgroundEntered();
+        return;
+      }
+
+      if (document.visibilityState === "visible") {
+        void flushDeviationIfNeeded();
+      }
+    };
+
+    window.addEventListener(
+      "focus-hybrid-native-bridge",
+      handleNativeAppStateChanged as EventListener
+    );
+    window.addEventListener(
+      "focus-hybrid-native-bridge",
+      handleNativeTodoSessionRecovery as EventListener
+    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener(
+        "focus-hybrid-native-bridge",
+        handleNativeAppStateChanged as EventListener
+      );
+      window.removeEventListener(
+        "focus-hybrid-native-bridge",
+        handleNativeTodoSessionRecovery as EventListener
+      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isAuthCallbackRoute, isLoggedIn, isLoginRoute]);
 
   useEffect(() => {
     if (!isLoggedIn || !authToken) {
@@ -397,6 +647,37 @@ function App() {
   return (
     <AppNavigationProvider value={navigationActions}>
       <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
+        {backendBootState === "checking" ? (
+          <div className="pointer-events-none fixed inset-x-0 top-3 z-[90] flex justify-center px-4">
+            <div className="pointer-events-auto inline-flex items-center gap-2 rounded-2xl border border-info/35 bg-base-100/95 px-3 py-2 text-sm text-base-content shadow-lg backdrop-blur">
+              <span className="loading loading-spinner loading-xs text-info" />
+              서버 연결 확인 중...
+            </div>
+          </div>
+        ) : null}
+
+        {backendBootState === "error" ? (
+          <div className="pointer-events-none fixed inset-x-0 top-3 z-[90] flex justify-center px-4">
+            <div className="pointer-events-auto w-full max-w-lg rounded-2xl border border-error/45 bg-base-100/95 px-3 py-2 shadow-[0_14px_36px_rgba(2,6,23,0.28)] backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="m-0 text-sm font-semibold text-error">서버 연결 안됨</p>
+                  <p className="m-0 truncate text-xs text-base-content/70">
+                    {backendBootError ?? "네트워크 상태를 확인해 주세요."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-xs btn-error rounded-lg"
+                  onClick={() => setBackendBootRetryKey((prev) => prev + 1)}
+                >
+                  재시도
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
           <CalendarRootPage isOverlayActive={Boolean(overlayRoute)} />
 

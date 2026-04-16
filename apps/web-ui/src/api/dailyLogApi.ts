@@ -1,6 +1,7 @@
 import { buildAuthHeaders } from "./authHeaders";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
+import { syncNativeTodoSession } from "../utils/notifications";
 
 const DAILY_LOGS_BY_MONTH_QUERY = /* GraphQL */ `
   query DailyLogsByMonth($monthKey: String!) {
@@ -478,6 +479,31 @@ type StopRestSessionMutation = {
   stopRestSession: DailyLogPayload;
 };
 
+function syncInProgressTodoSessionToNative(payload: DailyLogPayload | null | undefined) {
+  if (!payload) {
+    syncNativeTodoSession({ active: false, syncedAtMs: Date.now() });
+    return;
+  }
+
+  const inProgressTodo = payload.todos.find(
+    (todo) => !todo.done && Boolean(todo.startedAt) && !todo.pausedAt && !todo.completedAt
+  );
+
+  if (!inProgressTodo || !inProgressTodo.startedAt) {
+    syncNativeTodoSession({ active: false, syncedAtMs: Date.now() });
+    return;
+  }
+
+  syncNativeTodoSession({
+    active: true,
+    dateKey: payload.dateKey,
+    todoId: inProgressTodo.id,
+    startedAt: inProgressTodo.startedAt,
+    sessionId: `${payload.dateKey}:${inProgressTodo.id}:${inProgressTodo.startedAt}`,
+    syncedAtMs: Date.now(),
+  });
+}
+
 export async function fetchDailyLogsByMonth(monthKey: string) {
   const response = await fetch(getGraphqlEndpoint(), {
     method: "POST",
@@ -652,6 +678,7 @@ export async function startTodoFromDailyLog(input: { dateKey: string; todoId: st
   if (!next) {
     throw new Error("GraphQL startTodo failed");
   }
+  syncInProgressTodoSessionToNative(next);
   return next;
 }
 
@@ -678,6 +705,7 @@ export async function pauseTodoFromDailyLog(input: { dateKey: string; todoId: st
   if (!next) {
     throw new Error("GraphQL pauseTodo failed");
   }
+  syncInProgressTodoSessionToNative(next);
   return next;
 }
 
@@ -704,6 +732,7 @@ export async function resumeTodoFromDailyLog(input: { dateKey: string; todoId: s
   if (!next) {
     throw new Error("GraphQL resumeTodo failed");
   }
+  syncInProgressTodoSessionToNative(next);
   return next;
 }
 
@@ -730,6 +759,7 @@ export async function completeTodoFromDailyLog(input: { dateKey: string; todoId:
   if (!next) {
     throw new Error("GraphQL completeTodo failed");
   }
+  syncInProgressTodoSessionToNative(next);
   return next;
 }
 
@@ -756,6 +786,7 @@ export async function resetTodoFromDailyLog(input: { dateKey: string; todoId: st
   if (!next) {
     throw new Error("GraphQL resetTodo failed");
   }
+  syncInProgressTodoSessionToNative(next);
   return next;
 }
 
@@ -786,6 +817,7 @@ export async function addTodoDeviationToDailyLog(input: {
   if (!next) {
     throw new Error("GraphQL addDeviation failed");
   }
+  syncInProgressTodoSessionToNative(next);
   return next;
 }
 

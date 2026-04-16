@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { env } from "../../config/env.js";
 
 type ReminderTone = "soft" | "balanced" | "firm";
-type ReminderKind = "focus_start" | "empty_todo_start" | "incomplete_todo";
+type ReminderKind = "focus_start" | "empty_todo_start" | "incomplete_todo" | "scheduled_todo_start";
 
 type RunNotificationBatchInput = {
   prisma: PrismaClient;
@@ -48,10 +48,19 @@ const EMPTY_TODO_COPY: Record<ReminderTone, string> = {
 };
 
 const INCOMPLETE_COPY_BY_TONE: Record<ReminderTone, string> = {
-  soft: "아직 완료하지 않았어요. 가볍게 이어가볼까요?",
-  balanced: "아직 완료하지 않았어요. 지금 정리하면 흐름을 유지할 수 있어요.",
-  firm: "아직 완료하지 않았습니다. 지금 정리해 주세요.",
+  soft: "아직 진행하지 않은 작업이에요. 가볍게 시작해볼까요?",
+  balanced: "아직 진행 중인 작업이 남아 있어요. 지금 이어가면 흐름을 유지할 수 있어요.",
+  firm: "진행 중인 작업이 남아 있습니다. 지금 바로 시작해 주세요.",
 };
+
+const SCHEDULED_START_COPY_BY_TONE: Record<ReminderTone, string> = {
+  soft: "설정해둔 시작 시간이 됐어요. 가볍게 시작해볼까요?",
+  balanced: "설정해둔 시작 시간이 됐어요. 지금 시작해볼까요?",
+  firm: "설정해둔 시작 시간이 됐습니다. 지금 바로 시작해 주세요.",
+};
+
+const sentScheduledReminderMap = new Map<string, number>();
+const SCHEDULED_REMINDER_DEDUPE_TTL_MS = 10 * 60 * 1000;
 
 export async function runNotificationBatch(input: RunNotificationBatchInput): Promise<NotificationBatchResult> {
   const now = input.now ?? new Date();
@@ -89,19 +98,6 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         continue;
       }
 
-      if (
-        !isReminderDue({
-          now,
-          nowDateKey: nowInTimezone.dateKey,
-          nowMinutes,
-          startMinutes,
-          lastSentAt: settings.lastFocusReminderSentAt,
-          intervalMinutes: settings.intervalMinutes,
-          timezone,
-        })
-      ) {
-        continue;
-      }
     }
 
     eligibleUsers += 1;
@@ -123,6 +119,90 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
     const todoCount = dailyLog?.todoCount ?? todos.length;
     const incompleteCount = todos.filter((todo) => !todo.done).length;
     const tone = normalizeTone(settings.tone);
+    const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
+    const scheduledTargets = pickDueScheduledTodos({
+      todos,
+      now,
+      scheduleWindowMs,
+    });
+
+    if (scheduledTargets.length > 0 && settings.typeFocusStart) {
+      const dedupeTargets = scheduledTargets.filter((target) => {
+        const scheduledBucket = Math.floor(target.scheduledAtMs / 60000);
+        const dedupeKey = `${settings.userId}:${target.todoId}:${scheduledBucket}`;
+        const sentAt = sentScheduledReminderMap.get(dedupeKey);
+        return !(sentAt && now.getTime() - sentAt <= SCHEDULED_REMINDER_DEDUPE_TTL_MS);
+      });
+
+      if (dedupeTargets.length === 0) {
+        continue;
+      }
+
+      const scheduledLabel = dedupeTargets[0].label;
+      const scheduledCountSuffix =
+        dedupeTargets.length > 1 ? ` 외 ${dedupeTargets.length - 1}개 할일` : "";
+      const scheduledBody = `${scheduledLabel}, ${SCHEDULED_START_COPY_BY_TONE[tone]}`;
+      const scheduledBodyWithCount =
+        dedupeTargets.length > 1
+          ? `${scheduledLabel}${scheduledCountSuffix}, ${SCHEDULED_START_COPY_BY_TONE[tone]}`
+          : scheduledBody;
+
+      deliveries.push({
+        userId: settings.userId,
+        kind: "scheduled_todo_start",
+        title: "할일 시작 시간",
+        body: scheduledBodyWithCount,
+        tone,
+      });
+
+      if (!dryRun) {
+        const targetPath = `/date-tasks?date=${nowInTimezone.dateKey}`;
+        const tokens = await input.prisma.pushDeviceToken.findMany({
+          where: { userId: settings.userId, isActive: true },
+          select: { pushToken: true },
+        });
+        attemptedTokenCount += tokens.length;
+        if (tokens.length > 0) {
+          await sendExpoPushMessages({
+            entries: tokens.map((token) => ({
+              pushToken: token.pushToken,
+              title: "할일 시작 시간",
+              body: scheduledBodyWithCount,
+              data: {
+                kind: "scheduled_todo_start",
+                taskLabel: scheduledLabel,
+                taskCount: dedupeTargets.length,
+                dateKey: nowInTimezone.dateKey,
+                targetPath,
+              },
+            })),
+            prisma: input.prisma,
+          });
+          dedupeTargets.forEach((target) => {
+            const scheduledBucket = Math.floor(target.scheduledAtMs / 60000);
+            const dedupeKey = `${settings.userId}:${target.todoId}:${scheduledBucket}`;
+            sentScheduledReminderMap.set(dedupeKey, now.getTime());
+          });
+        }
+      }
+
+      continue;
+    }
+
+    if (
+      !force &&
+      !isReminderDue({
+        now,
+        nowDateKey: nowInTimezone.dateKey,
+        nowMinutes: nowInTimezone.hour * 60 + nowInTimezone.minute,
+        startMinutes: parseHHmmToMinutes(settings.activeStartTime) ?? 0,
+        lastSentAt: settings.lastFocusReminderSentAt,
+        intervalMinutes: settings.intervalMinutes,
+        timezone,
+      })
+    ) {
+      continue;
+    }
 
     if (todoCount === 0) {
       if (!settings.typeFocusStart) {
@@ -177,7 +257,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       deliveries.push({
         userId: settings.userId,
         kind: "incomplete_todo",
-        title: "미완료 작업 리마인드",
+        title: "작업 리마인드",
         body: incompleteBody,
         tone,
       });
@@ -193,7 +273,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
           await sendExpoPushMessages({
             entries: tokens.map((token) => ({
               pushToken: token.pushToken,
-              title: "미완료 작업 리마인드",
+              title: "작업 리마인드",
               body: incompleteBody,
               data: {
                 kind: "incomplete_todo",
@@ -525,4 +605,48 @@ function pickFirstIncompleteTodoLabel(
   }
 
   return "미완료 작업";
+}
+
+function pickDueScheduledTodos(input: {
+  todos: Array<{
+    id?: string;
+    done: boolean;
+    startedAt?: Date | null;
+    pausedAt?: Date | null;
+    completedAt?: Date | null;
+    scheduledStartAt?: Date | null;
+    content?: string | null;
+    titleSnapshot?: string | null;
+    order?: number;
+  }>;
+  now: Date;
+  scheduleWindowMs: number;
+}) {
+  const sorted = [...input.todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const matches: Array<{ label: string; todoId: string; scheduledAtMs: number }> = [];
+
+  for (const todo of sorted) {
+    if (todo.done || todo.completedAt || !todo.scheduledStartAt) {
+      continue;
+    }
+
+    const scheduledAt = new Date(todo.scheduledStartAt).getTime();
+    if (!Number.isFinite(scheduledAt)) {
+      continue;
+    }
+
+    const diffMs = input.now.getTime() - scheduledAt;
+    if (diffMs < 0 || diffMs > input.scheduleWindowMs) {
+      continue;
+    }
+
+    const label = todo.titleSnapshot?.trim() || todo.content?.trim() || "할일";
+    matches.push({
+      label,
+      todoId: todo.id ?? label,
+      scheduledAtMs: scheduledAt,
+    });
+  }
+
+  return matches;
 }

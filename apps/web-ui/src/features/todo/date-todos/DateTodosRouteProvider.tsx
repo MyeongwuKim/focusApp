@@ -5,6 +5,7 @@ import { useDailyLogMutation, useDailyLogQuery, useRoutineTemplateMutation, useR
 import { toast, useAppStore } from "../../../stores";
 import { formatDateKey } from "../../../utils/holidays";
 import { cancelNativeRestNotification, notifyRestFinished, scheduleNativeRestNotification } from "../../../utils/notifications";
+import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 import { useDateTodosTaskActions } from "./hooks/useDateTodosTaskActions";
 import { useDateTodosRoutineActions } from "./hooks/useDateTodosRoutineActions";
 
@@ -390,7 +391,7 @@ export function DateTodosRouteProvider({
           }
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "휴식 상태 업데이트 중 오류가 발생했어요.";
+        const message = getUserFacingErrorMessage(error, "휴식 상태 업데이트 중 오류가 발생했어요.");
         toast.show({
           type: "error",
           title: "업데이트 실패",

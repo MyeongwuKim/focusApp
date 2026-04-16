@@ -38,6 +38,13 @@ export type NativeLocationPermissionStatus = {
   status: "granted" | "denied" | "undetermined" | "unsupported" | "unknown";
 };
 
+export type NativeLocationCoordinatesSnapshot = NativeLocationPermissionStatus & {
+  coordinates: {
+    latitude: number;
+    longitude: number;
+  } | null;
+};
+
 export async function requestNotificationPermission() {
   if (typeof window === "undefined" || typeof Notification === "undefined") {
     return "unsupported" as const;
@@ -60,6 +67,15 @@ type RestNotificationBridgePayload = {
 
 type NativeWebViewBridge = {
   postMessage: (message: string) => void;
+};
+
+export type NativeTodoSessionSyncPayload = {
+  active: boolean;
+  dateKey?: string | null;
+  todoId?: string | null;
+  startedAt?: string | null;
+  sessionId?: string | null;
+  syncedAtMs?: number;
 };
 
 function getNativeWebViewBridge(): NativeWebViewBridge | null {
@@ -98,6 +114,10 @@ function postNativeBridgeMessage(type: string, payload?: Record<string, unknown>
 
   bridge.postMessage(JSON.stringify({ type, ...payload }));
   return true;
+}
+
+export function syncNativeTodoSession(payload: NativeTodoSessionSyncPayload) {
+  return postNativeBridgeMessage("REST_TODO_SESSION_SYNC", { payload });
 }
 
 function getBrowserPermissionStatus(): NativeNotificationPermissionStatus {
@@ -265,6 +285,76 @@ export async function getLocationPermissionStatus(): Promise<NativeLocationPermi
         return;
       }
       resolve(baseStatus);
+    };
+
+    window.addEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+  });
+}
+
+export async function getNativeLocationCoordinates(): Promise<NativeLocationCoordinatesSnapshot | null> {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const requestId = `location-coordinates-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const posted = postNativeBridgeMessage("REST_LOCATION_COORDINATES_REQUEST", { requestId });
+  if (!posted) {
+    return null;
+  }
+
+  return await new Promise<NativeLocationCoordinatesSnapshot | null>((resolve) => {
+    let settled = false;
+
+    const timeoutId = window.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+      resolve(null);
+    }, 1800);
+
+    const handleBridgeEvent = (
+      event: CustomEvent<{ type?: string; requestId?: string; payload?: unknown }>
+    ) => {
+      const detail = event.detail;
+      if (
+        detail?.type !== "REST_LOCATION_COORDINATES_RESULT" ||
+        detail.requestId !== requestId ||
+        !detail.payload ||
+        typeof detail.payload !== "object"
+      ) {
+        return;
+      }
+
+      const payload = detail.payload as Partial<NativeLocationCoordinatesSnapshot>;
+      const status =
+        payload.status === "granted" ||
+        payload.status === "denied" ||
+        payload.status === "undetermined" ||
+        payload.status === "unsupported"
+          ? payload.status
+          : "unknown";
+      const hasCoordinates =
+        payload.coordinates &&
+        typeof payload.coordinates === "object" &&
+        typeof (payload.coordinates as { latitude?: unknown }).latitude === "number" &&
+        typeof (payload.coordinates as { longitude?: unknown }).longitude === "number";
+
+      settled = true;
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+      resolve({
+        granted: Boolean(payload.granted),
+        canAskAgain: Boolean(payload.canAskAgain),
+        status,
+        coordinates: hasCoordinates
+          ? {
+              latitude: (payload.coordinates as { latitude: number }).latitude,
+              longitude: (payload.coordinates as { longitude: number }).longitude,
+            }
+          : null,
+      });
     };
 
     window.addEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);

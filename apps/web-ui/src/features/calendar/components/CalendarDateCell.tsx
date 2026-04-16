@@ -44,6 +44,9 @@ export const CalendarDateCell = memo(function CalendarDateCell({
         "calendar-date-cell relative z-0 flex h-full flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition-[border-color,background-color,box-shadow] duration-220 ease-out",
         inCurrentMonth ? "bg-base-100" : "bg-base-200/65",
         isSelected ? "z-10 border-primary/90 bg-primary/14 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]" : "",
+        isToday && !isSelected
+          ? "border-primary/55 bg-primary/8 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.14)]"
+          : "",
       ].join(" ")}
       style={{ minHeight: "var(--calendar-cell-min-h, 5.15rem)" }}
     >
@@ -55,7 +58,9 @@ export const CalendarDateCell = memo(function CalendarDateCell({
           className={[
             "calendar-date-number min-w-0 pr-[1px] leading-none tabular-nums",
             dateTextClass,
-            isToday ? "font-semibold text-primary" : "",
+            isToday
+              ? "inline-flex h-[1.18rem] min-w-[1.18rem] items-center justify-center rounded-full bg-primary px-1 text-[0.73rem] font-bold text-primary-content"
+              : "",
           ].join(" ")}
         >
           {date.getDate()}
