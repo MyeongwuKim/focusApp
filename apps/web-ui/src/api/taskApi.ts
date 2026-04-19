@@ -3,6 +3,7 @@ import type {
   CreateTaskCollectionInput,
 } from "../graphql/generated.ts";
 import { buildAuthHeaders } from "./authHeaders";
+import { fetchWithBackendStatus } from "./backendConnectivity";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -124,7 +125,7 @@ export const deleteTaskCollectionQuery = /* GraphQL */ `
 `;
 
 export async function fetchTaskCollections() {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -216,7 +217,7 @@ type TaskCollectionsPayload = {
 };
 
 export async function addTaskCollection(input: CreateTaskCollectionInput) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -244,7 +245,7 @@ export async function addTaskCollection(input: CreateTaskCollectionInput) {
 }
 
 export async function addTask(input: AddTaskInput) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -273,7 +274,7 @@ export async function addTask(input: AddTaskInput) {
 }
 
 export async function deleteTask(input: { taskId: string }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -296,7 +297,7 @@ export async function deleteTask(input: { taskId: string }) {
 }
 
 export async function moveTaskToCollection(input: { taskId: string; collectionId: string }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -324,7 +325,7 @@ export async function moveTaskToCollection(input: { taskId: string; collectionId
 }
 
 export async function reorderTaskCollections(input: { collectionIds: string[] }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -347,7 +348,7 @@ export async function reorderTaskCollections(input: { collectionIds: string[] })
 }
 
 export async function reorderTasks(input: { taskIds: string[] }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -370,7 +371,7 @@ export async function reorderTasks(input: { taskIds: string[] }) {
 }
 
 export async function renameTask(input: { taskId: string; title: string }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -398,7 +399,7 @@ export async function renameTask(input: { taskId: string; title: string }) {
 }
 
 export async function renameTaskCollection(input: { collectionId: string; name: string }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -426,7 +427,7 @@ export async function renameTaskCollection(input: { collectionId: string; name: 
 }
 
 export async function deleteTaskCollection(input: { collectionId: string }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -449,7 +450,7 @@ export async function deleteTaskCollection(input: { collectionId: string }) {
 }
 
 export async function setTaskFavorite(input: { taskId: string; isFavorite: boolean }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({

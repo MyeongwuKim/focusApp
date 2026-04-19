@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from "./authHeaders";
+import { fetchWithBackendStatus } from "./backendConnectivity";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -19,7 +20,7 @@ type MePayload = {
 };
 
 export async function fetchMe(options?: { signal?: AbortSignal }) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({ query: ME_QUERY }),

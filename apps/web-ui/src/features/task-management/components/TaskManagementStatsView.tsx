@@ -1,12 +1,8 @@
 import { useMemo, useState } from "react";
-import { FiArrowLeft } from "react-icons/fi";
-import { useSearchParams } from "react-router-dom";
 import { SegmentedToggle } from "../../../components/SegmentedToggle";
-import { Button } from "../../../components/ui/Button";
 import { formatDateInput, getPresetRange, normalizeStatsSearchParams } from "../../stats/statsDate";
 import { useStatsMetrics } from "../../stats/useStatsMetrics";
 import { useTaskCollectionQuery } from "../../../queries";
-import { useAppNavigation } from "../../../providers/AppNavigationProvider";
 import { TaskStatsSummaryTab } from "./TaskStatsSummaryTab";
 import { TaskStatsTrendTab } from "./TaskStatsTrendTab";
 
@@ -26,14 +22,22 @@ function findTaskTitle(
   return null;
 }
 
-export function TaskManagementStatsView() {
-  const { goBack, goPage } = useAppNavigation();
-  const [searchParams] = useSearchParams();
+type TaskManagementStatsViewProps = {
+  forcedSearch?: string;
+  isActive?: boolean;
+};
+
+export function TaskManagementStatsView({ forcedSearch, isActive = true }: TaskManagementStatsViewProps) {
+  const effectiveSearch = forcedSearch ?? "";
+  const searchParams = useMemo(
+    () => new URLSearchParams(effectiveSearch.startsWith("?") ? effectiveSearch.slice(1) : effectiveSearch),
+    [effectiveSearch]
+  );
   const [tab, setTab] = useState<"summary" | "trend">("summary");
   const normalized = useMemo(() => normalizeStatsSearchParams(searchParams), [searchParams]);
   const taskId = searchParams.get("taskId")?.trim() ?? "";
   const fallbackTaskLabel = searchParams.get("taskLabel")?.trim() || null;
-  const { taskCollectionsQuery } = useTaskCollectionQuery();
+  const { taskCollectionsQuery } = useTaskCollectionQuery({ enabled: isActive });
   const taskLabel = useMemo(() => {
     if (!taskId) {
       return null;
@@ -46,14 +50,15 @@ export function TaskManagementStatsView() {
   const range1y = getPresetRange("1y");
   const todayKey = formatDateInput(range7.end);
 
-  const all7 = useStatsMetrics({ start: range7.start, end: range7.end, todayKey });
-  const all30 = useStatsMetrics({ start: range30.start, end: range30.end, todayKey });
-  const all1y = useStatsMetrics({ start: range1y.start, end: range1y.end, todayKey });
+  const all7 = useStatsMetrics({ start: range7.start, end: range7.end, todayKey, enabled: isActive });
+  const all30 = useStatsMetrics({ start: range30.start, end: range30.end, todayKey, enabled: isActive });
+  const all1y = useStatsMetrics({ start: range1y.start, end: range1y.end, todayKey, enabled: isActive });
 
   const task7 = useStatsMetrics({
     start: range7.start,
     end: range7.end,
     todayKey,
+    enabled: isActive,
     taskId: taskId || undefined,
     taskLabel: taskLabel ?? undefined,
   });
@@ -61,6 +66,7 @@ export function TaskManagementStatsView() {
     start: range30.start,
     end: range30.end,
     todayKey,
+    enabled: isActive,
     taskId: taskId || undefined,
     taskLabel: taskLabel ?? undefined,
   });
@@ -68,6 +74,7 @@ export function TaskManagementStatsView() {
     start: range1y.start,
     end: range1y.end,
     todayKey,
+    enabled: isActive,
     taskId: taskId || undefined,
     taskLabel: taskLabel ?? undefined,
   });
@@ -75,6 +82,7 @@ export function TaskManagementStatsView() {
     start: normalized.start,
     end: normalized.end,
     todayKey: normalized.todayKey,
+    enabled: isActive,
     taskId: taskId || undefined,
     taskLabel: taskLabel ?? undefined,
   });
@@ -99,34 +107,9 @@ export function TaskManagementStatsView() {
     { label: "1년", total: all1y.time.totalDeviation, task: task1y.time.totalDeviation },
   ];
 
-  const closeStats = () => {
-    const historyState = window.history.state as { idx?: number } | null;
-    const stackIndex = typeof historyState?.idx === "number" ? historyState.idx : 0;
-
-    if (stackIndex > 0) {
-      goBack();
-      return;
-    }
-
-    goPage("/tasks", { replace: true });
-  };
-
   return (
     <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-base-300 bg-base-100/80 p-4 md:p-5">
       <div className="space-y-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs text-base-content/55">선택 할일 통계</p>
-            <h2 className="text-base font-semibold text-base-content">
-              {taskLabel ?? "할일을 찾을 수 없어요."}
-            </h2>
-          </div>
-          <Button size="sm" variant="ghost" className="gap-1" onClick={closeStats}>
-            <FiArrowLeft size={14} />
-            목록
-          </Button>
-        </div>
-
         {!taskId ? (
           <article className="rounded-xl border border-base-300/80 bg-base-200/40 p-4 text-sm text-base-content/70">
             통계를 볼 할일을 먼저 선택해주세요.

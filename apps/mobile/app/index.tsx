@@ -27,12 +27,21 @@ import {
   type NativeTodoSession,
   writeNativeTodoSession,
 } from "../src/features/todo/nativeTodoSessionStorage";
-import { NativeWeatherLayer } from "../src/features/weather/components/NativeWeatherLayer";
+import {
+  applyNativeWeatherSettings,
+  NativeWeatherDebugPanel,
+  NativeWeatherLayer,
+} from "../src/features/weather/components/NativeWeatherLayer";
 import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
 
 const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
 const MAX_SCALE = 1.08;
+const WEATHER_REFRESH_MS = 30 * 60 * 1000;
+const WEATHER_FALLBACK_COORDINATES: NativeCoordinates = {
+  latitude: 37.5665,
+  longitude: 126.978,
+};
 const PERMISSION_INTRO_FILE_URI = `${
   FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
 }native-permission-intro-v2.json`;
@@ -75,6 +84,16 @@ type TodoSessionRecoveryPayload = {
   backgroundEnteredAtMs: number;
   resumedAtMs: number;
   elapsedSeconds: number;
+};
+
+type NativeWeatherSnapshot = {
+  temperature: number;
+  weatherCode: number;
+  isDay: number;
+  coordinates: NativeCoordinates;
+  source: "device" | "fallback";
+  reason?: "denied" | "unavailable";
+  updatedAt: string;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -358,6 +377,53 @@ async function getLocationCoordinatesSnapshot(): Promise<LocationCoordinatesSnap
   };
 }
 
+async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot> {
+  const locationSnapshot = await getLocationCoordinatesSnapshot();
+  const coordinates = locationSnapshot.coordinates ?? WEATHER_FALLBACK_COORDINATES;
+  const source: "device" | "fallback" = locationSnapshot.coordinates ? "device" : "fallback";
+  const reason =
+    source === "fallback"
+      ? locationSnapshot.status === "denied"
+        ? "denied"
+        : "unavailable"
+      : undefined;
+
+  const url = new URL("https://api.open-meteo.com/v1/forecast");
+  url.searchParams.set("latitude", String(coordinates.latitude));
+  url.searchParams.set("longitude", String(coordinates.longitude));
+  url.searchParams.set("current", "temperature_2m,weather_code,is_day");
+  url.searchParams.set("forecast_days", "1");
+  url.searchParams.set("timezone", "auto");
+
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw new Error(`Open-Meteo weather API error: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    current?: { temperature_2m?: number; weather_code?: number; is_day?: number };
+  };
+  const current = data.current;
+  if (
+    !current ||
+    typeof current.temperature_2m !== "number" ||
+    typeof current.weather_code !== "number" ||
+    typeof current.is_day !== "number"
+  ) {
+    throw new Error("Invalid Open-Meteo weather payload");
+  }
+
+  return {
+    temperature: current.temperature_2m,
+    weatherCode: current.weather_code,
+    isDay: current.is_day,
+    coordinates,
+    source,
+    reason,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export default function WebViewScreen() {
   const pendingNotificationPathRef = useRef<string | null>(null);
   const isWebViewReadyRef = useRef(false);
@@ -374,6 +440,7 @@ export default function WebViewScreen() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const nativeTodoSessionRef = useRef<NativeTodoSession | null>(null);
   const pendingTodoSessionRecoveryRef = useRef<TodoSessionRecoveryPayload | null>(null);
+  const pendingWeatherSnapshotRef = useRef<NativeWeatherSnapshot | null>(null);
 
   const navigateWebViewByTargetPath = (targetPath: string) => {
     if (!targetPath.startsWith("/")) {
@@ -396,13 +463,14 @@ export default function WebViewScreen() {
   const dispatchNativeBridgeEvent = useCallback(
     (message: { type: string; payload?: Record<string, unknown> }) => {
       if (!webViewRef.current || !isWebViewReadyRef.current) {
-        return;
+        return false;
       }
 
       const bridgeMessage = JSON.stringify(message);
       webViewRef.current.injectJavaScript(
         `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${bridgeMessage} })); true;`
       );
+      return true;
     },
     []
   );
@@ -418,6 +486,7 @@ export default function WebViewScreen() {
       return;
     }
 
+    // RN -> WebView 복구 이벤트: 백그라운드 체류 시간(elapsedSeconds) 반영 요청
     dispatchNativeBridgeEvent({
       type: "RN_TODO_SESSION_RECOVERY",
       payload: pending,
@@ -432,6 +501,21 @@ export default function WebViewScreen() {
       });
     }
   }, [dispatchNativeBridgeEvent, persistNativeTodoSession]);
+
+  const dispatchPendingWeatherSnapshot = useCallback(() => {
+    const pendingSnapshot = pendingWeatherSnapshotRef.current;
+    if (!pendingSnapshot) {
+      return;
+    }
+
+    const isDispatched = dispatchNativeBridgeEvent({
+      type: "RN_WEATHER_SNAPSHOT",
+      payload: pendingSnapshot as unknown as Record<string, unknown>,
+    });
+    if (isDispatched) {
+      pendingWeatherSnapshotRef.current = null;
+    }
+  }, [dispatchNativeBridgeEvent]);
 
   const {
     handleRestNotificationBridgeMessage,
@@ -506,6 +590,21 @@ export default function WebViewScreen() {
         root.style.setProperty('--calendar-date-number-size', '${calendarLayoutVars.numberFontRem.toFixed(
           3
         )}rem');
+        root.style.background = 'transparent';
+        if (document.body) {
+          document.body.style.background = 'transparent';
+        }
+        const styleId = 'native-transparent-weather-background';
+        if (!document.getElementById(styleId)) {
+          const styleEl = document.createElement('style');
+          styleEl.id = styleId;
+          styleEl.textContent = [
+            'html, body, #root, #app, #__next, main { background: transparent !important; }',
+            '#root > div, #app > div, #__next > div, main > div { background: transparent !important; }',
+            'body::before, body::after, #root::before, #root::after { background: transparent !important; }',
+          ].join('\\n');
+          document.head?.appendChild(styleEl);
+        }
       })(); true;`,
     [calendarLayoutVars, uiScale]
   );
@@ -561,6 +660,16 @@ export default function WebViewScreen() {
     [webDebugBridgeScript, applyScaleScript]
   );
 
+  const refreshNativeWeatherSnapshot = useCallback(async () => {
+    try {
+      const snapshot = await fetchNativeWeatherSnapshot();
+      pendingWeatherSnapshotRef.current = snapshot;
+      dispatchPendingWeatherSnapshot();
+    } catch (error) {
+      console.log("Failed to fetch native weather snapshot:", error);
+    }
+  }, [dispatchPendingWeatherSnapshot]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -575,6 +684,8 @@ export default function WebViewScreen() {
         return;
       }
 
+      // 앱 재실행(콜드 스타트) 복구 경로:
+      // 이전 실행에서 backgroundEnteredAtMs가 남아 있으면 비정상 종료/중단으로 보고 이탈시간 복구 payload 생성
       const resumedAtMs = Date.now();
       pendingTodoSessionRecoveryRef.current = {
         dateKey: stored.dateKey,
@@ -594,6 +705,27 @@ export default function WebViewScreen() {
       cancelled = true;
     };
   }, [dispatchPendingTodoSessionRecovery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadNativeWeather = async () => {
+      await refreshNativeWeatherSnapshot();
+      if (cancelled) {
+        return;
+      }
+    };
+
+    void loadNativeWeather();
+    const intervalId = setInterval(() => {
+      void loadNativeWeather();
+    }, WEATHER_REFRESH_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [refreshNativeWeatherSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -672,6 +804,9 @@ export default function WebViewScreen() {
       const granted = await requestLocationPermission();
       const nextState = granted ? "granted" : await getLocationPermissionState();
       setLocationPermissionState(nextState);
+      if (granted) {
+        await refreshNativeWeatherSnapshot();
+      }
       if (!granted) {
         await Linking.openSettings().catch((error) => {
           console.log("Failed to open settings from location permission handler:", error);
@@ -770,6 +905,8 @@ export default function WebViewScreen() {
         if (currentSession.backgroundEnteredAtMs !== null) {
           return;
         }
+        // 실행 중 세션에서 앱이 백그라운드로 내려가면 진입 시각 저장
+        // 이후 복귀(active) 또는 재실행 시 elapsedSeconds 계산 기준으로 사용
         void persistNativeTodoSession({
           ...currentSession,
           backgroundEnteredAtMs: Date.now(),
@@ -781,6 +918,8 @@ export default function WebViewScreen() {
         return;
       }
 
+      // 정상 복귀(active) 경로:
+      // backgroundEnteredAtMs 기준으로 경과시간을 계산해 WebView에 복구 이벤트 전달
       const resumedAtMs = Date.now();
       pendingTodoSessionRecoveryRef.current = {
         dateKey: currentSession.dateKey,
@@ -849,6 +988,23 @@ export default function WebViewScreen() {
           sessionId: payload.sessionId,
           syncedAtMs: typeof payload.syncedAtMs === "number" ? payload.syncedAtMs : Date.now(),
           backgroundEnteredAtMs: shouldKeepBackgroundEnteredAt,
+        });
+        return;
+      }
+      if (parsedData?.type === "REST_WEATHER_SETTINGS_SYNC") {
+        const payload =
+          parsedData?.payload && typeof parsedData.payload === "object"
+            ? (parsedData.payload as { enabled?: unknown; mood?: unknown; particleClarity?: unknown })
+            : null;
+        if (!payload) {
+          return;
+        }
+
+        applyNativeWeatherSettings({
+          enabled: typeof payload.enabled === "boolean" ? payload.enabled : undefined,
+          mood: typeof payload.mood === "string" ? payload.mood : undefined,
+          particleClarity:
+            typeof payload.particleClarity === "number" ? payload.particleClarity : undefined,
         });
         return;
       }
@@ -963,13 +1119,19 @@ export default function WebViewScreen() {
       ) : null}
       {source && !showPermissionIntro ? (
         <View style={styles.webViewContainer}>
+          <View
+            pointerEvents="none"
+            style={styles.weatherLayer}>
+            <NativeWeatherLayer />
+          </View>
           <WebView
             ref={webViewRef}
+            style={styles.webView}
             source={source}
             originWhitelist={["*"]}
             javaScriptEnabled
             domStorageEnabled
-            allowsBackForwardNavigationGestures
+            allowsBackForwardNavigationGestures={false}
             bounces={false}
             overScrollMode="never"
             injectedJavaScriptBeforeContentLoaded={injectedBeforeContentLoaded}
@@ -1016,14 +1178,7 @@ export default function WebViewScreen() {
               if (webViewRef.current) {
                 webViewRef.current.injectJavaScript(applyScaleScript);
               }
-              dispatchNativeBridgeEvent({
-                type: "RN_APP_STATE_CHANGED",
-                payload: {
-                  state: appStateRef.current,
-                  previousState: appStateRef.current,
-                  isActive: appStateRef.current === "active",
-                },
-              });
+              dispatchPendingWeatherSnapshot();
               void dispatchPendingTodoSessionRecovery();
               const pendingTargetPath = pendingNotificationPathRef.current;
               if (pendingTargetPath) {
@@ -1059,7 +1214,9 @@ export default function WebViewScreen() {
               </View>
             )}
           />
-          <NativeWeatherLayer />
+          <View pointerEvents="box-none" style={styles.weatherDebugLayer}>
+            <NativeWeatherDebugPanel />
+          </View>
         </View>
       ) : null}
       {showPermissionIntro ? (
@@ -1095,5 +1252,19 @@ const styles = StyleSheet.create({
   },
   webViewContainer: {
     flex: 1,
+    backgroundColor: "transparent",
+  },
+  weatherLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+  },
+  weatherDebugLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+  },
+  webView: {
+    flex: 1,
+    backgroundColor: "transparent",
+    zIndex: 1,
   },
 });

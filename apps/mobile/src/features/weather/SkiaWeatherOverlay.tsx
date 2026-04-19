@@ -30,6 +30,10 @@ function wrap(value: number, max: number) {
   return ((value % max) + max) % max;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 class SkiaErrorBoundary extends Component<
   { children: ReactNode; onError: () => void },
   { hasError: boolean }
@@ -55,6 +59,7 @@ class SkiaErrorBoundary extends Component<
 export function SkiaWeatherOverlay({
   effect,
   mood,
+  particleClarity,
   width,
   height,
   impactBottomOffset,
@@ -62,6 +67,7 @@ export function SkiaWeatherOverlay({
 }: {
   effect: WeatherEffect;
   mood: WeatherMood;
+  particleClarity: number;
   width: number;
   height: number;
   impactBottomOffset: number;
@@ -85,58 +91,84 @@ export function SkiaWeatherOverlay({
     return () => cancelAnimationFrame(rafId);
   }, []);
 
+  const clarityRatio = clamp(particleClarity, 0, 100) / 100;
+  const clarityAlphaScale = 0.45 + clarityRatio * 1.2;
+  const clarityCountScale = 0.7 + clarityRatio * 0.65;
+  const clarityThicknessScale = 0.7 + clarityRatio * 0.95;
+  const claritySpeedScale = 0.85 + clarityRatio * 0.35;
+
   const rainParticles = useMemo<RainParticle[]>(() => {
     const isCinematic = mood === 'cinematic';
-    const count = isCinematic ? 96 : 84;
+    const baseCount = isCinematic ? 30 : 58;
+    const count = Math.max(8, Math.round(baseCount * clarityCountScale));
     return Array.from({ length: count }, () => ({
       x: Math.random() * width,
       seed: Math.random() * 1000,
-      speed: (isCinematic ? 460 : 390) + Math.random() * (isCinematic ? 240 : 210),
-      length: 12 + Math.random() * 24,
-      width: 0.8 + Math.random() * 1.4,
-      sway: 2 + Math.random() * 6,
-      alpha: (isCinematic ? 0.35 : 0.42) + Math.random() * 0.38,
+      speed: ((isCinematic ? 430 : 310) + Math.random() * (isCinematic ? 210 : 180)) * claritySpeedScale,
+      length: (isCinematic ? 26 : 18) + Math.random() * (isCinematic ? 24 : 20),
+      width: ((isCinematic ? 1.0 : 0.7) + Math.random() * (isCinematic ? 1.0 : 0.6)) * clarityThicknessScale,
+      sway: (isCinematic ? 2 : 4) + Math.random() * (isCinematic ? 4 : 8),
+      alpha: clamp(
+        ((isCinematic ? 0.1 : 0.2) + Math.random() * (isCinematic ? 0.08 : 0.14)) * clarityAlphaScale,
+        0.03,
+        0.95
+      ),
     }));
-  }, [mood, width]);
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, clarityThicknessScale, mood, width]);
 
   const rainSplashes = useMemo<RainParticle[]>(() => {
     const isCinematic = mood === 'cinematic';
-    const count = isCinematic ? 20 : 28;
+    const baseCount = isCinematic ? 8 : 20;
+    const count = Math.max(4, Math.round(baseCount * clarityCountScale));
     return Array.from({ length: count }, () => ({
       x: Math.random() * width,
       seed: Math.random() * 1000,
-      speed: 0.8 + Math.random() * 1.8,
-      length: 8 + Math.random() * 10,
+      speed: ((isCinematic ? 1.4 : 1.0) + Math.random() * (isCinematic ? 1.9 : 2.4)) * claritySpeedScale,
+      length: (isCinematic ? 7 : 10) + Math.random() * (isCinematic ? 8 : 12),
       width: 1,
-      sway: 4 + Math.random() * 10,
-      alpha: (isCinematic ? 0.2 : 0.26) + Math.random() * 0.28,
+      sway: (isCinematic ? 3 : 5) + Math.random() * (isCinematic ? 7 : 12),
+      alpha: clamp(
+        ((isCinematic ? 0.07 : 0.14) + Math.random() * (isCinematic ? 0.08 : 0.14)) * clarityAlphaScale,
+        0.04,
+        0.9
+      ),
     }));
-  }, [mood, width]);
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, mood, width]);
 
   const snowParticles = useMemo<SnowParticle[]>(() => {
     const isCinematic = mood === 'cinematic';
-    const farCount = isCinematic ? 28 : 34;
-    const nearCount = isCinematic ? 36 : 44;
+    const farBaseCount = isCinematic ? 12 : 32;
+    const nearBaseCount = isCinematic ? 16 : 40;
+    const farCount = Math.max(6, Math.round(farBaseCount * clarityCountScale));
+    const nearCount = Math.max(8, Math.round(nearBaseCount * clarityCountScale));
     const far = Array.from({ length: farCount }, () => ({
       x: Math.random() * width,
       seed: Math.random() * 1000,
-      speed: (isCinematic ? 34 : 40) + Math.random() * 24,
-      radius: 1.1 + Math.random() * 2.1,
-      sway: 4 + Math.random() * 6,
-      alpha: (isCinematic ? 0.16 : 0.2) + Math.random() * 0.18,
+      speed: ((isCinematic ? 42 : 34) + Math.random() * (isCinematic ? 30 : 24)) * claritySpeedScale,
+      radius: (isCinematic ? 0.9 : 1.5) + Math.random() * (isCinematic ? 1.8 : 2.4),
+      sway: (isCinematic ? 3 : 6) + Math.random() * (isCinematic ? 5 : 9),
+      alpha: clamp(
+        ((isCinematic ? 0.05 : 0.13) + Math.random() * (isCinematic ? 0.06 : 0.12)) * clarityAlphaScale,
+        0.02,
+        0.7
+      ),
       depth: 'far' as const,
     }));
     const near = Array.from({ length: nearCount }, () => ({
       x: Math.random() * width,
       seed: Math.random() * 1000,
-      speed: (isCinematic ? 52 : 60) + Math.random() * 34,
-      radius: 2.2 + Math.random() * 3.1,
-      sway: 7 + Math.random() * 10,
-      alpha: (isCinematic ? 0.24 : 0.3) + Math.random() * 0.25,
+      speed: ((isCinematic ? 68 : 54) + Math.random() * (isCinematic ? 38 : 32)) * claritySpeedScale,
+      radius: (isCinematic ? 1.9 : 2.8) + Math.random() * (isCinematic ? 3.0 : 3.8),
+      sway: (isCinematic ? 5 : 9) + Math.random() * (isCinematic ? 7 : 12),
+      alpha: clamp(
+        ((isCinematic ? 0.1 : 0.24) + Math.random() * (isCinematic ? 0.1 : 0.16)) * clarityAlphaScale,
+        0.04,
+        0.95
+      ),
       depth: 'near' as const,
     }));
     return [...far, ...near];
-  }, [mood, width]);
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, mood, width]);
 
   if (!effect) {
     return null;
@@ -165,7 +197,11 @@ export function SkiaWeatherOverlay({
                     key={`rain-streak-${index}`}
                     p1={p1}
                     p2={p2}
-                    color={`rgba(188,223,255,${particle.alpha})`}
+                    color={
+                      mood === 'cinematic'
+                        ? `rgba(168,206,244,${particle.alpha})`
+                        : `rgba(196,229,255,${particle.alpha})`
+                    }
                     strokeWidth={particle.width}
                   />
                 );
@@ -186,18 +222,35 @@ export function SkiaWeatherOverlay({
                 const baseX = particle.x + Math.sin(t * 1.3 + particle.seed) * 6;
                 return (
                   <Group key={`rain-splash-${index}`}>
-                    <Circle cx={baseX} cy={baseY} r={ringRadius} color={`rgba(188,223,255,${opacity})`} />
+                    <Circle
+                      cx={baseX}
+                      cy={baseY}
+                      r={ringRadius}
+                      color={
+                        mood === 'cinematic'
+                          ? `rgba(171,209,245,${opacity})`
+                          : `rgba(198,231,255,${opacity})`
+                      }
+                    />
                     <Circle
                       cx={baseX - particle.sway * pulse}
                       cy={baseY - sprayLift}
                       r={Math.max(0.8, particle.length * 0.08)}
-                      color={`rgba(204,232,255,${opacity * 0.92})`}
+                      color={
+                        mood === 'cinematic'
+                          ? `rgba(176,208,234,${opacity * 0.86})`
+                          : `rgba(211,236,255,${opacity * 0.86})`
+                      }
                     />
                     <Circle
                       cx={baseX + particle.sway * pulse}
                       cy={baseY - sprayLift * 0.9}
                       r={Math.max(0.8, particle.length * 0.08)}
-                      color={`rgba(204,232,255,${opacity * 0.92})`}
+                      color={
+                        mood === 'cinematic'
+                          ? `rgba(176,208,234,${opacity * 0.86})`
+                          : `rgba(211,236,255,${opacity * 0.86})`
+                      }
                     />
                   </Group>
                 );
@@ -219,7 +272,11 @@ export function SkiaWeatherOverlay({
                     cx={x}
                     cy={y}
                     r={particle.radius}
-                    color={`rgba(242,249,255,${particle.alpha})`}
+                    color={
+                      mood === 'cinematic'
+                        ? `rgba(224,237,248,${particle.alpha})`
+                        : `rgba(246,251,255,${particle.alpha})`
+                    }
                   />
                 );
               })

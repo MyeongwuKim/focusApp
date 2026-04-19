@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  defaultAnimateLayoutChanges,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -55,6 +56,15 @@ const parseCollectionDropId = (dropId: string) =>
 const isUncategorizedCollection = (name: string) =>
   name.trim().toLowerCase() === UNCATEGORIZED_COLLECTION_NAME.toLowerCase();
 
+const animateLayoutChanges = (
+  args: Parameters<typeof defaultAnimateLayoutChanges>[0]
+) => {
+  if (args.isSorting || args.wasDragging) {
+    return defaultAnimateLayoutChanges(args);
+  }
+  return false;
+};
+
 function DraggableTaskItem({
   task,
   collectionName,
@@ -75,6 +85,7 @@ function DraggableTaskItem({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: toTaskDragId(task.id),
     disabled: disableDrag,
+    animateLayoutChanges,
   });
 
   const style = {
@@ -120,6 +131,7 @@ function DroppableCollectionItem({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: toCollectionDropId(collectionId),
+    animateLayoutChanges,
   });
 
   const style = {

@@ -8,12 +8,10 @@ import { ThemeController } from "./components/ThemeController";
 import { queryClient } from "./queryClient";
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <HashRouter>
-        <ThemeController />
-        <App />
-      </HashRouter>
-    </QueryClientProvider>
-  </StrictMode>
+  <QueryClientProvider client={queryClient}>
+    <HashRouter>
+      <ThemeController />
+      <App />
+    </HashRouter>
+  </QueryClientProvider>
 );

@@ -267,7 +267,7 @@ export function SettingsNotificationsView() {
   };
 
   return (
-    <SettingsDetailShell title="리마인드 푸쉬알림 설정" description="">
+    <SettingsDetailShell description="리마인드 푸시 알림 옵션을 설정합니다.">
       <div className="space-y-3 rounded-xl border border-base-300/80 bg-base-100/75 p-3">
         <div className="flex items-center justify-between gap-3 rounded-lg border border-base-300/70 bg-base-200/40 px-3 py-2">
           <p className="m-0 text-sm font-medium text-base-content/85">푸쉬알림</p>

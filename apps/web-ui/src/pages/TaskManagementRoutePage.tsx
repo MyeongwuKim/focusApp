@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useReducer } from "react";
 import { useLocation } from "react-router-dom";
+import type { fetchTaskCollections } from "../api/taskApi";
 import { TaskManagementActions } from "../features/task-management/components/TaskManagementActions";
 import { TaskManagementBody } from "../features/task-management/components/TaskManagementBody";
 import { TaskManagementFooter } from "../features/task-management/components/TaskManagementFooter";
@@ -9,18 +10,81 @@ import { TaskManagementContextProvider } from "../features/task-management/provi
 import {
   createInitialTaskManagementDataState,
   reorderById,
+  type TaskManagementDataState,
   taskManagementDataReducer,
 } from "../features/task-management/state/taskManagementDataReducer";
 import { useTaskCollectionMutation, useTaskCollectionQuery } from "../queries";
-import { toast } from "../stores";
+import { taskCollectionsQueryKey } from "../queries/task-collection/queries";
+import { queryClient } from "../queryClient";
+import { toast, useTaskManagementViewStore } from "../stores";
 import { getUserFacingErrorMessage } from "../utils/errorMessage";
 
 const DEFAULT_COLLECTION_ID = "collection-default";
+type TaskCollectionsData = Awaited<ReturnType<typeof fetchTaskCollections>>;
+type InitialTaskManagementStateInput = {
+  taskCollections?: TaskCollectionsData;
+  selectedCollectionId: "all" | string;
+  selectedTaskId: string | null;
+};
 
-function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: boolean }) {
+function mapTaskManagementData(taskCollections: TaskCollectionsData) {
+  return {
+    collections: taskCollections.map((collection) => ({
+      id: collection.id,
+      name: collection.name,
+    })),
+    tasks: taskCollections.flatMap((collection) =>
+      collection.tasks.map((task) => ({
+        id: task.id,
+        label: task.title,
+        collectionId: collection.id,
+      }))
+    ),
+  };
+}
+
+function createInitialTaskManagementStateFromSnapshot(
+  input: InitialTaskManagementStateInput
+): TaskManagementDataState {
+  const base = createInitialTaskManagementDataState(DEFAULT_COLLECTION_ID);
+  const next: TaskManagementDataState = {
+    ...base,
+    selectedCollectionId: input.selectedCollectionId,
+    selectedTaskId: input.selectedTaskId,
+  };
+
+  if (!input.taskCollections) {
+    return next;
+  }
+
+  const mapped = mapTaskManagementData(input.taskCollections);
+  next.collections = mapped.collections;
+  next.tasks = mapped.tasks;
+  return next;
+}
+
+function TaskManagementRouteContent({
+  isTaskStatsRoute,
+  effectiveSearch,
+  isActive,
+}: {
+  isTaskStatsRoute: boolean;
+  effectiveSearch: string;
+  isActive: boolean;
+}) {
+  const cachedTaskCollections = queryClient.getQueryData<TaskCollectionsData>(taskCollectionsQueryKey);
+  const persistedSelectedCollectionId = useTaskManagementViewStore((state) => state.selectedCollectionId);
+  const persistedSelectedTaskId = useTaskManagementViewStore((state) => state.selectedTaskId);
+  const setPersistedSelectedCollectionId = useTaskManagementViewStore((state) => state.setSelectedCollectionId);
+  const setPersistedSelectedTaskId = useTaskManagementViewStore((state) => state.setSelectedTaskId);
   const [state, dispatch] = useReducer(
     taskManagementDataReducer,
-    createInitialTaskManagementDataState(DEFAULT_COLLECTION_ID)
+    {
+      taskCollections: cachedTaskCollections,
+      selectedCollectionId: persistedSelectedCollectionId,
+      selectedTaskId: persistedSelectedTaskId,
+    },
+    createInitialTaskManagementStateFromSnapshot
   );
   const { tasks, collections, selectedCollectionId, selectedTaskId } = state;
 
@@ -36,14 +100,17 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
     reorderTasksMutation,
   } = useTaskCollectionMutation();
 
-  const { taskCollectionsQuery } = useTaskCollectionQuery();
+  const { taskCollectionsQuery } = useTaskCollectionQuery({ enabled: isActive });
   const { data } = taskCollectionsQuery;
+  const effectiveTaskCollections = data ?? cachedTaskCollections;
+  const hasCollectionSnapshot = effectiveTaskCollections !== undefined;
+  const isInitialCollectionsLoading = !hasCollectionSnapshot && taskCollectionsQuery.isFetching;
 
   const recentUsedAt = useMemo(() => {
-    if (!data) {
+    if (!effectiveTaskCollections) {
       return null;
     }
-    const timestamps = data
+    const timestamps = effectiveTaskCollections
       .flatMap((collection) => collection.tasks.map((task) => task.lastUsedAt))
       .filter((value): value is string => Boolean(value))
       .map((value) => new Date(value).getTime())
@@ -53,7 +120,7 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
       return null;
     }
     return new Date(Math.max(...timestamps)).toISOString();
-  }, [data]);
+  }, [effectiveTaskCollections]);
 
   const selectedTaskLabel = useMemo(() => {
     if (!selectedTaskId) {
@@ -63,17 +130,17 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
   }, [selectedTaskId, tasks]);
 
   const selectedTaskLastUsedAt = useMemo(() => {
-    if (!selectedTaskId || !data) {
+    if (!selectedTaskId || !effectiveTaskCollections) {
       return null;
     }
-    for (const collection of data) {
+    for (const collection of effectiveTaskCollections) {
       const matched = collection.tasks.find((task) => task.id === selectedTaskId);
       if (matched) {
         return matched.lastUsedAt ?? null;
       }
     }
     return null;
-  }, [selectedTaskId, data]);
+  }, [selectedTaskId, effectiveTaskCollections]);
 
   const handleCreateCollection = async (name: string) => {
     const trimmedName = name.trim();
@@ -331,30 +398,30 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
     })();
   };
   useEffect(() => {
+    if (!isActive) {
+      return;
+    }
     if (!data) {
       return;
     }
-
-    const mappedCollections = data.map((collection) => ({
-      id: collection.id,
-      name: collection.name,
-    }));
-    const mappedTasks = data.flatMap((collection) =>
-      collection.tasks.map((task) => ({
-        id: task.id,
-        label: task.title,
-        collectionId: collection.id,
-      }))
-    );
+    const mapped = mapTaskManagementData(data);
 
     dispatch({
       type: "HYDRATE_FROM_QUERY",
       payload: {
-        collections: mappedCollections,
-        tasks: mappedTasks,
+        collections: mapped.collections,
+        tasks: mapped.tasks,
       },
     });
-  }, [data]);
+  }, [data, isActive]);
+
+  useEffect(() => {
+    setPersistedSelectedCollectionId(selectedCollectionId);
+  }, [selectedCollectionId, setPersistedSelectedCollectionId]);
+
+  useEffect(() => {
+    setPersistedSelectedTaskId(selectedTaskId);
+  }, [selectedTaskId, setPersistedSelectedTaskId]);
 
   useEffect(() => {
     dispatch({ type: "CLEAR_SELECTED_TASK_IF_MISSING" });
@@ -372,40 +439,52 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
         ].join(" ")}
       >
         <section className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4">
-          <TaskManagementContextProvider
-            data={{
-              tasks,
-              collections,
-              selectedCollectionId,
-              selectedTaskId,
-            }}
-            meta={{
-              selectedTaskLabel,
-              selectedTaskLastUsedAt,
-              recentUsedAt,
-            }}
-            actions={{
-              onSelectCollection: (collectionId) =>
-                dispatch({ type: "SELECT_COLLECTION", payload: collectionId }),
-              onSelectTask: (taskId) => dispatch({ type: "SELECT_TASK", payload: taskId }),
-              onRenameTask: handleRenameTask,
-              onDeleteTask: handleDeleteTask,
-              onRenameCollection: handleRenameCollection,
-              onDeleteCollection: handleDeleteCollection,
-              onMoveTaskToCollection: handleMoveTaskToCollection,
-              onReorderVisibleTasks: handleReorderVisibleTasks,
-              onReorderCollections: handleReorderCollections,
-              onCreateCollection: handleCreateCollection,
-              onCreateTask: handleCreateTask,
-            }}
-          >
-            <TaskManagementBody />
-
-            <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5">
-              <TaskManagementActions />
-              <TaskManagementFooter />
+          {isInitialCollectionsLoading ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-base-content/65">
+              <span className="loading loading-spinner loading-sm" />
+              <p className="m-0 text-sm">할일 목록 불러오는 중...</p>
             </div>
-          </TaskManagementContextProvider>
+          ) : (
+            <TaskManagementContextProvider
+              data={{
+                tasks,
+                collections,
+                selectedCollectionId,
+                selectedTaskId,
+              }}
+              meta={{
+                selectedTaskLabel,
+                selectedTaskLastUsedAt,
+                recentUsedAt,
+              }}
+              actions={{
+                onSelectCollection: (collectionId) => {
+                  setPersistedSelectedCollectionId(collectionId);
+                  dispatch({ type: "SELECT_COLLECTION", payload: collectionId });
+                },
+                onSelectTask: (taskId) => {
+                  setPersistedSelectedTaskId(taskId);
+                  dispatch({ type: "SELECT_TASK", payload: taskId });
+                },
+                onRenameTask: handleRenameTask,
+                onDeleteTask: handleDeleteTask,
+                onRenameCollection: handleRenameCollection,
+                onDeleteCollection: handleDeleteCollection,
+                onMoveTaskToCollection: handleMoveTaskToCollection,
+                onReorderVisibleTasks: handleReorderVisibleTasks,
+                onReorderCollections: handleReorderCollections,
+                onCreateCollection: handleCreateCollection,
+                onCreateTask: handleCreateTask,
+              }}
+            >
+              <TaskManagementBody />
+
+              <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5">
+                <TaskManagementActions />
+                <TaskManagementFooter />
+              </div>
+            </TaskManagementContextProvider>
+          )}
         </section>
       </div>
 
@@ -418,20 +497,32 @@ function TaskManagementRouteContent({ isTaskStatsRoute }: { isTaskStatsRoute: bo
             : "translate-x-6 opacity-0 pointer-events-none",
         ].join(" ")}
       >
-        <TaskManagementStatsView />
+        <TaskManagementStatsView forcedSearch={effectiveSearch} isActive={isActive && isTaskStatsRoute} />
       </div>
     </div>
   );
 }
 
-export function TaskManagementRoutePage() {
+type TaskManagementRoutePageProps = {
+  forcedPathname?: string;
+  forcedSearch?: string;
+  isActive?: boolean;
+};
+
+export function TaskManagementRoutePage({
+  forcedPathname,
+  forcedSearch,
+  isActive = true,
+}: TaskManagementRoutePageProps) {
   const location = useLocation();
-  const normalizedPathname = location.pathname.replace(/\/+$/, "") || "/";
+  const pathname = forcedPathname ?? location.pathname;
+  const search = forcedSearch ?? location.search;
+  const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
   const isTaskStatsRoute = normalizedPathname === "/tasks/stats";
 
   return (
     <TaskManagementModalProvider>
-      <TaskManagementRouteContent isTaskStatsRoute={isTaskStatsRoute} />
+      <TaskManagementRouteContent isTaskStatsRoute={isTaskStatsRoute} effectiveSearch={search} isActive={isActive} />
     </TaskManagementModalProvider>
   );
 }

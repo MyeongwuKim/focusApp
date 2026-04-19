@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { fetchDailyLogByDate } from "../../api/dailyLogApi";
-import { useDailyLogQuery } from "../../queries";
+import { statsDailyDetailQueryKey, useDailyLogQuery } from "../../queries";
 import { addDays, formatDateInput, getMonthKeysBetween, getRangeDays, parseInputDate } from "./statsDate";
 import type { CountBarDatum, TimeBarDatum } from "./components/types";
 
@@ -23,6 +23,7 @@ type UseStatsMetricsInput = {
   todayKey: string;
   taskId?: string;
   taskLabel?: string;
+  enabled?: boolean;
 };
 
 function normalizeLabel(value: string | null | undefined) {
@@ -52,10 +53,19 @@ function matchesTask(
   return false;
 }
 
-export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel }: UseStatsMetricsInput) {
+export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabled = true }: UseStatsMetricsInput) {
   const rangeDays = getRangeDays(start, end);
   const monthKeys = useMemo(() => getMonthKeysBetween(start, end), [start, end]);
-  const { monthlyLogsQuery } = useDailyLogQuery({ monthKeys });
+  const { monthlyLogsQuery } = useDailyLogQuery({
+    monthKeys,
+    monthlyLogsOptions: {
+      enabled,
+      staleTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    },
+  });
 
   const filteredLogs = useMemo(() => {
     const startKey = formatDateInput(start);
@@ -66,10 +76,13 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel }: Use
   const detailDateKeys = useMemo(() => filteredLogs.map((log) => log.dateKey), [filteredLogs]);
   const detailQueries = useQueries({
     queries: detailDateKeys.map((dateKey) => ({
-      queryKey: ["stats-daily-detail", dateKey],
+      queryKey: statsDailyDetailQueryKey(dateKey),
       queryFn: () => fetchDailyLogByDate(dateKey),
-      staleTime: 30 * 1000,
-      enabled: Boolean(dateKey),
+      staleTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      enabled: enabled && Boolean(dateKey),
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
     })),
   });
 

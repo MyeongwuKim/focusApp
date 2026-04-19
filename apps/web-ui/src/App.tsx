@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SettingsPage } from "./pages/SettingsPage";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
@@ -11,16 +11,16 @@ import { PageHeader } from "./components/PageHeader";
 import { Toast } from "./components/Toast";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ActionSheet } from "./components/ActionSheet";
+import { BackendConnectionBanner } from "./components/BackendConnectionBanner";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { GoPageOptions, NavigateOptions } from "./providers/AppNavigationProvider";
 import { MAIN_ROUTE } from "./routes/route-config";
-import { toast, useAuthStore, useWeatherStore } from "./stores";
+import { useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
-import { fetchCurrentWeather, SEOUL_COORDINATES, type Coordinates } from "./utils/weather";
 import {
   getNativeExpoPushToken,
-  getNativeLocationCoordinates,
   getNotificationPermissionStatus,
+  syncNativeWeatherSettings,
 } from "./utils/notifications";
 import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
 import { updateNotificationSettings } from "./api/notificationSettingsApi";
@@ -28,10 +28,30 @@ import { addTodoDeviationToDailyLog, fetchDailyLogByDate } from "./api/dailyLogA
 import { formatDateKey } from "./utils/holidays";
 import { fetchMe } from "./api/userApi";
 import { getUserFacingErrorMessage } from "./utils/errorMessage";
+import { queryClient } from "./queryClient";
+import { dailyLogByDateQueryKey, statsDailyDetailQueryKey } from "./queries/daily-log/queries";
+import {
+  getBackendConnectivityState,
+  isLikelyBackendOfflineError,
+  markBackendOffline,
+  markBackendOnline,
+  subscribeBackendConnectivity,
+} from "./api/backendConnectivity";
 
-const WEATHER_REFRESH_MS = 30 * 60 * 1000;
+const BACKEND_RECHECK_MS = 3000;
 const LOGIN_ROUTE_PATH = "/login";
 const AUTH_CALLBACK_ROUTE_PATH = "/auth/callback";
+const OVERLAY_EDGE_SWIPE_START_MAX_X = 56;
+const OVERLAY_EDGE_SWIPE_MIN_DISTANCE = 72;
+const OVERLAY_EDGE_SWIPE_MAX_VERTICAL_DRIFT = 56;
+const OVERLAY_SWIPE_AXIS_THRESHOLD = 8;
+const OVERLAY_SWIPE_CLOSE_ANIMATION_MS = 320;
+const OVERLAY_ENTER_ANIMATION_MS = 340;
+const OVERLAY_ENTER_GUARD_MS = 720;
+const OVERLAY_CAROUSEL_BACK_OFFSET_PERCENT = 16;
+const OVERLAY_CAROUSEL_BACK_MIN_SCALE = 0.955;
+const OVERLAY_CAROUSEL_FRONT_MIN_SCALE = 0.985;
+const OVERLAY_ROUTES: RouteKey[] = ["tasks", "dateTasks", "stats", "settings"];
 const ROUTE_PATH: Record<RouteKey, string> = {
   calendar: "/calendar",
   tasks: "/tasks",
@@ -73,101 +93,67 @@ function buildPagePath(path: string, query?: Record<string, string>) {
   return search ? `${normalizedPath}?${search}` : normalizedPath;
 }
 
-type LocationResolveResult = {
-  coordinates: Coordinates;
-  source: "device" | "fallback";
-  reason?: "unsupported" | "denied" | "timeout" | "unavailable" | "error";
-};
+function getHistoryStackIndex() {
+  const historyState = window.history.state as { idx?: number } | null;
+  return typeof historyState?.idx === "number" ? historyState.idx : 0;
+}
 
-function getCurrentCoordinates(timeoutMs = 5000): Promise<LocationResolveResult> {
-  return getNativeLocationCoordinates()
-    .then((snapshot) => {
-      if (!snapshot) {
-        return null;
-      }
-      if (snapshot.coordinates) {
-        return {
-          coordinates: snapshot.coordinates,
-          source: "device" as const,
-        };
-      }
-      return {
-        coordinates: SEOUL_COORDINATES,
-        source: "fallback" as const,
-        reason:
-          snapshot.status === "denied"
-            ? ("denied" as const)
-            : snapshot.status === "unsupported"
-            ? ("unsupported" as const)
-            : ("unavailable" as const),
-      };
-    })
-    .then((nativeResult) => {
-      if (nativeResult) {
-        return nativeResult;
-      }
+function splitPathAndSearch(pathWithSearch: string) {
+  const queryStartIndex = pathWithSearch.indexOf("?");
+  if (queryStartIndex < 0) {
+    return {
+      pathname: pathWithSearch,
+      search: "",
+    };
+  }
+  return {
+    pathname: pathWithSearch.slice(0, queryStartIndex),
+    search: pathWithSearch.slice(queryStartIndex),
+  };
+}
 
-  if (typeof navigator === "undefined" || !navigator.geolocation) {
-    return Promise.resolve({
-      coordinates: SEOUL_COORDINATES,
-      source: "fallback",
-      reason: "unsupported",
-    });
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function isOverlaySwipeBackBlockedTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return false;
   }
 
-  return new Promise((resolve) => {
-    let settled = false;
-    const timeoutId = window.setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resolve({
-        coordinates: SEOUL_COORDINATES,
-        source: "fallback",
-        reason: "timeout",
-      });
-    }, timeoutMs);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        window.clearTimeout(timeoutId);
-        resolve({
-          coordinates: {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          },
-          source: "device",
-        });
-      },
-      (error) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        window.clearTimeout(timeoutId);
-        resolve({
-          coordinates: SEOUL_COORDINATES,
-          source: "fallback",
-          reason:
-            error.code === error.PERMISSION_DENIED
-              ? "denied"
-              : error.code === error.POSITION_UNAVAILABLE
-              ? "unavailable"
-              : error.code === error.TIMEOUT
-              ? "timeout"
-              : "error",
-        });
-      },
-      { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 10 * 60 * 1000 }
-    );
-  });
-    });
+  return Boolean(
+    target.closest(
+      [
+        "input",
+        "textarea",
+        "select",
+        "button",
+        "[role='button']",
+        "[role='slider']",
+        "[contenteditable='true']",
+        "[data-disable-overlay-swipe-back='true']",
+      ].join(",")
+    )
+  );
 }
+
+type OverlayTouchStart = {
+  x: number;
+  y: number;
+  canSwipeBack: boolean;
+  axis: "horizontal" | "vertical" | null;
+};
+
+type NativeWeatherSnapshotPayload = {
+  temperature?: number;
+  weatherCode?: number;
+  isDay?: number;
+};
+
+type OverlayRouteSnapshot = {
+  pathname: string;
+  search: string;
+};
 
 function getCallbackParam(name: string, routeSearch: string): string | null {
   const fromRouteSearch = new URLSearchParams(routeSearch).get(name);
@@ -204,13 +190,32 @@ function App() {
   const [backendBootState, setBackendBootState] = useState<"idle" | "checking" | "ready" | "error">("idle");
   const [backendBootError, setBackendBootError] = useState<string | null>(null);
   const [backendBootRetryKey, setBackendBootRetryKey] = useState(0);
-  const overlayTouchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const weatherFallbackNotifiedRef = useRef(false);
+  const overlayTouchStartRef = useRef<OverlayTouchStart | null>(null);
+  const overlaySwipeBackTimeoutRef = useRef<number | null>(null);
+  const overlayEnterAnimationTimeoutRef = useRef<number | null>(null);
+  const overlayHistoryPathByIdxRef = useRef<Map<number, string>>(new Map());
+  const overlayLastStackIndexRef = useRef<number | null>(null);
+  const [overlayDragX, setOverlayDragX] = useState(0);
+  const [overlaySwipeState, setOverlaySwipeState] = useState<"idle" | "dragging" | "settling" | "closing">(
+    "idle"
+  );
+  const [isOverlayEntering, setIsOverlayEntering] = useState(false);
+  const [overlayRouteSnapshots, setOverlayRouteSnapshots] = useState<
+    Partial<Record<RouteKey, OverlayRouteSnapshot>>
+  >({});
+  const [overlayBackPreviewRoute, setOverlayBackPreviewRoute] = useState<RouteKey | null>(null);
+  const [overlayBackPreviewPathWithSearch, setOverlayBackPreviewPathWithSearch] = useState<string | null>(
+    null
+  );
+  const lastOverlayEnterRef = useRef<{ path: string; at: number } | null>(null);
+  const lastOverlayNavigationRef = useRef<{ path: string; at: number } | null>(null);
   const syncedNotificationAuthTokenRef = useRef<string | null>(null);
   const backgroundEnteredAtMsRef = useRef<number | null>(null);
   const backgroundSyncInFlightRef = useRef(false);
   const skipNextNativeForegroundFlushRef = useRef(false);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
+  const weatherMood = useWeatherStore((state) => state.weatherMood);
+  const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
 
   useEffect(() => {
     if (isAuthCallbackRoute) {
@@ -283,12 +288,17 @@ function App() {
           return;
         }
         setBackendBootState("ready");
+        setBackendBootError(null);
+        markBackendOnline();
       } catch (error) {
         if (cancelled) {
           return;
         }
         setBackendBootState("error");
         setBackendBootError(getUserFacingErrorMessage(error, "서버 연결에 실패했어요."));
+        if (isLikelyBackendOfflineError(error)) {
+          markBackendOffline();
+        }
       } finally {
         window.clearTimeout(timeoutId);
       }
@@ -302,49 +312,139 @@ function App() {
   }, [backendBootRetryKey, isAuthCallbackRoute, isLoggedIn, isLoginRoute, setAuthToken]);
 
   useEffect(() => {
-    if (!weatherEnabled) {
-      useWeatherStore.getState().setWeather(null);
+    if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+      return;
+    }
+
+    const unsubscribe = subscribeBackendConnectivity((next, previous) => {
+      if (next === "offline") {
+        setBackendBootState("error");
+        setBackendBootError("서버 연결에 실패했어요.");
+        return;
+      }
+
+      setBackendBootState("ready");
+      setBackendBootError(null);
+      if (previous === "offline") {
+        void queryClient.resumePausedMutations();
+        void queryClient.invalidateQueries();
+        void queryClient.refetchQueries({ type: "active" });
+      }
+    });
+
+    if (getBackendConnectivityState() === "offline") {
+      setBackendBootState("error");
+      setBackendBootError("서버 연결에 실패했어요.");
+    }
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isAuthCallbackRoute, isLoggedIn, isLoginRoute]);
+
+  useEffect(() => {
+    if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+      return;
+    }
+    if (getBackendConnectivityState() !== "offline") {
       return;
     }
 
     let cancelled = false;
 
-    const loadWeather = async () => {
+    const probeBackend = async () => {
       try {
-        const location = await getCurrentCoordinates();
-        const nextWeather = await fetchCurrentWeather(location.coordinates);
-        if (!cancelled) {
-          useWeatherStore.getState().setWeather(nextWeather);
-          if (location.source === "fallback" && !weatherFallbackNotifiedRef.current) {
-            weatherFallbackNotifiedRef.current = true;
-            if (location.reason === "denied") {
-              toast.error("위치 권한이 없어 서울 날씨로 표시 중이에요.", "위치 권한 안내");
-            } else {
-              toast.error("현재 위치를 가져오지 못해 서울 날씨로 표시 중이에요.", "위치 안내");
-            }
-          }
+        const me = await fetchMe();
+        if (cancelled) {
+          return;
         }
+        if (!me) {
+          setAuthToken(null);
+          return;
+        }
+        markBackendOnline();
       } catch (error) {
-        if (!cancelled) {
-          console.warn("Failed to load weather", error);
+        if (cancelled) {
+          return;
+        }
+        if (!isLikelyBackendOfflineError(error)) {
+          setBackendBootError(getUserFacingErrorMessage(error, "서버 연결에 실패했어요."));
         }
       }
     };
 
-    loadWeather();
-    const intervalId = window.setInterval(loadWeather, WEATHER_REFRESH_MS);
+    void probeBackend();
+    const intervalId = window.setInterval(() => {
+      void probeBackend();
+    }, BACKEND_RECHECK_MS);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+    };
+  }, [backendBootState, isAuthCallbackRoute, isLoggedIn, isLoginRoute, setAuthToken]);
+
+  useEffect(() => {
+    if (!weatherEnabled) {
+      useWeatherStore.getState().setWeather(null);
+    }
+  }, [weatherEnabled]);
+
+  useEffect(() => {
+    syncNativeWeatherSettings({
+      enabled: weatherEnabled,
+      mood: weatherMood,
+      particleClarity: weatherParticleClarity,
+    });
+  }, [weatherEnabled, weatherMood, weatherParticleClarity]);
+
+  useEffect(() => {
+    const handleNativeWeatherSnapshot = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        type?: string;
+        payload?: NativeWeatherSnapshotPayload;
+      }>;
+      const detail = customEvent.detail;
+      if (detail?.type !== "RN_WEATHER_SNAPSHOT") {
+        return;
+      }
+
+      if (!weatherEnabled) {
+        useWeatherStore.getState().setWeather(null);
+        return;
+      }
+
+      const payload = detail.payload;
+      if (
+        !payload ||
+        typeof payload.temperature !== "number" ||
+        typeof payload.weatherCode !== "number" ||
+        typeof payload.isDay !== "number"
+      ) {
+        return;
+      }
+
+      useWeatherStore.getState().setWeather({
+        temperature: payload.temperature,
+        weatherCode: payload.weatherCode,
+        isDay: payload.isDay,
+      });
+    };
+
+    window.addEventListener("focus-hybrid-native-bridge", handleNativeWeatherSnapshot as EventListener);
+
+    return () => {
+      window.removeEventListener("focus-hybrid-native-bridge", handleNativeWeatherSnapshot as EventListener);
     };
   }, [weatherEnabled]);
 
   useEffect(() => {
     const hasNativeWebViewBridge =
       typeof window !== "undefined" &&
-      Boolean((window as Window & { ReactNativeWebView?: { postMessage?: (message: string) => void } })
-        .ReactNativeWebView);
+      Boolean(
+        (window as Window & { ReactNativeWebView?: { postMessage?: (message: string) => void } })
+          .ReactNativeWebView
+      );
 
     const markBackgroundEntered = () => {
       if (backgroundEnteredAtMsRef.current === null) {
@@ -371,11 +471,13 @@ function App() {
             return;
           }
 
-          await addTodoDeviationToDailyLog({
+          const updatedLog = await addTodoDeviationToDailyLog({
             dateKey: todayKey,
             todoId: inProgressTodo.id,
             seconds: elapsedSeconds,
           });
+          queryClient.setQueryData(dailyLogByDateQueryKey(todayKey), updatedLog);
+          queryClient.setQueryData(statsDailyDetailQueryKey(todayKey), updatedLog);
         }
       } catch (error) {
         console.log("Failed to add deviation on app foreground:", error);
@@ -453,11 +555,13 @@ function App() {
           return;
         }
 
-        await addTodoDeviationToDailyLog({
+        const updatedLog = await addTodoDeviationToDailyLog({
           dateKey,
           todoId,
           seconds: elapsedSeconds,
         });
+        queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), updatedLog);
+        queryClient.setQueryData(statsDailyDetailQueryKey(dateKey), updatedLog);
       } catch (error) {
         console.log("Failed to restore deviation from native todo session:", error);
       }
@@ -481,20 +585,11 @@ function App() {
       }
     };
 
-    window.addEventListener(
-      "focus-hybrid-native-bridge",
-      handleNativeAppStateChanged as EventListener
-    );
-    window.addEventListener(
-      "focus-hybrid-native-bridge",
-      handleNativeTodoSessionRecovery as EventListener
-    );
+    window.addEventListener("focus-hybrid-native-bridge", handleNativeAppStateChanged as EventListener);
+    window.addEventListener("focus-hybrid-native-bridge", handleNativeTodoSessionRecovery as EventListener);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
-      window.removeEventListener(
-        "focus-hybrid-native-bridge",
-        handleNativeAppStateChanged as EventListener
-      );
+      window.removeEventListener("focus-hybrid-native-bridge", handleNativeAppStateChanged as EventListener);
       window.removeEventListener(
         "focus-hybrid-native-bridge",
         handleNativeTodoSessionRecovery as EventListener
@@ -559,11 +654,22 @@ function App() {
   const goPage = (path: string, options?: GoPageOptions) => {
     const nextPath = buildPagePath(path, options?.query);
     const currentPath = `${location.pathname}${location.search}`;
-    if (currentPath === nextPath) {
+    const liveCurrentPath =
+      typeof window === "undefined" ? currentPath : `${window.location.pathname}${window.location.search}`;
+    const now = Date.now();
+    const isDuplicateRapidNavigation =
+      lastOverlayNavigationRef.current?.path === nextPath &&
+      now - lastOverlayNavigationRef.current.at < OVERLAY_ENTER_ANIMATION_MS;
+
+    if (currentPath === nextPath || liveCurrentPath === nextPath || isDuplicateRapidNavigation) {
       setIsDrawerOpen(false);
       return;
     }
 
+    lastOverlayNavigationRef.current = {
+      path: nextPath,
+      at: now,
+    };
     navigate(nextPath, {
       state: options?.state,
       replace: options?.replace,
@@ -584,7 +690,7 @@ function App() {
     });
   };
 
-  const goBack = () => {
+  const performGoBackNavigation = () => {
     const historyState = window.history.state as { idx?: number } | null;
     const stackIndex = typeof historyState?.idx === "number" ? historyState.idx : 0;
 
@@ -596,6 +702,146 @@ function App() {
     goPage(ROUTE_PATH[MAIN_ROUTE], { replace: true });
     setIsDrawerOpen(false);
   };
+
+  const goBack = (options?: { animated?: boolean }) => {
+    const prefersAnimatedBack = options?.animated ?? true;
+    const stackIndex = getHistoryStackIndex();
+    const previousPathWithSearch =
+      stackIndex > 0 ? overlayHistoryPathByIdxRef.current.get(stackIndex - 1) ?? null : null;
+    const previousPathname = previousPathWithSearch ? splitPathAndSearch(previousPathWithSearch).pathname : null;
+    const previousRoute = previousPathname ? getRouteFromPath(previousPathname) : null;
+    const isInternalBackWithinSameOverlay = previousRoute !== null && previousRoute === overlayRoute;
+    const shouldAnimate = prefersAnimatedBack && overlayRoute !== null && !isInternalBackWithinSameOverlay;
+
+    if (!shouldAnimate) {
+      performGoBackNavigation();
+      return;
+    }
+
+    if (overlaySwipeState === "closing") {
+      return;
+    }
+
+    if (overlaySwipeBackTimeoutRef.current !== null) {
+      window.clearTimeout(overlaySwipeBackTimeoutRef.current);
+      overlaySwipeBackTimeoutRef.current = null;
+    }
+
+    const viewportWidth = window.innerWidth || 390;
+    setIsOverlayEntering(false);
+    setOverlaySwipeState("closing");
+    setOverlayDragX(viewportWidth);
+    overlaySwipeBackTimeoutRef.current = window.setTimeout(() => {
+      overlaySwipeBackTimeoutRef.current = null;
+      performGoBackNavigation();
+      overlayTouchStartRef.current = null;
+      setOverlaySwipeState("idle");
+      setOverlayDragX(0);
+    }, OVERLAY_SWIPE_CLOSE_ANIMATION_MS);
+  };
+
+  useEffect(() => {
+    const stackIndex = getHistoryStackIndex();
+    const currentPathWithSearch = `${location.pathname}${location.search}`;
+    overlayHistoryPathByIdxRef.current.set(stackIndex, currentPathWithSearch);
+
+    if (stackIndex <= 0) {
+      setOverlayBackPreviewRoute(null);
+      setOverlayBackPreviewPathWithSearch(null);
+      return;
+    }
+
+    const previousPathWithSearch = overlayHistoryPathByIdxRef.current.get(stackIndex - 1);
+    if (!previousPathWithSearch) {
+      setOverlayBackPreviewRoute(null);
+      setOverlayBackPreviewPathWithSearch(null);
+      return;
+    }
+
+    const previousPathname = previousPathWithSearch.split("?")[0] ?? previousPathWithSearch;
+    const previousRoute = getRouteFromPath(previousPathname);
+    if (previousRoute === MAIN_ROUTE) {
+      setOverlayBackPreviewRoute(null);
+      setOverlayBackPreviewPathWithSearch(null);
+      return;
+    }
+
+    setOverlayBackPreviewRoute(previousRoute);
+    setOverlayBackPreviewPathWithSearch(previousPathWithSearch);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!overlayRoute) {
+      return;
+    }
+    const nextSnapshot = {
+      pathname: location.pathname,
+      search: location.search,
+    };
+    setOverlayRouteSnapshots((previous) => {
+      const current = previous[overlayRoute];
+      if (current && current.pathname === nextSnapshot.pathname && current.search === nextSnapshot.search) {
+        return previous;
+      }
+      return {
+        ...previous,
+        [overlayRoute]: nextSnapshot,
+      };
+    });
+  }, [location.pathname, location.search, overlayRoute]);
+
+  useLayoutEffect(() => {
+    overlayTouchStartRef.current = null;
+    setOverlayDragX(0);
+    setOverlaySwipeState("idle");
+    const stackIndex = getHistoryStackIndex();
+    const previousStackIndex = overlayLastStackIndexRef.current;
+    overlayLastStackIndexRef.current = stackIndex;
+    const shouldAnimateOverlayEnterCandidate =
+      Boolean(overlayRoute) && (previousStackIndex === null || stackIndex > previousStackIndex);
+    const nextOverlayPath = `${location.pathname}${location.search}`;
+    const now = Date.now();
+    const shouldSuppressDuplicateEnter =
+      shouldAnimateOverlayEnterCandidate &&
+      lastOverlayEnterRef.current?.path === nextOverlayPath &&
+      now - lastOverlayEnterRef.current.at < OVERLAY_ENTER_GUARD_MS;
+    const shouldAnimateOverlayEnter = shouldAnimateOverlayEnterCandidate && !shouldSuppressDuplicateEnter;
+    if (shouldAnimateOverlayEnter) {
+      lastOverlayEnterRef.current = {
+        path: nextOverlayPath,
+        at: now,
+      };
+    }
+    setIsOverlayEntering(shouldAnimateOverlayEnter);
+
+    if (overlaySwipeBackTimeoutRef.current !== null) {
+      window.clearTimeout(overlaySwipeBackTimeoutRef.current);
+      overlaySwipeBackTimeoutRef.current = null;
+    }
+
+    if (overlayEnterAnimationTimeoutRef.current !== null) {
+      window.clearTimeout(overlayEnterAnimationTimeoutRef.current);
+      overlayEnterAnimationTimeoutRef.current = null;
+    }
+
+    if (overlayRoute && shouldAnimateOverlayEnter) {
+      overlayEnterAnimationTimeoutRef.current = window.setTimeout(() => {
+        overlayEnterAnimationTimeoutRef.current = null;
+        setIsOverlayEntering(false);
+      }, OVERLAY_ENTER_ANIMATION_MS);
+    }
+  }, [location.pathname, location.search, overlayRoute]);
+
+  useEffect(() => {
+    return () => {
+      if (overlaySwipeBackTimeoutRef.current !== null) {
+        window.clearTimeout(overlaySwipeBackTimeoutRef.current);
+      }
+      if (overlayEnterAnimationTimeoutRef.current !== null) {
+        window.clearTimeout(overlayEnterAnimationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const navigationActions = useMemo(
     () => ({
@@ -611,16 +857,31 @@ function App() {
     [activeRoute, goBack, navigateTo, goPage]
   );
 
-  const renderOverlayBody = (route: RouteKey) => {
+  const renderOverlayBody = (
+    route: RouteKey,
+    options?: {
+      forcedPathname?: string;
+      forcedSearch?: string;
+      isActive?: boolean;
+    }
+  ) => {
     switch (route) {
       case "settings":
-        return <SettingsPage />;
+        return <SettingsPage forcedPathname={options?.forcedPathname} />;
       case "dateTasks":
-        return <DateTodosRoutePage />;
+        return (
+          <DateTodosRoutePage forcedPathname={options?.forcedPathname} forcedSearch={options?.forcedSearch} />
+        );
       case "tasks":
-        return <TaskManagementRoutePage />;
+        return (
+          <TaskManagementRoutePage
+            forcedPathname={options?.forcedPathname}
+            forcedSearch={options?.forcedSearch}
+            isActive={options?.isActive ?? true}
+          />
+        );
       case "stats":
-        return <StatsRoutePage />;
+        return <StatsRoutePage forcedSearch={options?.forcedSearch} />;
       case "calendar":
         return null;
       default: {
@@ -629,6 +890,29 @@ function App() {
       }
     }
   };
+
+  const shouldShowOverlaySwipePreview =
+    overlayRoute !== null &&
+    overlayDragX > 0 &&
+    (overlaySwipeState === "dragging" || overlaySwipeState === "settling" || overlaySwipeState === "closing");
+  const shouldRenderOverlayBackPreview =
+    shouldShowOverlaySwipePreview &&
+    overlayBackPreviewRoute !== null &&
+    overlayBackPreviewPathWithSearch !== null;
+  const overlayBackPreviewPath = overlayBackPreviewPathWithSearch
+    ? splitPathAndSearch(overlayBackPreviewPathWithSearch)
+    : null;
+  const overlayMountedRoutes = OVERLAY_ROUTES.filter(
+    (route) => route === overlayRoute || Boolean(overlayRouteSnapshots[route])
+  );
+  const overlayViewportWidth = typeof window === "undefined" ? 390 : Math.max(window.innerWidth || 390, 1);
+  const overlaySwipeProgress = clampNumber(overlayDragX / overlayViewportWidth, 0, 1);
+  const overlayBackTranslatePercent = (1 - overlaySwipeProgress) * OVERLAY_CAROUSEL_BACK_OFFSET_PERCENT;
+  const overlayBackScale =
+    OVERLAY_CAROUSEL_BACK_MIN_SCALE + (1 - OVERLAY_CAROUSEL_BACK_MIN_SCALE) * overlaySwipeProgress;
+  const overlayBackOpacity = 0.76 + overlaySwipeProgress * 0.24;
+  const overlayFrontScale = 1 - (1 - OVERLAY_CAROUSEL_FRONT_MIN_SCALE) * overlaySwipeProgress;
+  const overlayFrontOpacity = Math.max(1 - overlaySwipeProgress * 0.2, 0.8);
 
   if (!isLoggedIn && !isAuthCallbackRoute) {
     return <LoginPage />;
@@ -647,65 +931,221 @@ function App() {
   return (
     <AppNavigationProvider value={navigationActions}>
       <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
-        {backendBootState === "checking" ? (
-          <div className="pointer-events-none fixed inset-x-0 top-3 z-[90] flex justify-center px-4">
-            <div className="pointer-events-auto inline-flex items-center gap-2 rounded-2xl border border-info/35 bg-base-100/95 px-3 py-2 text-sm text-base-content shadow-lg backdrop-blur">
-              <span className="loading loading-spinner loading-xs text-info" />
-              서버 연결 확인 중...
-            </div>
-          </div>
-        ) : null}
-
-        {backendBootState === "error" ? (
-          <div className="pointer-events-none fixed inset-x-0 top-3 z-[90] flex justify-center px-4">
-            <div className="pointer-events-auto w-full max-w-lg rounded-2xl border border-error/45 bg-base-100/95 px-3 py-2 shadow-[0_14px_36px_rgba(2,6,23,0.28)] backdrop-blur">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="m-0 text-sm font-semibold text-error">서버 연결 안됨</p>
-                  <p className="m-0 truncate text-xs text-base-content/70">
-                    {backendBootError ?? "네트워크 상태를 확인해 주세요."}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-xs btn-error rounded-lg"
-                  onClick={() => setBackendBootRetryKey((prev) => prev + 1)}
-                >
-                  재시도
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <BackendConnectionBanner
+          state={backendBootState}
+          errorMessage={backendBootError}
+          onRetry={() => setBackendBootRetryKey((prev) => prev + 1)}
+        />
 
         <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
           <CalendarRootPage isOverlayActive={Boolean(overlayRoute)} />
 
+          {shouldRenderOverlayBackPreview ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-10 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
+              style={{
+                transform: `translateX(-${overlayBackTranslatePercent}%) scale(${overlayBackScale})`,
+                transformOrigin: "left center",
+                opacity: overlayBackOpacity,
+                transition:
+                  overlaySwipeState === "dragging"
+                    ? "none"
+                    : "transform 320ms cubic-bezier(0.22,1,0.36,1), opacity 260ms ease",
+              }}
+            >
+              <PageHeader
+                route={overlayBackPreviewRoute!}
+                forcedPathname={overlayBackPreviewPath?.pathname}
+                forcedSearch={overlayBackPreviewPath?.search}
+              />
+              <div className="min-h-0 flex flex-1 flex-col">
+                {renderOverlayBody(
+                  overlayBackPreviewRoute!,
+                  overlayBackPreviewPath
+                    ? {
+                        forcedPathname: overlayBackPreviewPath.pathname,
+                        forcedSearch: overlayBackPreviewPath.search,
+                        isActive: false,
+                      }
+                    : undefined
+                )}
+              </div>
+            </div>
+          ) : null}
+
           {overlayRoute ? (
             <div
-              key={overlayRoute}
-              className="overlay-enter absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
+              className={[
+                "absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm",
+                isOverlayEntering && overlaySwipeState === "idle" ? "overlay-enter" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              style={
+                overlaySwipeState === "idle"
+                  ? undefined
+                  : {
+                      transform: `translateX(${overlayDragX}px) scale(${overlayFrontScale})`,
+                      transformOrigin: "left center",
+                      opacity: overlayFrontOpacity,
+                      boxShadow: "0 0 0 1px rgba(148, 163, 184, 0.12), -24px 0 42px rgba(2, 6, 23, 0.18)",
+                      transition:
+                        overlaySwipeState === "dragging"
+                          ? "none"
+                          : "transform 320ms cubic-bezier(0.22,1,0.36,1), opacity 260ms ease",
+                    }
+              }
               onTouchStart={(event) => {
                 const touch = event.touches[0];
-                overlayTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+                overlayTouchStartRef.current = {
+                  x: touch.clientX,
+                  y: touch.clientY,
+                  canSwipeBack:
+                    touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X &&
+                    !isOverlaySwipeBackBlockedTarget(event.target),
+                  axis: null,
+                };
+                if (touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X) {
+                  setIsOverlayEntering(false);
+                }
+              }}
+              onTouchMove={(event) => {
+                const start = overlayTouchStartRef.current;
+                if (!start || !start.canSwipeBack || overlaySwipeState === "closing") {
+                  return;
+                }
+
+                const touch = event.touches[0];
+                const deltaX = touch.clientX - start.x;
+                const deltaY = touch.clientY - start.y;
+
+                if (!start.axis) {
+                  if (
+                    Math.abs(deltaX) < OVERLAY_SWIPE_AXIS_THRESHOLD &&
+                    Math.abs(deltaY) < OVERLAY_SWIPE_AXIS_THRESHOLD
+                  ) {
+                    return;
+                  }
+                  start.axis = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+                }
+
+                if (start.axis !== "horizontal") {
+                  return;
+                }
+
+                if (deltaX <= 0) {
+                  if (overlayDragX !== 0) {
+                    setOverlayDragX(0);
+                  }
+                  setOverlaySwipeState("dragging");
+                  return;
+                }
+
+                event.preventDefault();
+                setOverlaySwipeState("dragging");
+                const viewportWidth = window.innerWidth || 390;
+                const limitedDeltaX = Math.min(deltaX, viewportWidth * 1.08);
+                const dragX =
+                  limitedDeltaX <= viewportWidth
+                    ? limitedDeltaX
+                    : viewportWidth + (limitedDeltaX - viewportWidth) * 0.24;
+                setOverlayDragX(dragX);
               }}
               onTouchEnd={(event) => {
                 const start = overlayTouchStartRef.current;
                 if (!start) {
                   return;
                 }
+
+                if (!start.canSwipeBack || start.axis !== "horizontal") {
+                  overlayTouchStartRef.current = null;
+                  if (overlaySwipeState === "dragging" && overlayDragX > 0) {
+                    setOverlaySwipeState("settling");
+                    setOverlayDragX(0);
+                  } else {
+                    setOverlaySwipeState("idle");
+                  }
+                  return;
+                }
+
                 const touch = event.changedTouches[0];
                 const deltaX = touch.clientX - start.x;
                 const deltaY = touch.clientY - start.y;
-                if (deltaX > 72 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                  goBack();
+                const closeThreshold = Math.max(
+                  OVERLAY_EDGE_SWIPE_MIN_DISTANCE,
+                  Math.min(window.innerWidth * 0.24, 112)
+                );
+                const shouldClose =
+                  deltaX > closeThreshold &&
+                  Math.abs(deltaY) <= OVERLAY_EDGE_SWIPE_MAX_VERTICAL_DRIFT &&
+                  Math.abs(deltaX) > Math.abs(deltaY);
+
+                if (shouldClose) {
+                  const viewportWidth = window.innerWidth || 390;
+                  setOverlaySwipeState("closing");
+                  setOverlayDragX(viewportWidth);
+                  overlaySwipeBackTimeoutRef.current = window.setTimeout(() => {
+                    overlaySwipeBackTimeoutRef.current = null;
+                    performGoBackNavigation();
+                    overlayTouchStartRef.current = null;
+                    setOverlaySwipeState("idle");
+                    setOverlayDragX(0);
+                  }, OVERLAY_SWIPE_CLOSE_ANIMATION_MS);
+                } else {
+                  if (overlayDragX > 0) {
+                    setOverlaySwipeState("settling");
+                    setOverlayDragX(0);
+                  } else {
+                    setOverlaySwipeState("idle");
+                  }
                 }
                 overlayTouchStartRef.current = null;
               }}
+              onTouchCancel={() => {
+                overlayTouchStartRef.current = null;
+                setOverlaySwipeState(overlayDragX > 0 ? "settling" : "idle");
+                setOverlayDragX(0);
+              }}
+              onTransitionEnd={(event) => {
+                if (event.currentTarget !== event.target) {
+                  return;
+                }
+                if (overlaySwipeState === "settling") {
+                  setOverlaySwipeState("idle");
+                }
+              }}
             >
               <PageHeader route={overlayRoute} />
-              <div className="min-h-0 flex flex-1 flex-col">
-                {renderOverlayBody(overlayRoute)}
+              <div className="relative min-h-0 flex flex-1 flex-col overflow-hidden">
+                {overlayMountedRoutes.map((route) => {
+                  const isActiveRoute = route === overlayRoute;
+                  const routeSnapshot = overlayRouteSnapshots[route];
+                  const forcedRenderOptions =
+                    !isActiveRoute && routeSnapshot
+                      ? {
+                          forcedPathname: routeSnapshot.pathname,
+                          forcedSearch: routeSnapshot.search,
+                          isActive: false,
+                        }
+                      : {
+                          isActive: isActiveRoute,
+                        };
+
+                  return (
+                    <div
+                      key={route}
+                      aria-hidden={!isActiveRoute}
+                      className={[
+                        "absolute inset-0 min-h-0 flex flex-col",
+                        isActiveRoute
+                          ? "pointer-events-auto opacity-100 visible"
+                          : "pointer-events-none opacity-0 invisible",
+                      ].join(" ")}
+                    >
+                      {renderOverlayBody(route, forcedRenderOptions)}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}

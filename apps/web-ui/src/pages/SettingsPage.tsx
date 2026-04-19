@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { FiBell, FiCloud, FiSun } from "react-icons/fi";
 import { SettingsNotificationsView } from "../features/settings/components/SettingsNotificationsView";
@@ -50,10 +50,15 @@ function resolveSettingsSection(pathname: string): SettingsSection {
   return "home";
 }
 
-export function SettingsPage() {
+type SettingsPageProps = {
+  forcedPathname?: string;
+};
+
+export function SettingsPage({ forcedPathname }: SettingsPageProps) {
   const location = useLocation();
   const { goPage } = useAppNavigation();
-  const section = useMemo(() => resolveSettingsSection(location.pathname), [location.pathname]);
+  const pathname = forcedPathname ?? location.pathname;
+  const section = useMemo(() => resolveSettingsSection(pathname), [pathname]);
 
   const goSection = (nextSection: SettingsSection) => {
     if (nextSection === "home") {
@@ -64,7 +69,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div key={section} className="settings-view-forward min-h-0 h-full overflow-y-auto">
+    <div className="min-h-0 h-full overflow-y-auto">
       {section === "home" ? (
         <section className="space-y-4 rounded-2xl border border-base-300 bg-base-200/50 p-4">
           <div className="space-y-2">

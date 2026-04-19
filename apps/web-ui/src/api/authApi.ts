@@ -1,4 +1,5 @@
 import { useAuthStore } from "../stores";
+import { fetchWithBackendStatus } from "./backendConnectivity";
 import { getApiOrigin } from "./graphqlEndpoint";
 
 export async function logout() {
@@ -6,7 +7,7 @@ export async function logout() {
   const apiOrigin = getApiOrigin() || "http://localhost:4000";
 
   if (token) {
-    await fetch(`${apiOrigin}/auth/logout`, {
+    await fetchWithBackendStatus(`${apiOrigin}/auth/logout`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

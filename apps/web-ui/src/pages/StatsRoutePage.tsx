@@ -8,9 +8,20 @@ import { StatsTimeSection } from "../features/stats/components/StatsTimeSection"
 import { getRangeDays, normalizeStatsSearchParams } from "../features/stats/statsDate";
 import { useStatsMetrics } from "../features/stats/useStatsMetrics";
 
-export function StatsRoutePage() {
+type StatsRoutePageProps = {
+  forcedSearch?: string;
+};
+
+export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const normalized = useMemo(() => normalizeStatsSearchParams(searchParams), [searchParams]);
+  const effectiveSearchParams = useMemo(
+    () => (forcedSearch !== undefined ? new URLSearchParams(forcedSearch) : searchParams),
+    [forcedSearch, searchParams]
+  );
+  const normalized = useMemo(
+    () => normalizeStatsSearchParams(effectiveSearchParams),
+    [effectiveSearchParams]
+  );
   const { count, time, isFetching } = useStatsMetrics({
     start: normalized.start,
     end: normalized.end,
@@ -58,11 +69,14 @@ export function StatsRoutePage() {
   );
 
   useEffect(() => {
+    if (forcedSearch !== undefined) {
+      return;
+    }
     const next = normalized.normalized.toString();
     if (searchParams.toString() !== next) {
       setSearchParams(normalized.normalized, { replace: true });
     }
-  }, [normalized.normalized, searchParams, setSearchParams]);
+  }, [forcedSearch, normalized.normalized, searchParams, setSearchParams]);
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-base-300 bg-base-100/80 p-4 md:p-5">

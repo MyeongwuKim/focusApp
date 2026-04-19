@@ -113,11 +113,11 @@
   }
 
   .overlay-enter {
-    animation: overlay-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: overlay-enter 320ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
   }
 
   .overlay-leave {
-    animation: overlay-leave 240ms cubic-bezier(0.4, 0, 1, 1) both;
+    animation: overlay-leave 300ms cubic-bezier(0.4, 0, 1, 1) both;
   }
 
   .settings-view-forward {
@@ -664,8 +664,8 @@
 
 @keyframes overlay-enter {
   from {
-    transform: translateX(18%);
-    opacity: 0.82;
+    transform: translateX(22%);
+    opacity: 1;
   }
   to {
     transform: translateX(0%);

@@ -88,17 +88,67 @@ export function reorderById<T extends { id: string }>(
   return moveInArray(items, from, to);
 }
 
+function isSameTaskList(
+  previous: ManagedTaskItem[],
+  next: ManagedTaskItem[]
+) {
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const prevItem = previous[index];
+    const nextItem = next[index];
+    if (
+      prevItem.id !== nextItem.id ||
+      prevItem.label !== nextItem.label ||
+      prevItem.collectionId !== nextItem.collectionId
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isSameCollectionList(
+  previous: ManagedCollection[],
+  next: ManagedCollection[]
+) {
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const prevItem = previous[index];
+    const nextItem = next[index];
+    if (prevItem.id !== nextItem.id || prevItem.name !== nextItem.name) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function taskManagementDataReducer(
   state: TaskManagementDataState,
   action: TaskManagementDataAction
 ): TaskManagementDataState {
   switch (action.type) {
-    case "HYDRATE_FROM_QUERY":
+    case "HYDRATE_FROM_QUERY": {
+      if (
+        isSameTaskList(state.tasks, action.payload.tasks) &&
+        isSameCollectionList(state.collections, action.payload.collections)
+      ) {
+        return state;
+      }
+
       return {
         ...state,
         tasks: action.payload.tasks,
         collections: action.payload.collections,
       };
+    }
     case "SELECT_COLLECTION":
       return {
         ...state,

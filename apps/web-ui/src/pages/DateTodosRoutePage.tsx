@@ -10,13 +10,20 @@ import {
 import { DateTodosRouteProvider } from "../features/todo/date-todos/DateTodosRouteProvider";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 
-export function DateTodosRoutePage() {
+type DateTodosRoutePageProps = {
+  forcedPathname?: string;
+  forcedSearch?: string;
+};
+
+export function DateTodosRoutePage({ forcedPathname, forcedSearch }: DateTodosRoutePageProps) {
   const location = useLocation();
   const { goBack, goPage } = useAppNavigation();
-  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const pathname = forcedPathname ?? location.pathname;
+  const search = forcedSearch ?? location.search;
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const dateKey = searchParams.get("date");
   const restFinishedRequested = searchParams.get("restFinished") === "1";
-  const normalizedPathname = location.pathname.replace(/\/+$/, "") || "/";
+  const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
   const isRoutineImportRoute = normalizedPathname === "/date-tasks/routines";
   const isRoutineCreateRoute = normalizedPathname === "/date-tasks/routines/new";
   const isTaskPickerRoute = normalizedPathname === "/date-tasks/add";

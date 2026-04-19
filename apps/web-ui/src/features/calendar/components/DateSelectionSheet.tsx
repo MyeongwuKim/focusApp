@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { FiCheckCircle, FiChevronRight, FiChevronUp, FiClipboard } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import { useAppStore } from "../../../stores";
+import { formatDateKey } from "../../../utils/holidays";
 import { formatDateLabel } from "../utils/date";
 
 type SelectedTaskItem = {
@@ -24,6 +25,26 @@ type TouchPoint = {
 
 type SwipeAxis = "horizontal" | "vertical" | null;
 
+function getEmptyMessageByDate(selectedDateKey: string) {
+  const todayDateKey = formatDateKey(new Date());
+  if (selectedDateKey === todayDateKey) {
+    return {
+      title: "오늘 할 일이 아직 없어요.",
+      description: "할 일을 추가해서 하루를 시작해볼까요?",
+    };
+  }
+  if (selectedDateKey < todayDateKey) {
+    return {
+      title: "이 날짜에는 기록된 할 일이 없어요.",
+      description: "필요하면 회고 메모만 남겨도 좋아요.",
+    };
+  }
+  return {
+    title: "이 날짜에는 예정된 할 일이 없어요.",
+    description: "미리 할 일을 등록해두면 관리가 쉬워져요.",
+  };
+}
+
 export function DateSelectionSheet({
   isOpen,
   selectedTasks,
@@ -32,6 +53,9 @@ export function DateSelectionSheet({
   onShiftSelectedDate,
 }: DateSelectionSheetProps) {
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
+  const emptyMessage = selectedDateKey
+    ? getEmptyMessageByDate(selectedDateKey)
+    : { title: "", description: "" };
   const touchStartRef = useRef<TouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
   const [shouldRender, setShouldRender] = useState(isOpen);
@@ -202,8 +226,9 @@ export function DateSelectionSheet({
                 <FiClipboard size={20} />
               </span>
               <p className="m-0 text-base font-semibold tracking-tight text-base-content/80">
-                지금은 비어 있어요. 작은 할 일부터 시작해볼까요?
+                {emptyMessage.title}
               </p>
+              <p className="m-0 text-sm text-base-content/60">{emptyMessage.description}</p>
             </div>
           )}
         </div>

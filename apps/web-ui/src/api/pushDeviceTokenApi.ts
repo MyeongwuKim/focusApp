@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from "./authHeaders";
+import { fetchWithBackendStatus } from "./backendConnectivity";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -30,7 +31,7 @@ type RegisterPushDeviceTokenPayload = {
 };
 
 export async function registerPushDeviceToken(input: RegisterPushDeviceTokenInput) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({

@@ -78,6 +78,12 @@ export type NativeTodoSessionSyncPayload = {
   syncedAtMs?: number;
 };
 
+export type NativeWeatherSettingsSyncPayload = {
+  enabled: boolean;
+  mood: "dreamy" | "cinematic";
+  particleClarity: number;
+};
+
 function getNativeWebViewBridge(): NativeWebViewBridge | null {
   if (typeof window === "undefined") {
     return null;
@@ -118,6 +124,10 @@ function postNativeBridgeMessage(type: string, payload?: Record<string, unknown>
 
 export function syncNativeTodoSession(payload: NativeTodoSessionSyncPayload) {
   return postNativeBridgeMessage("REST_TODO_SESSION_SYNC", { payload });
+}
+
+export function syncNativeWeatherSettings(payload: NativeWeatherSettingsSyncPayload) {
+  return postNativeBridgeMessage("REST_WEATHER_SETTINGS_SYNC", { payload });
 }
 
 function getBrowserPermissionStatus(): NativeNotificationPermissionStatus {

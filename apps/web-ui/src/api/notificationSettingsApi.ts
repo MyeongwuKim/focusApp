@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from "./authHeaders";
+import { fetchWithBackendStatus } from "./backendConnectivity";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
 
@@ -94,7 +95,7 @@ type UpdateNotificationSettingsMutationPayload = {
 };
 
 export async function fetchNotificationSettings() {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({
@@ -120,7 +121,7 @@ export async function fetchNotificationSettings() {
 }
 
 export async function updateNotificationSettings(input: UpdateNotificationSettingsInput) {
-  const response = await fetch(getGraphqlEndpoint(), {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
     method: "POST",
     headers: buildAuthHeaders(),
     body: JSON.stringify({

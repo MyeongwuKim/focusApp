@@ -21,6 +21,8 @@ import { Button } from "./ui/Button";
 
 type PageHeaderProps = {
   route: RouteKey;
+  forcedPathname?: string;
+  forcedSearch?: string;
 };
 
 function WeatherIcon({ code, isDay }: { code: number; isDay: number }) {
@@ -57,7 +59,7 @@ function getTasksTitleFromDateKey(dateKey: string) {
   return `${month}.${day} 할일`;
 }
 
-export function PageHeader({ route }: PageHeaderProps) {
+export function PageHeader({ route, forcedPathname, forcedSearch }: PageHeaderProps) {
   const location = useLocation();
   const { openMenu, goBack, goPage } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
@@ -65,16 +67,43 @@ export function PageHeader({ route }: PageHeaderProps) {
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weather = useWeatherStore((state) => state.weather);
-  const dateTasksRouteTitle = useMemo(() => {
-    if (route !== "dateTasks") {
-      return ROUTE_LABEL[route];
+  const pathname = forcedPathname ?? location.pathname;
+  const search = forcedSearch ?? location.search;
+  const routeTitle = useMemo(() => {
+    if (route === "dateTasks") {
+      const dateParam = new URLSearchParams(search).get("date");
+      if (!dateParam) {
+        return ROUTE_LABEL.dateTasks;
+      }
+      return getTasksTitleFromDateKey(dateParam);
     }
-    const dateParam = new URLSearchParams(location.search).get("date");
-    if (!dateParam) {
-      return ROUTE_LABEL.dateTasks;
+
+    if (route === "tasks") {
+      const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+      if (normalizedPath === "/tasks/stats") {
+        const taskLabel = new URLSearchParams(search).get("taskLabel")?.trim();
+        if (taskLabel) {
+          return `${taskLabel} 통계`;
+        }
+        return "할일 통계";
+      }
     }
-    return getTasksTitleFromDateKey(dateParam);
-  }, [location.search, route]);
+
+    if (route === "settings") {
+      const subPath = pathname.replace(/^\/settings\/?/, "").split("/")[0];
+      if (subPath === "theme") {
+        return "테마";
+      }
+      if (subPath === "weather") {
+        return "날씨";
+      }
+      if (subPath === "notifications") {
+        return "알림";
+      }
+    }
+
+    return ROUTE_LABEL[route];
+  }, [pathname, route, search]);
 
   if (route === MAIN_ROUTE) {
     return (
@@ -134,8 +163,8 @@ export function PageHeader({ route }: PageHeaderProps) {
       >
         <FiChevronLeft size={18} />
       </Button>
-      <h1 className="m-0 text-center text-lg font-semibold text-base-content">
-        {dateTasksRouteTitle}
+      <h1 className="m-0 max-w-[calc(100%-6.5rem)] truncate px-2 text-center text-lg font-semibold text-base-content">
+        {routeTitle}
       </h1>
       {route !== "settings" ? (
         <Button

@@ -41,6 +41,10 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
     }
   }, [meQuery.data, setAuthUser]);
 
+  const handleNavigateFromDrawer = (route: RouteKey) => {
+    navigateTo(route);
+  };
+
   const accountEmail = authUser?.email ?? meQuery.data?.email ?? "guest";
 
   return (
@@ -80,11 +84,9 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
               variant={activeRoute === route.key ? "default" : "ghost"}
               className={[
                 "justify-start gap-2.5 rounded-lg border border-transparent px-2.5",
-                activeRoute === route.key
-                  ? "bg-base-200 text-primary"
-                  : "text-base-content/80",
+                activeRoute === route.key ? "bg-base-200 text-primary" : "text-base-content/80",
               ].join(" ")}
-              onClick={() => navigateTo(route.key)}
+              onClick={() => handleNavigateFromDrawer(route.key)}
             >
               <span className="inline-flex h-4 w-4 items-center justify-center text-base-content/75">
                 {ROUTE_ICON[route.key]}

@@ -5,13 +5,27 @@ import { fetchDailyLogByDate, fetchDailyLogMemo, fetchDailyLogsByMonth } from ".
 export const dailyLogsByMonthQueryKey = (monthKey: string) => ["daily-logs", monthKey] as const;
 export const dailyLogByDateQueryKey = (dateKey: string) => ["daily-log-by-date", dateKey] as const;
 export const dailyLogMemoQueryKey = (dateKey: string) => ["daily-log-memo", dateKey] as const;
+export const statsDailyDetailQueryKey = (dateKey: string) => ["stats-daily-detail", dateKey] as const;
 
-export function dailyLogsByMonthQuery(monthKeys: string[]) {
+type MonthlyLogsQueryOptions = {
+  enabled?: boolean;
+  staleTime?: number;
+  gcTime?: number;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
+};
+
+export function dailyLogsByMonthQuery(monthKeys: string[], options?: MonthlyLogsQueryOptions) {
+  const enabled = options?.enabled ?? true;
   const dailyLogQueries = useQueries({
     queries: monthKeys.map((monthKey) => ({
       queryKey: dailyLogsByMonthQueryKey(monthKey),
       queryFn: () => fetchDailyLogsByMonth(monthKey),
-      staleTime: 60 * 1000,
+      staleTime: options?.staleTime ?? 60 * 1000,
+      gcTime: options?.gcTime,
+      enabled: enabled && Boolean(monthKey),
+      refetchOnMount: options?.refetchOnMount,
+      refetchOnWindowFocus: options?.refetchOnWindowFocus,
     })),
   });
 
@@ -45,8 +59,9 @@ export function useDailyLogQuery(input?: {
   monthKeys?: string[];
   dateKey?: string | null;
   memoDateKey?: string | null;
+  monthlyLogsOptions?: MonthlyLogsQueryOptions;
 }) {
-  const monthlyLogsQuery = dailyLogsByMonthQuery(input?.monthKeys ?? []);
+  const monthlyLogsQuery = dailyLogsByMonthQuery(input?.monthKeys ?? [], input?.monthlyLogsOptions);
   const dailyLogByDate = dailyLogByDateQuery(input?.dateKey ?? null);
   const dailyLogMemo = dailyLogMemoQuery(input?.memoDateKey ?? null);
   return {
