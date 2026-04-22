@@ -17,7 +17,6 @@ export function DateTodosRoutineImportRouteLayer({ onClose }: DateTodosRoutineRo
 
   return (
     <TodoRoutineImportModal
-      isOpen
       routines={routineTemplates}
       isLoading={isRoutineTemplatesLoading}
       onClose={onClose}
@@ -33,7 +32,6 @@ export function DateTodosRoutineCreateRouteLayer({ onClose }: DateTodosRoutineRo
 
   return (
     <TodoRoutineCreateModal
-      isOpen
       onClose={onClose}
       onCreate={handleCreateRoutineTemplate}
     />

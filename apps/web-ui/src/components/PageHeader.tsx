@@ -23,6 +23,7 @@ type PageHeaderProps = {
   route: RouteKey;
   forcedPathname?: string;
   forcedSearch?: string;
+  onBack?: () => void;
 };
 
 function WeatherIcon({ code, isDay }: { code: number; isDay: number }) {
@@ -59,7 +60,7 @@ function getTasksTitleFromDateKey(dateKey: string) {
   return `${month}.${day} 할일`;
 }
 
-export function PageHeader({ route, forcedPathname, forcedSearch }: PageHeaderProps) {
+export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: PageHeaderProps) {
   const location = useLocation();
   const { openMenu, goBack, goPage } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
@@ -71,6 +72,14 @@ export function PageHeader({ route, forcedPathname, forcedSearch }: PageHeaderPr
   const search = forcedSearch ?? location.search;
   const routeTitle = useMemo(() => {
     if (route === "dateTasks") {
+      const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+      if (normalizedPath === "/date-tasks/routines/new") {
+        return "루틴 만들기";
+      }
+      if (normalizedPath === "/date-tasks/routines") {
+        return "루틴 불러오기";
+      }
+
       const dateParam = new URLSearchParams(search).get("date");
       if (!dateParam) {
         return ROUTE_LABEL.dateTasks;
@@ -158,26 +167,14 @@ export function PageHeader({ route, forcedPathname, forcedSearch }: PageHeaderPr
         size="sm"
         circle
         className="absolute left-2 top-1/2 -translate-y-1/2"
-        onClick={goBack}
+        onClick={() => (onBack ? onBack() : goBack({ animated: false }))}
         aria-label="뒤로가기"
       >
         <FiChevronLeft size={18} />
       </Button>
-      <h1 className="m-0 max-w-[calc(100%-6.5rem)] truncate px-2 text-center text-lg font-semibold text-base-content">
+      <h1 className="m-0 max-w-[calc(100%-4rem)] truncate px-2 text-center text-lg font-semibold text-base-content">
         {routeTitle}
       </h1>
-      {route !== "settings" ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          circle
-          className="absolute right-2 top-1/2 -translate-y-1/2"
-          onClick={() => goPage("/settings")}
-          aria-label="옵션으로 이동"
-        >
-          <FiSettings size={18} />
-        </Button>
-      ) : null}
     </header>
   );
 }

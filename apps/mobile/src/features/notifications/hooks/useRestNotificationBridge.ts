@@ -52,6 +52,30 @@ function extractDateKeyFromNotificationKey(key: string | null) {
   return matched?.[0] ?? null;
 }
 
+function normalizeTargetPath(path: string) {
+  if (!path.startsWith("/")) {
+    return null;
+  }
+
+  const [pathname, rawSearch = ""] = path.split("?", 2);
+  if (pathname !== "/date-tasks") {
+    return path;
+  }
+
+  const params = new URLSearchParams(rawSearch);
+  const next = new URLSearchParams();
+  next.set("sheet", "1");
+  const date = params.get("date");
+  if (date) {
+    next.set("date", date);
+  }
+  if (params.get("restFinished") === "1") {
+    next.set("restFinished", "1");
+  }
+
+  return `/calendar?${next.toString()}`;
+}
+
 async function ensureNotificationPermission() {
   const permissions = await Notifications.getPermissionsAsync();
   if (permissions.granted || permissions.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) {
@@ -124,8 +148,11 @@ export function useRestNotificationBridge({ onNavigate }: UseRestNotificationBri
       handledResponseIdRef.current = responseId;
 
       const targetPath = response.notification.request.content.data?.targetPath;
-      if (typeof targetPath === "string" && targetPath.startsWith("/")) {
-        onNavigate(targetPath);
+      if (typeof targetPath === "string") {
+        const normalizedPath = normalizeTargetPath(targetPath);
+        if (normalizedPath) {
+          onNavigate(normalizedPath);
+        }
       }
     },
     [onNavigate]
@@ -164,7 +191,9 @@ export function useRestNotificationBridge({ onNavigate }: UseRestNotificationBri
     const title = asString(payload.title) ?? DEFAULT_REST_NOTIFICATION_TITLE;
     const body = asString(payload.body) ?? DEFAULT_REST_NOTIFICATION_BODY;
     const parsedDateKey = extractDateKeyFromNotificationKey(key);
-    const targetPath = asString(payload.targetPath) ?? (parsedDateKey ? `/date-tasks?date=${parsedDateKey}` : "/date-tasks");
+    const targetPath =
+      normalizeTargetPath(asString(payload.targetPath) ?? "") ??
+      (parsedDateKey ? `/calendar?sheet=1&date=${parsedDateKey}&restFinished=1` : "/calendar?sheet=1");
 
     if (key) {
       const existingNotificationId = notificationIdByKeyRef.current.get(key);

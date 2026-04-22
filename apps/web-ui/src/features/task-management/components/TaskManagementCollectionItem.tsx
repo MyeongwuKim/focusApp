@@ -7,6 +7,7 @@ type TaskManagementCollectionItemProps = {
   count: number;
   active: boolean;
   dropActive?: boolean;
+  disableInteraction?: boolean;
   onSelect: () => void;
   onOpenMenu?: () => void;
 };
@@ -16,6 +17,7 @@ function TaskManagementCollectionItemComponent({
   count,
   active,
   dropActive = false,
+  disableInteraction = false,
   onSelect,
   onOpenMenu,
 }: TaskManagementCollectionItemProps) {
@@ -33,6 +35,7 @@ function TaskManagementCollectionItemComponent({
           "h-10 min-h-10 min-w-0 flex-1 border-transparent bg-transparent px-1 text-[11px] shadow-none",
           active ? "text-primary" : "text-base-content/70",
         ].join(" ")}
+        disabled={disableInteraction}
         onClick={onSelect}
       >
         <span className="flex w-full items-center justify-between gap-1">
@@ -50,6 +53,7 @@ function TaskManagementCollectionItemComponent({
           size="xs"
           circle
           className="h-7 min-h-7 w-7 min-w-7 border-transparent bg-transparent text-base-content/55 shadow-none"
+          disabled={disableInteraction}
           onClick={onOpenMenu}
           aria-label="컬렉션 옵션"
         >
@@ -67,5 +71,6 @@ export const TaskManagementCollectionItem = memo(
     prev.count === next.count &&
     prev.active === next.active &&
     prev.dropActive === next.dropActive &&
+    prev.disableInteraction === next.disableInteraction &&
     Boolean(prev.onOpenMenu) === Boolean(next.onOpenMenu)
 );

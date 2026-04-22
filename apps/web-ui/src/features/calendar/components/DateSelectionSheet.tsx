@@ -58,18 +58,19 @@ export function DateSelectionSheet({
     : { title: "", description: "" };
   const touchStartRef = useRef<TouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
+  const handleTouchStartYRef = useRef<number | null>(null);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [motion, setMotion] = useState<"enter" | "leave">("enter");
   const [isDragging, setIsDragging] = useState(false);
-  const [dragX, setDragX] = useState(0);
   const [dragY, setDragY] = useState(0);
+  const [bodyDragX, setBodyDragX] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       setMotion("enter");
-      setDragX(0);
       setDragY(0);
+      setBodyDragX(0);
       setIsDragging(false);
       return;
     }
@@ -77,8 +78,8 @@ export function DateSelectionSheet({
     if (shouldRender) {
       setMotion("leave");
       setIsDragging(false);
-      setDragX(0);
       setDragY(0);
+      setBodyDragX(0);
     }
   }, [isOpen, shouldRender]);
 
@@ -86,14 +87,45 @@ export function DateSelectionSheet({
     return null;
   }
 
-  const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
+  const handleHandleTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    const touch = event.touches[0];
+    handleTouchStartYRef.current = touch.clientY;
+    setIsDragging(true);
+  };
+
+  const handleHandleTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    const startY = handleTouchStartYRef.current;
+    if (startY === null) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    const deltaY = Math.max(touch.clientY - startY, 0);
+    event.preventDefault();
+    setDragY(deltaY);
+  };
+
+  const handleHandleTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
+    const closeThreshold = 84;
+
+    if (dragY > closeThreshold) {
+      onRequestClose();
+    } else {
+      setDragY(0);
+    }
+
+    handleTouchStartYRef.current = null;
+    setIsDragging(false);
+  };
+
+  const handleBodyTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
     const touch = event.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
     swipeAxisRef.current = null;
     setIsDragging(true);
   };
 
-  const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
+  const handleBodyTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
     const start = touchStartRef.current;
     if (!start) {
       return;
@@ -111,44 +143,25 @@ export function DateSelectionSheet({
       swipeAxisRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
     }
 
-    if (swipeAxisRef.current === "horizontal") {
-      event.preventDefault();
-      setDragX(deltaX);
-      setDragY(0);
+    if (swipeAxisRef.current !== "horizontal") {
       return;
     }
 
     event.preventDefault();
-    setDragY(deltaY);
-    setDragX(0);
+    setBodyDragX(deltaX);
   };
 
-  const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
-    const closeThreshold = 84;
+  const handleBodyTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
     const swipeThreshold = 52;
 
-    setIsDragging(false);
-
-    if (swipeAxisRef.current === "horizontal") {
-      if (Math.abs(dragX) > swipeThreshold) {
-        onShiftSelectedDate(dragX < 0 ? 1 : -1);
-      }
-      setDragX(0);
-      setDragY(0);
-      touchStartRef.current = null;
-      swipeAxisRef.current = null;
-      return;
+    if (swipeAxisRef.current === "horizontal" && Math.abs(bodyDragX) > swipeThreshold) {
+      onShiftSelectedDate(bodyDragX < 0 ? 1 : -1);
     }
 
-    if (dragY > closeThreshold) {
-      onRequestClose();
-    } else {
-      setDragY(0);
-      setDragX(0);
-    }
-
+    setBodyDragX(0);
     touchStartRef.current = null;
     swipeAxisRef.current = null;
+    setIsDragging(false);
   };
 
   return (
@@ -162,7 +175,7 @@ export function DateSelectionSheet({
           motion === "enter" && !isDragging ? "date-sheet-enter" : "",
         ].join(" ")}
         style={{
-          transform: motion === "leave" ? "translateY(112%)" : `translate(${dragX}px, ${dragY}px)`,
+          transform: motion === "leave" ? "translateY(112%)" : `translateY(${dragY}px)`,
           opacity: motion === "leave" ? 0 : 1,
           transition: isDragging
             ? "none"
@@ -179,15 +192,13 @@ export function DateSelectionSheet({
       >
         <div
           className="mb-1 select-none"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          onTouchStart={handleHandleTouchStart}
+          onTouchMove={handleHandleTouchMove}
+          onTouchEnd={handleHandleTouchEnd}
           onTouchCancel={() => {
             setIsDragging(false);
-            setDragX(0);
             setDragY(0);
-            touchStartRef.current = null;
-            swipeAxisRef.current = null;
+            handleTouchStartYRef.current = null;
           }}
         >
           <div className="flex items-center justify-center text-base-content/45">
@@ -207,30 +218,49 @@ export function DateSelectionSheet({
             <FiChevronRight size={12} />
           </Button>
         </div>
-        <div className="mt-2 flex-1 space-y-2 overflow-y-auto overscroll-contain">
-          {selectedTasks.length > 0 ? (
-            selectedTasks.map((task, index) => (
-              <div
-                key={`${selectedDateKey}-${task.label}-${index}`}
-                className="flex items-center gap-2 rounded-lg border border-base-300/80 bg-base-200/50 px-2.5 py-2 text-sm text-base-content/85"
-              >
-                {task.done ? <FiCheckCircle size={14} className="text-success" /> : null}
-                <span className={task.done ? "truncate text-base-content/55 line-through" : "truncate"}>
-                  {task.label}
+        <div
+          className="mt-2 flex-1 overflow-hidden"
+          onTouchStart={handleBodyTouchStart}
+          onTouchMove={handleBodyTouchMove}
+          onTouchEnd={handleBodyTouchEnd}
+          onTouchCancel={() => {
+            setIsDragging(false);
+            setBodyDragX(0);
+            touchStartRef.current = null;
+            swipeAxisRef.current = null;
+          }}
+        >
+          <div
+            className="h-full space-y-2 overflow-y-auto overscroll-contain"
+            style={{
+              transform: `translateX(${bodyDragX}px)`,
+              transition: isDragging ? "none" : "transform 180ms ease-out",
+            }}
+          >
+            {selectedTasks.length > 0 ? (
+              selectedTasks.map((task, index) => (
+                <div
+                  key={`${selectedDateKey}-${task.label}-${index}`}
+                  className="flex items-center gap-2 rounded-lg border border-base-300/80 bg-base-200/50 px-2.5 py-2 text-sm text-base-content/85"
+                >
+                  {task.done ? <FiCheckCircle size={14} className="text-success" /> : null}
+                  <span className={task.done ? "truncate text-base-content/55 line-through" : "truncate"}>
+                    {task.label}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="flex min-h-full flex-col items-center justify-center gap-4 px-3 py-6 text-center">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-base-200 text-base-content/60">
+                  <FiClipboard size={20} />
                 </span>
+                <p className="m-0 text-base font-semibold tracking-tight text-base-content/80">
+                  {emptyMessage.title}
+                </p>
+                <p className="m-0 text-sm text-base-content/60">{emptyMessage.description}</p>
               </div>
-            ))
-          ) : (
-            <div className="flex min-h-full flex-col items-center justify-center gap-4 px-3 py-6 text-center">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-base-200 text-base-content/60">
-                <FiClipboard size={20} />
-              </span>
-              <p className="m-0 text-base font-semibold tracking-tight text-base-content/80">
-                {emptyMessage.title}
-              </p>
-              <p className="m-0 text-sm text-base-content/60">{emptyMessage.description}</p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

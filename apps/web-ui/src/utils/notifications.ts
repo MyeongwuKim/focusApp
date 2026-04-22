@@ -15,7 +15,7 @@ export function notifyRestFinished(dateKey: string) {
   notification.onclick = () => {
     notification.close();
     window.focus();
-    window.location.hash = `#/date-tasks?date=${dateKey}&restFinished=1`;
+    window.location.hash = `#/calendar?sheet=1&date=${dateKey}&restFinished=1`;
   };
 
   return true;
@@ -448,7 +448,7 @@ export function scheduleNativeRestNotification(input: {
     key: `rest-finished-${input.dateKey}`,
     title: input.title ?? "휴식 시간 종료",
     body: input.body ?? "설정한 휴식 시간이 끝났어요. 눌러서 오늘 할일로 이동하세요.",
-    targetPath: `/date-tasks?date=${input.dateKey}&restFinished=1`,
+    targetPath: `/calendar?sheet=1&date=${input.dateKey}&restFinished=1`,
     seconds,
   });
 }

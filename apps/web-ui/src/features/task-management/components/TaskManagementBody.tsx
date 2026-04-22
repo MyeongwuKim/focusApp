@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
@@ -6,6 +7,7 @@ import {
   MouseSensor,
   TouchSensor,
   closestCenter,
+  pointerWithin,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -19,8 +21,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FiEdit3, FiTrash2 } from "react-icons/fi";
-import { actionSheet, confirm } from "../../../stores";
+import { FiArrowRight, FiEdit3, FiTrash2 } from "react-icons/fi";
+import { actionSheet, confirm, toast } from "../../../stores";
 import {
   useTaskManagementActions,
   useTaskManagementData,
@@ -56,6 +58,11 @@ const parseCollectionDropId = (dropId: string) =>
 const isUncategorizedCollection = (name: string) =>
   name.trim().toLowerCase() === UNCATEGORIZED_COLLECTION_NAME.toLowerCase();
 
+const TASK_DRAG_START_DISTANCE_THRESHOLD = 6;
+
+const isTaskDragContainerId = (containerId: string) => containerId.startsWith(TASK_DRAG_ID_PREFIX);
+const isCollectionContainerId = (containerId: string) => containerId.startsWith(COLLECTION_DROP_ID_PREFIX);
+
 const animateLayoutChanges = (
   args: Parameters<typeof defaultAnimateLayoutChanges>[0]
 ) => {
@@ -70,7 +77,6 @@ function DraggableTaskItem({
   collectionName,
   active,
   disableActions,
-  disableDrag,
   onSelect,
   onOpenMenu,
 }: {
@@ -78,19 +84,18 @@ function DraggableTaskItem({
   collectionName: string;
   active: boolean;
   disableActions: boolean;
-  disableDrag: boolean;
   onSelect: () => void;
   onOpenMenu: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: toTaskDragId(task.id),
-    disabled: disableDrag,
     animateLayoutChanges,
   });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0 : 1,
   };
 
   return (
@@ -118,6 +123,7 @@ function DroppableCollectionItem({
   count,
   active,
   draggingTaskId,
+  draggingCollectionId,
   onSelect,
   onOpenMenu,
 }: {
@@ -126,6 +132,7 @@ function DroppableCollectionItem({
   count: number;
   active: boolean;
   draggingTaskId: string | null;
+  draggingCollectionId: string | null;
   onSelect: () => void;
   onOpenMenu?: () => void;
 }) {
@@ -136,7 +143,7 @@ function DroppableCollectionItem({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isDragging ? undefined : transition,
     zIndex: isDragging ? 20 : undefined,
     position: isDragging ? ("relative" as const) : undefined,
   };
@@ -148,6 +155,7 @@ function DroppableCollectionItem({
         count={count}
         active={active}
         dropActive={Boolean(draggingTaskId) && isOver}
+        disableInteraction={Boolean(draggingCollectionId)}
         onSelect={onSelect}
         onOpenMenu={onOpenMenu}
       />
@@ -170,7 +178,10 @@ export function TaskManagementBody() {
   } = useTaskManagementActions();
   const { openRename } = useTaskManagementModals();
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [draggingCollectionId, setDraggingCollectionId] = useState<string | null>(null);
+  const [dragStartPointer, setDragStartPointer] = useState<{ x: number; y: number } | null>(null);
   const [draggingTaskWidth, setDraggingTaskWidth] = useState<number | null>(null);
+  const collectionPaneRef = useRef<HTMLElement | null>(null);
   const draggingTask = useMemo(
     () => (draggingTaskId ? tasks.find((task) => task.id === draggingTaskId) ?? null : null),
     [draggingTaskId, tasks]
@@ -207,18 +218,102 @@ export function TaskManagementBody() {
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
+      activationConstraint: { distance: 2 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
+      activationConstraint: { delay: 120, tolerance: 3 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
+  const collisionDetection = (args: Parameters<typeof closestCenter>[0]) => {
+    const activeId = String(args.active.id);
+    const activeTaskId = parseTaskDragId(activeId);
+    if (activeTaskId) {
+      const containersExcludingActive = args.droppableContainers.filter(
+        (container) => String(container.id) !== activeId
+      );
+      const scopedArgs = {
+        ...args,
+        droppableContainers: containersExcludingActive,
+      };
+
+      const pointerCollisions = pointerWithin(scopedArgs);
+      if (pointerCollisions.length > 0) {
+        return pointerCollisions;
+      }
+
+      if (dragStartPointer && args.pointerCoordinates) {
+        const distanceFromStart = Math.hypot(
+          args.pointerCoordinates.x - dragStartPointer.x,
+          args.pointerCoordinates.y - dragStartPointer.y
+        );
+        if (distanceFromStart < TASK_DRAG_START_DISTANCE_THRESHOLD) {
+          return [];
+        }
+      }
+
+      const collectionPaneBounds = collectionPaneRef.current?.getBoundingClientRect();
+      const pointerX = args.pointerCoordinates?.x ?? null;
+      const isPointerNearCollectionPane =
+        collectionPaneBounds !== undefined &&
+        collectionPaneBounds !== null &&
+        pointerX !== null &&
+        pointerX >= collectionPaneBounds.left - 6;
+
+      if (isPointerNearCollectionPane) {
+        const collectionContainers = containersExcludingActive.filter((container) =>
+          isCollectionContainerId(String(container.id))
+        );
+        if (collectionContainers.length > 0) {
+          return closestCenter({
+            ...args,
+            droppableContainers: collectionContainers,
+          });
+        }
+      }
+
+      const taskContainers = containersExcludingActive.filter((container) =>
+        isTaskDragContainerId(String(container.id))
+      );
+      if (taskContainers.length > 0) {
+        return closestCenter({
+          ...args,
+          droppableContainers: taskContainers,
+        });
+      }
+
+      return [];
+    }
+
+    const activeCollectionId = parseCollectionDropId(activeId);
+    if (!activeCollectionId) {
+      return closestCenter(args);
+    }
+
+    const collectionOnlyContainers = args.droppableContainers.filter((container) =>
+      String(container.id).startsWith(COLLECTION_DROP_ID_PREFIX)
+    );
+
+    const collectionScopedArgs = {
+      ...args,
+      droppableContainers: collectionOnlyContainers,
+    };
+
+    const pointerCollisions = pointerWithin(collectionScopedArgs);
+    if (pointerCollisions.length > 0) {
+      return pointerCollisions;
+    }
+
+    return closestCenter(collectionScopedArgs);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggingTaskId(null);
+    setDraggingCollectionId(null);
+    setDragStartPointer(null);
     setDraggingTaskWidth(null);
     if (!event.over) {
       return;
@@ -255,9 +350,33 @@ export function TaskManagementBody() {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    setDraggingTaskId(parseTaskDragId(String(event.active.id)));
+    const activeId = String(event.active.id);
+    setDraggingTaskId(parseTaskDragId(activeId));
+    setDraggingCollectionId(parseCollectionDropId(activeId));
     const activeRectWidth = event.active.rect.current.initial?.width;
     setDraggingTaskWidth(typeof activeRectWidth === "number" ? activeRectWidth : null);
+
+    const activatorEvent = event.activatorEvent as {
+      clientX?: unknown;
+      clientY?: unknown;
+      touches?: ArrayLike<{ clientX: number; clientY: number }>;
+      changedTouches?: ArrayLike<{ clientX: number; clientY: number }>;
+    };
+    if (activatorEvent.touches && activatorEvent.touches.length > 0) {
+      const firstTouch = activatorEvent.touches[0];
+      setDragStartPointer({ x: firstTouch.clientX, y: firstTouch.clientY });
+      return;
+    }
+    if (activatorEvent.changedTouches && activatorEvent.changedTouches.length > 0) {
+      const firstTouch = activatorEvent.changedTouches[0];
+      setDragStartPointer({ x: firstTouch.clientX, y: firstTouch.clientY });
+      return;
+    }
+    if (typeof activatorEvent.clientX === "number" && typeof activatorEvent.clientY === "number") {
+      setDragStartPointer({ x: activatorEvent.clientX, y: activatorEvent.clientY });
+      return;
+    }
+    setDragStartPointer(null);
   };
 
   const handleTaskMenu = async (taskId: string) => {
@@ -270,6 +389,13 @@ export function TaskManagementBody() {
       title: target.label,
       message: "작업을 선택하세요",
       items: [
+        {
+          label: "컬렉션 이동",
+          value: "move",
+          icon: <FiArrowRight size={14} />,
+          description: "이 할일을 다른 컬렉션으로 이동합니다.",
+          disabled: collections.every((collection) => collection.id === target.collectionId),
+        },
         {
           label: "이름 변경",
           value: "rename",
@@ -286,6 +412,28 @@ export function TaskManagementBody() {
         },
       ],
     });
+
+    if (selected === "move") {
+      const movableCollections = collections.filter((collection) => collection.id !== target.collectionId);
+      if (movableCollections.length === 0) {
+        toast.error("이동할 수 있는 컬렉션이 없어요.", "이동 불가");
+        return;
+      }
+      const moveTargetCollectionId = await actionSheet({
+        title: "컬렉션으로 이동",
+        message: "이동할 컬렉션을 선택하세요",
+        items: movableCollections.map((collection) => ({
+          label: collection.name,
+          value: collection.id,
+          description: `할일 ${collectionCountMap.get(collection.id) ?? 0}개`,
+        })),
+      });
+      if (!moveTargetCollectionId) {
+        return;
+      }
+      onMoveTaskToCollection(taskId, moveTargetCollectionId);
+      return;
+    }
 
     if (selected === "rename") {
       const nextName = await openRename({
@@ -390,16 +538,23 @@ export function TaskManagementBody() {
       <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_136px] gap-2">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onDragCancel={() => {
             setDraggingTaskId(null);
+            setDraggingCollectionId(null);
+            setDragStartPointer(null);
             setDraggingTaskWidth(null);
           }}
         >
           <div className="min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
-            <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
+            <div
+              className={[
+                "no-scrollbar h-full space-y-1.5 pr-0.5",
+                draggingTaskId ? "overflow-visible" : "overflow-y-auto",
+              ].join(" ")}
+            >
               {isAllCollectionSelected ? (
                 <p className="m-0 px-1 py-1 text-[11px] text-base-content/55">
                   전체 보기에서는 할일 순서 변경이 비활성화됩니다.
@@ -414,7 +569,6 @@ export function TaskManagementBody() {
                       collectionName={collectionNameById.get(task.collectionId) ?? "미분류"}
                       active={selectedTaskId === task.id}
                       disableActions={Boolean(draggingTaskId)}
-                      disableDrag={isAllCollectionSelected}
                       onSelect={() => onSelectTask(task.id)}
                       onOpenMenu={() => {
                         void handleTaskMenu(task.id);
@@ -428,12 +582,13 @@ export function TaskManagementBody() {
             </div>
           </div>
 
-          <aside className="min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+          <aside ref={collectionPaneRef} className="min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
             <div className="space-y-1.5">
               <TaskManagementCollectionItem
                 name="전체"
                 count={tasks.length}
                 active={selectedCollectionId === "all"}
+                disableInteraction={Boolean(draggingCollectionId)}
                 onSelect={() => onSelectCollection("all")}
               />
               <SortableContext items={collectionDropIds} strategy={verticalListSortingStrategy}>
@@ -448,6 +603,7 @@ export function TaskManagementBody() {
                       count={collectionCountMap.get(collection.id) ?? 0}
                       active={active}
                       draggingTaskId={draggingTaskId}
+                      draggingCollectionId={draggingCollectionId}
                       onSelect={() => onSelectCollection(collection.id)}
                       onOpenMenu={
                         showCollectionMenu
@@ -462,23 +618,29 @@ export function TaskManagementBody() {
               </SortableContext>
             </div>
           </aside>
-          <DragOverlay>
-            {draggingTask ? (
-              <div className="rounded-lg" style={draggingTaskWidth ? { width: `${draggingTaskWidth}px` } : undefined}>
-                <TaskManagementTaskItem
-                  label={draggingTask.label}
-                  collectionName={collectionNameById.get(draggingTask.collectionId) ?? "미분류"}
-                  active={selectedTaskId === draggingTask.id}
-                  disableActions
-                  sideButton={{
-                    type: "menu",
-                    ariaLabel: "할일 옵션",
-                    onClick: () => {},
-                  }}
-                />
-              </div>
-            ) : null}
-          </DragOverlay>
+          {typeof document !== "undefined"
+            ? createPortal(
+                <DragOverlay dropAnimation={null}>
+                  {draggingTask ? (
+                    <div className="rounded-lg" style={draggingTaskWidth ? { width: `${draggingTaskWidth}px` } : undefined}>
+                      <TaskManagementTaskItem
+                        label={draggingTask.label}
+                        collectionName={collectionNameById.get(draggingTask.collectionId) ?? "미분류"}
+                        active={selectedTaskId === draggingTask.id}
+                        isDragging
+                        disableActions
+                        sideButton={{
+                          type: "menu",
+                          ariaLabel: "할일 옵션",
+                          onClick: () => {},
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </DragOverlay>,
+                document.body
+              )
+            : null}
         </DndContext>
       </div>
     </div>

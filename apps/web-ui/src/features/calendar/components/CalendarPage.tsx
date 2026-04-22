@@ -2,11 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast, useAppStore } from "../../../stores";
 import { buildCalendarCells, shiftMonth } from "../../../utils/calendar";
 import { formatDateKey } from "../../../utils/holidays";
-import { parseDateKey, shiftDateKey } from "../utils/date";
-import { DateSelectionSheet } from "./DateSelectionSheet";
 import useHolidaysByViewMonth from "../queries/useHolidaysByViewMonth";
 import { CalendarDateCell, type CalendarPreviewBar } from "./CalendarDateCell";
-import { useAppNavigation } from "../../../providers/AppNavigationProvider";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -26,16 +23,9 @@ type CalendarPageProps = {
       allDone: boolean;
       hasMemo: boolean;
       previewBars: CalendarPreviewBar[];
-      tasks: SelectedTaskItem[];
     }
   >;
-  isActive: boolean;
-  todayOpenSignal?: number;
-};
-
-type SelectedTaskItem = {
-  label: string;
-  done: boolean;
+  onRequestOpenDateTasksSheet: () => void;
 };
 
 function getSelectedRowIndex(cells: ReturnType<typeof buildCalendarCells>, selectedDateKey: string | null) {
@@ -63,10 +53,8 @@ function buildRowTemplate(selectedRowIndex: number | null) {
 
 export function CalendarPage({
   logsByDate,
-  isActive,
-  todayOpenSignal = 0,
+  onRequestOpenDateTasksSheet,
 }: CalendarPageProps) {
-  const { goPage } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
@@ -75,19 +63,10 @@ export function CalendarPage({
   const touchStartRef = useRef<TouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
   const holidayErrorNotifiedRef = useRef(false);
-  const todayOpenSignalRef = useRef(todayOpenSignal);
-  const shouldOpenTodaySheetRef = useRef(false);
 
   const [dragX, setDragX] = useState(0);
   const [settleDirection, setSettleDirection] = useState<-1 | 0 | 1>(0);
   const [isReleasing, setIsReleasing] = useState(false);
-  const [isDateSheetOpen, setIsDateSheetOpen] = useState(false);
-  const selectedTasks = useMemo(() => {
-    if (!selectedDateKey) {
-      return [];
-    }
-    return logsByDate[selectedDateKey]?.tasks ?? [];
-  }, [selectedDateKey, logsByDate]);
 
   const prevMonth = useMemo(() => shiftMonth(viewMonth, -1), [viewMonth]);
   const nextMonth = useMemo(() => shiftMonth(viewMonth, 1), [viewMonth]);
@@ -175,60 +154,12 @@ export function CalendarPage({
   };
 
   useEffect(() => {
-    if (!isActive) {
-      setIsDateSheetOpen(false);
-    }
-  }, [isActive]);
-
-  useEffect(() => {
-    if (todayOpenSignal !== todayOpenSignalRef.current) {
-      todayOpenSignalRef.current = todayOpenSignal;
-      shouldOpenTodaySheetRef.current = true;
-    }
-
-    if (!shouldOpenTodaySheetRef.current || !selectedDateKey) {
-      return;
-    }
-
-    setIsDateSheetOpen(true);
-    shouldOpenTodaySheetRef.current = false;
-  }, [todayOpenSignal, selectedDateKey]);
-
-  useEffect(() => {
     if (!hasHolidayError || holidayErrorNotifiedRef.current) {
       return;
     }
     holidayErrorNotifiedRef.current = true;
     toast.error("공휴일 데이터를 가져오지 못했어요.", "불러오기 실패");
   }, [hasHolidayError]);
-
-  const handleShiftSelectedDate = (days: number) => {
-    if (!selectedDateKey) {
-      return;
-    }
-    const nextDateKey = shiftDateKey(selectedDateKey, days);
-    setSelectedDateKey(nextDateKey);
-    const nextDate = parseDateKey(nextDateKey);
-    if (nextDate.getFullYear() !== viewMonth.getFullYear() || nextDate.getMonth() !== viewMonth.getMonth()) {
-      setViewMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
-    }
-  };
-
-  const handleOpenTasksFromSheet = () => {
-    if (!selectedDateKey) {
-      return;
-    }
-    goPage("/date-tasks", {
-      query: {
-        date: selectedDateKey,
-      },
-      state: {
-        dateKey: selectedDateKey,
-        initialTasks: selectedTasks.map((task) => task.label),
-      },
-    });
-    setIsDateSheetOpen(false);
-  };
 
   return (
     <section className="relative flex min-h-0 flex-1 flex-col">
@@ -285,12 +216,11 @@ export function CalendarPage({
                         hasMemo={hasMemo}
                         onClick={() => {
                           if (selectedDateKey === dateKey) {
-                            handleOpenTasksFromSheet();
+                            onRequestOpenDateTasksSheet();
                             return;
                           }
 
                           setSelectedDateKey(dateKey);
-                          setIsDateSheetOpen(true);
                         }}
                       />
                     );
@@ -301,13 +231,6 @@ export function CalendarPage({
           </div>
         </div>
       </div>
-      <DateSelectionSheet
-        isOpen={isDateSheetOpen}
-        selectedTasks={selectedTasks}
-        onRequestClose={() => setIsDateSheetOpen(false)}
-        onRequestOpenTasks={handleOpenTasksFromSheet}
-        onShiftSelectedDate={handleShiftSelectedDate}
-      />
     </section>
   );
 }

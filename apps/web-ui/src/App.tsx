@@ -51,7 +51,6 @@ const OVERLAY_ENTER_GUARD_MS = 720;
 const OVERLAY_CAROUSEL_BACK_OFFSET_PERCENT = 16;
 const OVERLAY_CAROUSEL_BACK_MIN_SCALE = 0.955;
 const OVERLAY_CAROUSEL_FRONT_MIN_SCALE = 0.985;
-const OVERLAY_ROUTES: RouteKey[] = ["tasks", "dateTasks", "stats", "settings"];
 const ROUTE_PATH: Record<RouteKey, string> = {
   calendar: "/calendar",
   tasks: "/tasks",
@@ -66,6 +65,16 @@ function getRouteFromPath(pathname: string): RouteKey {
     return normalizedPath === routePath || normalizedPath.startsWith(`${routePath}/`);
   });
   return matched?.[0] ?? MAIN_ROUTE;
+}
+
+function isDateTasksRoutinePath(pathname: string) {
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+  return normalizedPath === "/date-tasks/routines" || normalizedPath === "/date-tasks/routines/new";
+}
+
+function isDateTasksMainPath(pathname: string) {
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+  return normalizedPath === "/date-tasks";
 }
 
 function buildRoutePath(route: RouteKey, search?: string): string {
@@ -96,20 +105,6 @@ function buildPagePath(path: string, query?: Record<string, string>) {
 function getHistoryStackIndex() {
   const historyState = window.history.state as { idx?: number } | null;
   return typeof historyState?.idx === "number" ? historyState.idx : 0;
-}
-
-function splitPathAndSearch(pathWithSearch: string) {
-  const queryStartIndex = pathWithSearch.indexOf("?");
-  if (queryStartIndex < 0) {
-    return {
-      pathname: pathWithSearch,
-      search: "",
-    };
-  }
-  return {
-    pathname: pathWithSearch.slice(0, queryStartIndex),
-    search: pathWithSearch.slice(queryStartIndex),
-  };
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -150,7 +145,9 @@ type NativeWeatherSnapshotPayload = {
   isDay?: number;
 };
 
-type OverlayRouteSnapshot = {
+type OverlayStackEntry = {
+  stackIndex: number;
+  route: RouteKey;
   pathname: string;
   search: string;
 };
@@ -193,20 +190,13 @@ function App() {
   const overlayTouchStartRef = useRef<OverlayTouchStart | null>(null);
   const overlaySwipeBackTimeoutRef = useRef<number | null>(null);
   const overlayEnterAnimationTimeoutRef = useRef<number | null>(null);
-  const overlayHistoryPathByIdxRef = useRef<Map<number, string>>(new Map());
+  const overlayStackEntriesByIdxRef = useRef<Map<number, OverlayStackEntry>>(new Map());
   const overlayLastStackIndexRef = useRef<number | null>(null);
   const [overlayDragX, setOverlayDragX] = useState(0);
   const [overlaySwipeState, setOverlaySwipeState] = useState<"idle" | "dragging" | "settling" | "closing">(
     "idle"
   );
   const [isOverlayEntering, setIsOverlayEntering] = useState(false);
-  const [overlayRouteSnapshots, setOverlayRouteSnapshots] = useState<
-    Partial<Record<RouteKey, OverlayRouteSnapshot>>
-  >({});
-  const [overlayBackPreviewRoute, setOverlayBackPreviewRoute] = useState<RouteKey | null>(null);
-  const [overlayBackPreviewPathWithSearch, setOverlayBackPreviewPathWithSearch] = useState<string | null>(
-    null
-  );
   const lastOverlayEnterRef = useRef<{ path: string; at: number } | null>(null);
   const lastOverlayNavigationRef = useRef<{ path: string; at: number } | null>(null);
   const syncedNotificationAuthTokenRef = useRef<string | null>(null);
@@ -706,10 +696,8 @@ function App() {
   const goBack = (options?: { animated?: boolean }) => {
     const prefersAnimatedBack = options?.animated ?? true;
     const stackIndex = getHistoryStackIndex();
-    const previousPathWithSearch =
-      stackIndex > 0 ? overlayHistoryPathByIdxRef.current.get(stackIndex - 1) ?? null : null;
-    const previousPathname = previousPathWithSearch ? splitPathAndSearch(previousPathWithSearch).pathname : null;
-    const previousRoute = previousPathname ? getRouteFromPath(previousPathname) : null;
+    const previousEntry = stackIndex > 0 ? overlayStackEntriesByIdxRef.current.get(stackIndex - 1) ?? null : null;
+    const previousRoute = previousEntry?.route ?? null;
     const isInternalBackWithinSameOverlay = previousRoute !== null && previousRoute === overlayRoute;
     const shouldAnimate = prefersAnimatedBack && overlayRoute !== null && !isInternalBackWithinSameOverlay;
 
@@ -742,53 +730,14 @@ function App() {
 
   useEffect(() => {
     const stackIndex = getHistoryStackIndex();
-    const currentPathWithSearch = `${location.pathname}${location.search}`;
-    overlayHistoryPathByIdxRef.current.set(stackIndex, currentPathWithSearch);
-
-    if (stackIndex <= 0) {
-      setOverlayBackPreviewRoute(null);
-      setOverlayBackPreviewPathWithSearch(null);
-      return;
-    }
-
-    const previousPathWithSearch = overlayHistoryPathByIdxRef.current.get(stackIndex - 1);
-    if (!previousPathWithSearch) {
-      setOverlayBackPreviewRoute(null);
-      setOverlayBackPreviewPathWithSearch(null);
-      return;
-    }
-
-    const previousPathname = previousPathWithSearch.split("?")[0] ?? previousPathWithSearch;
-    const previousRoute = getRouteFromPath(previousPathname);
-    if (previousRoute === MAIN_ROUTE) {
-      setOverlayBackPreviewRoute(null);
-      setOverlayBackPreviewPathWithSearch(null);
-      return;
-    }
-
-    setOverlayBackPreviewRoute(previousRoute);
-    setOverlayBackPreviewPathWithSearch(previousPathWithSearch);
-  }, [location.pathname, location.search]);
-
-  useEffect(() => {
-    if (!overlayRoute) {
-      return;
-    }
-    const nextSnapshot = {
+    const nextEntry: OverlayStackEntry = {
+      stackIndex,
+      route: activeRoute,
       pathname: location.pathname,
       search: location.search,
     };
-    setOverlayRouteSnapshots((previous) => {
-      const current = previous[overlayRoute];
-      if (current && current.pathname === nextSnapshot.pathname && current.search === nextSnapshot.search) {
-        return previous;
-      }
-      return {
-        ...previous,
-        [overlayRoute]: nextSnapshot,
-      };
-    });
-  }, [location.pathname, location.search, overlayRoute]);
+    overlayStackEntriesByIdxRef.current.set(stackIndex, nextEntry);
+  }, [activeRoute, location.pathname, location.search]);
 
   useLayoutEffect(() => {
     overlayTouchStartRef.current = null;
@@ -870,7 +819,11 @@ function App() {
         return <SettingsPage forcedPathname={options?.forcedPathname} />;
       case "dateTasks":
         return (
-          <DateTodosRoutePage forcedPathname={options?.forcedPathname} forcedSearch={options?.forcedSearch} />
+          <DateTodosRoutePage
+            forcedPathname={options?.forcedPathname}
+            forcedSearch={options?.forcedSearch}
+            isActive={options?.isActive ?? true}
+          />
         );
       case "tasks":
         return (
@@ -891,20 +844,51 @@ function App() {
     }
   };
 
-  const shouldShowOverlaySwipePreview =
-    overlayRoute !== null &&
+  const overlayCurrentStackIndex = getHistoryStackIndex();
+  const overlayCurrentEntryCandidate = overlayStackEntriesByIdxRef.current.get(overlayCurrentStackIndex) ?? null;
+  const hasCurrentEntryLocationMismatch = Boolean(
+    overlayCurrentEntryCandidate &&
+      (overlayCurrentEntryCandidate.pathname !== location.pathname ||
+        overlayCurrentEntryCandidate.search !== location.search)
+  );
+  const overlayCurrentEntry =
+    overlayRoute === null
+      ? null
+      : !hasCurrentEntryLocationMismatch && overlayCurrentEntryCandidate
+        ? overlayCurrentEntryCandidate
+        : {
+          stackIndex: overlayCurrentStackIndex,
+          route: overlayRoute,
+          pathname: location.pathname,
+          search: location.search,
+        };
+  const overlayPreviousEntryCandidate =
+    overlayCurrentEntry && overlayCurrentStackIndex > 0
+      ? overlayStackEntriesByIdxRef.current.get(overlayCurrentStackIndex - 1) ?? null
+      : null;
+  const overlayPreviousEntry =
+    overlayPreviousEntryCandidate && overlayPreviousEntryCandidate.route !== MAIN_ROUTE
+      ? overlayPreviousEntryCandidate
+      : null;
+  const overlayRenderEntries = overlayCurrentEntry
+    ? [overlayPreviousEntry, overlayCurrentEntry].filter(
+        (entry): entry is OverlayStackEntry => entry !== null
+      )
+    : [];
+  const previousStackEntryForBackdrop =
+    overlayCurrentStackIndex > 0
+      ? overlayStackEntriesByIdxRef.current.get(overlayCurrentStackIndex - 1) ?? null
+      : null;
+  const shouldRevealCalendarDateSheetBackdrop =
+    overlayRoute === "dateTasks" &&
+    isDateTasksRoutinePath(location.pathname) &&
+    previousStackEntryForBackdrop?.route === MAIN_ROUTE &&
     overlayDragX > 0 &&
     (overlaySwipeState === "dragging" || overlaySwipeState === "settling" || overlaySwipeState === "closing");
-  const shouldRenderOverlayBackPreview =
-    shouldShowOverlaySwipePreview &&
-    overlayBackPreviewRoute !== null &&
-    overlayBackPreviewPathWithSearch !== null;
-  const overlayBackPreviewPath = overlayBackPreviewPathWithSearch
-    ? splitPathAndSearch(overlayBackPreviewPathWithSearch)
-    : null;
-  const overlayMountedRoutes = OVERLAY_ROUTES.filter(
-    (route) => route === overlayRoute || Boolean(overlayRouteSnapshots[route])
-  );
+  const shouldShowOverlaySwipePreview =
+    overlayPreviousEntry !== null &&
+    overlayDragX > 0 &&
+    (overlaySwipeState === "dragging" || overlaySwipeState === "settling" || overlaySwipeState === "closing");
   const overlayViewportWidth = typeof window === "undefined" ? 390 : Math.max(window.innerWidth || 390, 1);
   const overlaySwipeProgress = clampNumber(overlayDragX / overlayViewportWidth, 0, 1);
   const overlayBackTranslatePercent = (1 - overlaySwipeProgress) * OVERLAY_CAROUSEL_BACK_OFFSET_PERCENT;
@@ -938,216 +922,203 @@ function App() {
         />
 
         <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
-          <CalendarRootPage isOverlayActive={Boolean(overlayRoute)} />
+          <CalendarRootPage
+            isOverlayActive={Boolean(overlayRoute) && !shouldRevealCalendarDateSheetBackdrop}
+          />
 
-          {shouldRenderOverlayBackPreview ? (
-            <div
-              className="pointer-events-none absolute inset-0 z-10 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm"
-              style={{
-                transform: `translateX(-${overlayBackTranslatePercent}%) scale(${overlayBackScale})`,
-                transformOrigin: "left center",
-                opacity: overlayBackOpacity,
-                transition:
-                  overlaySwipeState === "dragging"
-                    ? "none"
-                    : "transform 320ms cubic-bezier(0.22,1,0.36,1), opacity 260ms ease",
-              }}
-            >
-              <PageHeader
-                route={overlayBackPreviewRoute!}
-                forcedPathname={overlayBackPreviewPath?.pathname}
-                forcedSearch={overlayBackPreviewPath?.search}
-              />
-              <div className="min-h-0 flex flex-1 flex-col">
-                {renderOverlayBody(
-                  overlayBackPreviewRoute!,
-                  overlayBackPreviewPath
-                    ? {
-                        forcedPathname: overlayBackPreviewPath.pathname,
-                        forcedSearch: overlayBackPreviewPath.search,
-                        isActive: false,
-                      }
-                    : undefined
-                )}
-              </div>
-            </div>
-          ) : null}
+          {overlayCurrentEntry ? (
+            <>
+              {overlayRenderEntries.map((entry) => {
+                const isActiveEntry = entry.stackIndex === overlayCurrentEntry.stackIndex;
 
-          {overlayRoute ? (
-            <div
-              className={[
-                "absolute inset-0 z-20 flex flex-col bg-base-100/98 px-1.5 py-1.5 backdrop-blur-sm",
-                isOverlayEntering && overlaySwipeState === "idle" ? "overlay-enter" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              style={
-                overlaySwipeState === "idle"
-                  ? undefined
-                  : {
-                      transform: `translateX(${overlayDragX}px) scale(${overlayFrontScale})`,
-                      transformOrigin: "left center",
-                      opacity: overlayFrontOpacity,
-                      boxShadow: "0 0 0 1px rgba(148, 163, 184, 0.12), -24px 0 42px rgba(2, 6, 23, 0.18)",
-                      transition:
-                        overlaySwipeState === "dragging"
-                          ? "none"
-                          : "transform 320ms cubic-bezier(0.22,1,0.36,1), opacity 260ms ease",
+                return (
+                  <div
+                    key={entry.stackIndex}
+                    aria-hidden={!isActiveEntry}
+                    className={[
+                      "absolute inset-0 flex flex-col bg-base-100/98 px-1.5 py-1.5",
+                      isActiveEntry ? "z-20 backdrop-blur-sm" : "z-10 pointer-events-none",
+                      isActiveEntry && isOverlayEntering && overlaySwipeState === "idle" ? "overlay-enter" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    style={
+                      isActiveEntry
+                        ? overlaySwipeState === "idle"
+                          ? undefined
+                          : {
+                              transform: `translateX(${overlayDragX}px) scale(${overlayFrontScale})`,
+                              transformOrigin: "left center",
+                              opacity: overlayFrontOpacity,
+                              boxShadow: "0 0 0 1px rgba(148, 163, 184, 0.12), -24px 0 42px rgba(2, 6, 23, 0.18)",
+                              transition:
+                                overlaySwipeState === "dragging"
+                                  ? "none"
+                                  : "transform 320ms cubic-bezier(0.22,1,0.36,1), opacity 260ms ease",
+                            }
+                        : {
+                            transform: `translateX(-${overlayBackTranslatePercent}%) scale(${overlayBackScale})`,
+                            transformOrigin: "left center",
+                            opacity: shouldShowOverlaySwipePreview ? overlayBackOpacity : 0,
+                            transition:
+                              overlaySwipeState === "dragging"
+                                ? "none"
+                                : "transform 320ms cubic-bezier(0.22,1,0.36,1), opacity 260ms ease",
+                          }
                     }
-              }
-              onTouchStart={(event) => {
-                const touch = event.touches[0];
-                overlayTouchStartRef.current = {
-                  x: touch.clientX,
-                  y: touch.clientY,
-                  canSwipeBack:
-                    touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X &&
-                    !isOverlaySwipeBackBlockedTarget(event.target),
-                  axis: null,
-                };
-                if (touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X) {
-                  setIsOverlayEntering(false);
-                }
-              }}
-              onTouchMove={(event) => {
-                const start = overlayTouchStartRef.current;
-                if (!start || !start.canSwipeBack || overlaySwipeState === "closing") {
-                  return;
-                }
+                    onTouchStart={
+                      isActiveEntry
+                        ? (event) => {
+                            const touch = event.touches[0];
+                            overlayTouchStartRef.current = {
+                              x: touch.clientX,
+                              y: touch.clientY,
+                              canSwipeBack:
+                                touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X &&
+                                !isOverlaySwipeBackBlockedTarget(event.target) &&
+                                !(entry.route === "dateTasks" && isDateTasksMainPath(entry.pathname)),
+                              axis: null,
+                            };
+                            if (touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X) {
+                              setIsOverlayEntering(false);
+                            }
+                          }
+                        : undefined
+                    }
+                    onTouchMove={
+                      isActiveEntry
+                        ? (event) => {
+                            const start = overlayTouchStartRef.current;
+                            if (!start || !start.canSwipeBack || overlaySwipeState === "closing") {
+                              return;
+                            }
 
-                const touch = event.touches[0];
-                const deltaX = touch.clientX - start.x;
-                const deltaY = touch.clientY - start.y;
+                            const touch = event.touches[0];
+                            const deltaX = touch.clientX - start.x;
+                            const deltaY = touch.clientY - start.y;
 
-                if (!start.axis) {
-                  if (
-                    Math.abs(deltaX) < OVERLAY_SWIPE_AXIS_THRESHOLD &&
-                    Math.abs(deltaY) < OVERLAY_SWIPE_AXIS_THRESHOLD
-                  ) {
-                    return;
-                  }
-                  start.axis = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
-                }
+                            if (!start.axis) {
+                              if (
+                                Math.abs(deltaX) < OVERLAY_SWIPE_AXIS_THRESHOLD &&
+                                Math.abs(deltaY) < OVERLAY_SWIPE_AXIS_THRESHOLD
+                              ) {
+                                return;
+                              }
+                              start.axis = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+                            }
 
-                if (start.axis !== "horizontal") {
-                  return;
-                }
+                            if (start.axis !== "horizontal") {
+                              return;
+                            }
 
-                if (deltaX <= 0) {
-                  if (overlayDragX !== 0) {
-                    setOverlayDragX(0);
-                  }
-                  setOverlaySwipeState("dragging");
-                  return;
-                }
+                            if (deltaX <= 0) {
+                              if (overlayDragX !== 0) {
+                                setOverlayDragX(0);
+                              }
+                              setOverlaySwipeState("dragging");
+                              return;
+                            }
 
-                event.preventDefault();
-                setOverlaySwipeState("dragging");
-                const viewportWidth = window.innerWidth || 390;
-                const limitedDeltaX = Math.min(deltaX, viewportWidth * 1.08);
-                const dragX =
-                  limitedDeltaX <= viewportWidth
-                    ? limitedDeltaX
-                    : viewportWidth + (limitedDeltaX - viewportWidth) * 0.24;
-                setOverlayDragX(dragX);
-              }}
-              onTouchEnd={(event) => {
-                const start = overlayTouchStartRef.current;
-                if (!start) {
-                  return;
-                }
+                            event.preventDefault();
+                            setOverlaySwipeState("dragging");
+                            const viewportWidth = window.innerWidth || 390;
+                            const limitedDeltaX = Math.min(deltaX, viewportWidth * 1.08);
+                            const dragX =
+                              limitedDeltaX <= viewportWidth
+                                ? limitedDeltaX
+                                : viewportWidth + (limitedDeltaX - viewportWidth) * 0.24;
+                            setOverlayDragX(dragX);
+                          }
+                        : undefined
+                    }
+                    onTouchEnd={
+                      isActiveEntry
+                        ? (event) => {
+                            const start = overlayTouchStartRef.current;
+                            if (!start) {
+                              return;
+                            }
 
-                if (!start.canSwipeBack || start.axis !== "horizontal") {
-                  overlayTouchStartRef.current = null;
-                  if (overlaySwipeState === "dragging" && overlayDragX > 0) {
-                    setOverlaySwipeState("settling");
-                    setOverlayDragX(0);
-                  } else {
-                    setOverlaySwipeState("idle");
-                  }
-                  return;
-                }
+                            if (!start.canSwipeBack || start.axis !== "horizontal") {
+                              overlayTouchStartRef.current = null;
+                              if (overlaySwipeState === "dragging" && overlayDragX > 0) {
+                                setOverlaySwipeState("settling");
+                                setOverlayDragX(0);
+                              } else {
+                                setOverlaySwipeState("idle");
+                              }
+                              return;
+                            }
 
-                const touch = event.changedTouches[0];
-                const deltaX = touch.clientX - start.x;
-                const deltaY = touch.clientY - start.y;
-                const closeThreshold = Math.max(
-                  OVERLAY_EDGE_SWIPE_MIN_DISTANCE,
-                  Math.min(window.innerWidth * 0.24, 112)
-                );
-                const shouldClose =
-                  deltaX > closeThreshold &&
-                  Math.abs(deltaY) <= OVERLAY_EDGE_SWIPE_MAX_VERTICAL_DRIFT &&
-                  Math.abs(deltaX) > Math.abs(deltaY);
+                            const touch = event.changedTouches[0];
+                            const deltaX = touch.clientX - start.x;
+                            const deltaY = touch.clientY - start.y;
+                            const closeThreshold = Math.max(
+                              OVERLAY_EDGE_SWIPE_MIN_DISTANCE,
+                              Math.min(window.innerWidth * 0.24, 112)
+                            );
+                            const shouldClose =
+                              deltaX > closeThreshold &&
+                              Math.abs(deltaY) <= OVERLAY_EDGE_SWIPE_MAX_VERTICAL_DRIFT &&
+                              Math.abs(deltaX) > Math.abs(deltaY);
 
-                if (shouldClose) {
-                  const viewportWidth = window.innerWidth || 390;
-                  setOverlaySwipeState("closing");
-                  setOverlayDragX(viewportWidth);
-                  overlaySwipeBackTimeoutRef.current = window.setTimeout(() => {
-                    overlaySwipeBackTimeoutRef.current = null;
-                    performGoBackNavigation();
-                    overlayTouchStartRef.current = null;
-                    setOverlaySwipeState("idle");
-                    setOverlayDragX(0);
-                  }, OVERLAY_SWIPE_CLOSE_ANIMATION_MS);
-                } else {
-                  if (overlayDragX > 0) {
-                    setOverlaySwipeState("settling");
-                    setOverlayDragX(0);
-                  } else {
-                    setOverlaySwipeState("idle");
-                  }
-                }
-                overlayTouchStartRef.current = null;
-              }}
-              onTouchCancel={() => {
-                overlayTouchStartRef.current = null;
-                setOverlaySwipeState(overlayDragX > 0 ? "settling" : "idle");
-                setOverlayDragX(0);
-              }}
-              onTransitionEnd={(event) => {
-                if (event.currentTarget !== event.target) {
-                  return;
-                }
-                if (overlaySwipeState === "settling") {
-                  setOverlaySwipeState("idle");
-                }
-              }}
-            >
-              <PageHeader route={overlayRoute} />
-              <div className="relative min-h-0 flex flex-1 flex-col overflow-hidden">
-                {overlayMountedRoutes.map((route) => {
-                  const isActiveRoute = route === overlayRoute;
-                  const routeSnapshot = overlayRouteSnapshots[route];
-                  const forcedRenderOptions =
-                    !isActiveRoute && routeSnapshot
-                      ? {
-                          forcedPathname: routeSnapshot.pathname,
-                          forcedSearch: routeSnapshot.search,
-                          isActive: false,
-                        }
-                      : {
-                          isActive: isActiveRoute,
-                        };
-
-                  return (
-                    <div
-                      key={route}
-                      aria-hidden={!isActiveRoute}
-                      className={[
-                        "absolute inset-0 min-h-0 flex flex-col",
-                        isActiveRoute
-                          ? "pointer-events-auto opacity-100 visible"
-                          : "pointer-events-none opacity-0 invisible",
-                      ].join(" ")}
-                    >
-                      {renderOverlayBody(route, forcedRenderOptions)}
+                            if (shouldClose) {
+                              const viewportWidth = window.innerWidth || 390;
+                              setOverlaySwipeState("closing");
+                              setOverlayDragX(viewportWidth);
+                              overlaySwipeBackTimeoutRef.current = window.setTimeout(() => {
+                                overlaySwipeBackTimeoutRef.current = null;
+                                performGoBackNavigation();
+                                overlayTouchStartRef.current = null;
+                                setOverlaySwipeState("idle");
+                                setOverlayDragX(0);
+                              }, OVERLAY_SWIPE_CLOSE_ANIMATION_MS);
+                            } else {
+                              if (overlayDragX > 0) {
+                                setOverlaySwipeState("settling");
+                                setOverlayDragX(0);
+                              } else {
+                                setOverlaySwipeState("idle");
+                              }
+                            }
+                            overlayTouchStartRef.current = null;
+                          }
+                        : undefined
+                    }
+                    onTouchCancel={
+                      isActiveEntry
+                        ? () => {
+                            overlayTouchStartRef.current = null;
+                            setOverlaySwipeState(overlayDragX > 0 ? "settling" : "idle");
+                            setOverlayDragX(0);
+                          }
+                        : undefined
+                    }
+                    onTransitionEnd={
+                      isActiveEntry
+                        ? (event) => {
+                            if (event.currentTarget !== event.target) {
+                              return;
+                            }
+                            if (overlaySwipeState === "settling") {
+                              setOverlaySwipeState("idle");
+                            }
+                          }
+                        : undefined
+                    }
+                  >
+                    <PageHeader route={entry.route} forcedPathname={entry.pathname} forcedSearch={entry.search} />
+                    <div className="relative min-h-0 flex flex-1 flex-col overflow-hidden">
+                      {renderOverlayBody(entry.route, {
+                        forcedPathname: entry.pathname,
+                        forcedSearch: entry.search,
+                        isActive: isActiveEntry,
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+                );
+              })}
+            </>
           ) : null}
         </section>
 

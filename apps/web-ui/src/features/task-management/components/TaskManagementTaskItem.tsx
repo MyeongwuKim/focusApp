@@ -35,7 +35,7 @@ function TaskManagementTaskItemComponent({
         active
           ? "border-primary/70 bg-primary/10 shadow-[0_0_0_1px_rgba(59,130,246,0.2)]"
           : "border-base-300/75 bg-base-100/85 hover:bg-base-100",
-        isDragging ? "opacity-45" : "",
+        isDragging ? "border-primary/65 bg-base-100 shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_24px_rgba(0,0,0,0.22)]" : "",
       ].join(" ")}
       role="button"
       tabIndex={0}

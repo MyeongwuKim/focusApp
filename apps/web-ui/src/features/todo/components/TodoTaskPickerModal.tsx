@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiPlus, FiX } from "react-icons/fi";
+import { FiChevronLeft, FiPlus } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import { InputField } from "../../../components/ui/InputField";
 import { useTaskCollectionMutation, useTaskCollectionQuery } from "../../../queries";
@@ -259,8 +259,8 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
         ].join(" ")}
       >
         <header className="grid h-12 shrink-0 grid-cols-[44px_1fr_64px] items-center border-b border-base-300/80 px-2">
-        <Button variant="ghost" size="sm" circle aria-label="할일 선택 닫기" onClick={onClose}>
-          <FiX size={18} />
+        <Button variant="ghost" size="sm" circle aria-label="할일 선택 뒤로가기" onClick={onClose}>
+          <FiChevronLeft size={18} />
         </Button>
         <h2 className="m-0 text-center text-sm font-semibold text-base-content">할일 가져오기</h2>
         <div aria-hidden="true" />

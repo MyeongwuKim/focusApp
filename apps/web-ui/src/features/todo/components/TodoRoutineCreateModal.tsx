@@ -17,8 +17,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
-import { FiCheck, FiMenu, FiPlus, FiTag, FiX } from "react-icons/fi";
+import { FiCheck, FiClock, FiMenu, FiPlus, FiTag, FiX } from "react-icons/fi";
 import { SelectDropbox } from "../../../components/SelectDropbox";
+import { TimePickerBottomSheet } from "../../../components/TimePickerBottomSheet";
 import { Button } from "../../../components/ui/Button";
 import { InputField } from "../../../components/ui/InputField";
 import { useTaskCollectionMutation, useTaskCollectionQuery } from "../../../queries";
@@ -33,7 +34,6 @@ type RoutineDraftItem = {
 };
 
 type TodoRoutineCreateModalProps = {
-  isOpen: boolean;
   onClose: () => void;
   onCreate: (input: {
     name: string;
@@ -49,10 +49,17 @@ type SortableSelectedTaskRowProps = {
   };
   scheduledTime: string | null;
   onRemove: (taskId: string) => void;
+  onOpenTimePicker: (taskId: string) => void;
   onChangeTime: (taskId: string, nextTime: string | null) => void;
 };
 
-function SortableSelectedTaskRow({ task, scheduledTime, onRemove, onChangeTime }: SortableSelectedTaskRowProps) {
+function SortableSelectedTaskRow({
+  task,
+  scheduledTime,
+  onRemove,
+  onOpenTimePicker,
+  onChangeTime,
+}: SortableSelectedTaskRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -96,26 +103,46 @@ function SortableSelectedTaskRow({ task, scheduledTime, onRemove, onChangeTime }
           <FiX size={12} />
         </Button>
       </div>
-      <InputField
-        type="time"
-        className="h-8 min-h-8 w-full rounded-lg text-sm"
-        value={scheduledTime ?? ""}
-        onChange={(event) => onChangeTime(task.id, event.target.value || null)}
-      />
+      <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-base-300/70 bg-base-200/35 px-2 py-1.5">
+        <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-base-content/60">
+          <FiClock size={11} />
+          시간
+        </span>
+        <Button
+          variant="ghost"
+          size="xs"
+          className={[
+            "h-7 min-h-7 flex-1 justify-start rounded-md px-2 text-xs font-medium",
+            scheduledTime ? "text-base-content/80" : "text-base-content/45",
+          ].join(" ")}
+          onClick={() => onOpenTimePicker(task.id)}
+        >
+          {scheduledTime ? scheduledTime : "미설정"}
+        </Button>
+        {scheduledTime ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            className="h-7 min-h-7 rounded-md px-2 text-[11px] text-base-content/60"
+            onClick={() => onChangeTime(task.id, null)}
+          >
+            해제
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutineCreateModalProps) {
+export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateModalProps) {
   const { taskCollectionsQuery } = useTaskCollectionQuery();
   const { data: collections = [], isLoading: isTaskLoading } = taskCollectionsQuery;
   const { createTaskCollectionMutation, addTaskMutation } = useTaskCollectionMutation();
 
-  const [shouldRender, setShouldRender] = useState(isOpen);
-  const [isVisible, setIsVisible] = useState(false);
   const [name, setName] = useState("");
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [selectedTaskTimes, setSelectedTaskTimes] = useState<Record<string, string | null>>({});
+  const [editingTimeTaskId, setEditingTimeTaskId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("all");
   const [quickCreateMode, setQuickCreateMode] = useState<"collection" | "task" | null>(null);
   const [quickName, setQuickName] = useState("");
@@ -133,44 +160,6 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  useEffect(() => {
-    let rafId: number | null = null;
-    let timeoutId: number | null = null;
-
-    if (isOpen) {
-      setShouldRender(true);
-      rafId = window.requestAnimationFrame(() => {
-        setIsVisible(true);
-      });
-    } else {
-      setIsVisible(false);
-      timeoutId = window.setTimeout(() => {
-        setShouldRender(false);
-      }, 240);
-    }
-
-    return () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-      }
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setName("");
-      setSelectedTaskIds([]);
-      setSelectedTaskTimes({});
-      setSelectedCollectionId("all");
-      setQuickCreateMode(null);
-      setQuickName("");
-      setQuickTaskCollectionId("");
-    }
-  }, [isOpen]);
 
   const allTasks = useMemo(
     () =>
@@ -199,6 +188,7 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
     setSelectedTaskIds((prev) => {
       const exists = prev.includes(taskId);
       if (exists) {
+        setEditingTimeTaskId((current) => (current === taskId ? null : current));
         setSelectedTaskTimes((current) => {
           const next = { ...current };
           delete next[taskId];
@@ -216,6 +206,15 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
       .map((taskId) => taskById.get(taskId))
       .filter((task): task is NonNullable<typeof task> => Boolean(task));
   }, [allTasks, selectedTaskIds]);
+
+  useEffect(() => {
+    if (!editingTimeTaskId) {
+      return;
+    }
+    if (!selectedTaskIds.includes(editingTimeTaskId)) {
+      setEditingTimeTaskId(null);
+    }
+  }, [editingTimeTaskId, selectedTaskIds]);
 
   const handleSelectedTaskDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -380,43 +379,20 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
   const hasValidItems = selectedTaskIds.length > 0;
   const canSave = hasValidName && hasValidItems && !isSaving;
 
-  if (!shouldRender) {
-    return null;
-  }
-
   return (
-    <div
-      className={[
-        "absolute inset-0 z-40 transition-opacity duration-250 ease-out",
-        isVisible ? "opacity-100" : "opacity-0",
-      ].join(" ")}
-    >
-      <div
-        className={[
-          "absolute inset-0 flex flex-col bg-base-100 transition-[transform,opacity] duration-250 ease-out",
-          isVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-90",
-        ].join(" ")}
-      >
-        <header className="grid h-12 shrink-0 grid-cols-[44px_1fr_44px] items-center border-b border-base-300/80 px-2">
-          <Button variant="ghost" size="sm" circle aria-label="루틴 만들기 닫기" onClick={onClose}>
-            <FiX size={18} />
-          </Button>
-          <h2 className="m-0 text-center text-sm font-semibold text-base-content">루틴 만들기</h2>
-          <div aria-hidden="true" />
-        </header>
+    <div className="flex min-h-0 flex-1 flex-col bg-base-100">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+        <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
+          <label className="mb-1 block text-xs font-semibold text-base-content/75">루틴 이름</label>
+          <InputField
+            className="h-10 w-full rounded-lg"
+            placeholder="예: 평일 아침 루틴"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
 
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-          <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
-            <label className="mb-1 block text-xs font-semibold text-base-content/75">루틴 이름</label>
-            <InputField
-              className="h-10 w-full rounded-lg"
-              placeholder="예: 평일 아침 루틴"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-
-          <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
+        <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
             <div className="mb-2 flex items-center gap-2">
               <SelectDropbox
                 className="h-9 min-h-9 flex-1 rounded-lg"
@@ -522,9 +498,9 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
                 );
               })}
             </div>
-          </div>
+        </div>
 
-          <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
+        <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
             <p className="m-0 mb-2 text-xs font-semibold text-base-content/75">
               선택한 할일 ({selectedTaskIds.length})
             </p>
@@ -544,6 +520,7 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
                           task={task}
                           scheduledTime={selectedTaskTimes[task.id] ?? null}
                           onRemove={toggleTaskSelection}
+                          onOpenTimePicker={setEditingTimeTaskId}
                           onChangeTime={(taskId, nextTime) =>
                             setSelectedTaskTimes((prev) => ({
                               ...prev,
@@ -557,22 +534,39 @@ export function TodoRoutineCreateModal({ isOpen, onClose, onCreate }: TodoRoutin
                 </DndContext>
               ) : null}
             </div>
-          </div>
-
-        </div>
-
-        <div className="shrink-0 border-t border-base-300/80 bg-base-100 p-2">
-          <Button
-            variant="primary"
-            block
-            className="h-10 min-h-10 rounded-xl"
-            disabled={!canSave}
-            onClick={handleSave}
-          >
-            {isSaving ? "저장 중..." : "루틴 저장"}
-          </Button>
         </div>
       </div>
+
+      <div className="shrink-0 border-t border-base-300/80 bg-base-100 p-2">
+        <Button
+          variant="primary"
+          block
+          className="h-10 min-h-10 rounded-xl"
+          disabled={!canSave}
+          onClick={handleSave}
+        >
+          {isSaving ? "저장 중..." : "루틴 저장"}
+        </Button>
+      </div>
+
+      <TimePickerBottomSheet
+        isOpen={editingTimeTaskId !== null}
+        title="루틴 시간 설정"
+        initialValue={editingTimeTaskId ? selectedTaskTimes[editingTimeTaskId] ?? "09:00" : "09:00"}
+        description="위로 스크롤해 루틴 시작 시간을 선택해 주세요."
+        applyLabel="저장"
+        onClose={() => setEditingTimeTaskId(null)}
+        onApply={(next) => {
+          if (!editingTimeTaskId) {
+            return false;
+          }
+          setSelectedTaskTimes((prev) => ({
+            ...prev,
+            [editingTimeTaskId]: next,
+          }));
+          return true;
+        }}
+      />
     </div>
   );
 }

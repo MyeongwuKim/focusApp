@@ -158,6 +158,31 @@ function mapDailyLogTodosToTaskItems(
     });
 }
 
+function isSameTaskItems(a: TaskItem[], b: TaskItem[]) {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  for (let index = 0; index < a.length; index += 1) {
+    const current = a[index];
+    const next = b[index];
+    if (
+      current.id !== next.id ||
+      current.label !== next.label ||
+      current.status !== next.status ||
+      current.accumulatedMs !== next.accumulatedMs ||
+      current.startedAt !== next.startedAt ||
+      current.scheduledStartAt !== next.scheduledStartAt ||
+      current.completedAt !== next.completedAt ||
+      current.completedDurationMs !== next.completedDurationMs
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function DateTodosRouteProvider({
   dateKey,
   restFinishedRequested = false,
@@ -232,9 +257,6 @@ export function DateTodosRouteProvider({
 
   useEffect(() => {
     setSelectedDateKey(dateKey);
-    return () => {
-      setSelectedDateKey(null);
-    };
   }, [dateKey, setSelectedDateKey]);
 
   useEffect(() => {
@@ -272,14 +294,11 @@ export function DateTodosRouteProvider({
       return;
     }
 
-    if (hydratedDateKey === dateKey) {
-      return;
-    }
-
     const todos = dailyLogQuery.data?.todos ?? [];
-    setDateTasksRouteItems(mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), todos));
+    const nextItems = mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), todos);
+    setDateTasksRouteItems((previous) => (isSameTaskItems(previous, nextItems) ? previous : nextItems));
     setHydratedDateKey(dateKey);
-  }, [dateKey, dailyLogQuery.data, dailyLogQuery.isSuccess, hydratedDateKey]);
+  }, [dateKey, dailyLogQuery.data, dailyLogQuery.isSuccess]);
 
   const restStartedAtMs = useMemo(() => {
     const value = dailyLogQuery.data?.restStartedAt ?? null;

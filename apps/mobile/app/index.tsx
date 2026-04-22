@@ -29,7 +29,6 @@ import {
 } from "../src/features/todo/nativeTodoSessionStorage";
 import {
   applyNativeWeatherSettings,
-  NativeWeatherDebugPanel,
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
 import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
@@ -1214,9 +1213,6 @@ export default function WebViewScreen() {
               </View>
             )}
           />
-          <View pointerEvents="box-none" style={styles.weatherDebugLayer}>
-            <NativeWeatherDebugPanel />
-          </View>
         </View>
       ) : null}
       {showPermissionIntro ? (
@@ -1257,10 +1253,6 @@ const styles = StyleSheet.create({
   weatherLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 2,
-  },
-  weatherDebugLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 30,
   },
   webView: {
     flex: 1,

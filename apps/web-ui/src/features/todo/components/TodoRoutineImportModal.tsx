@@ -17,14 +17,13 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
-import { FiDownload, FiMenu, FiSave, FiTag, FiTrash2, FiX } from "react-icons/fi";
+import { FiDownload, FiMenu, FiSave, FiTag, FiTrash2 } from "react-icons/fi";
 import type { RoutineTemplate, RoutineTemplateItem } from "../../../api/routineTemplateApi";
 import { Button } from "../../../components/ui/Button";
 import { useTaskCollectionQuery } from "../../../queries";
 import { confirm } from "../../../stores";
 
 type TodoRoutineImportModalProps = {
-  isOpen: boolean;
   routines: RoutineTemplate[];
   isLoading: boolean;
   onClose: () => void;
@@ -157,7 +156,6 @@ function SortableRoutineItemRow({
 }
 
 export function TodoRoutineImportModal({
-  isOpen,
   routines,
   isLoading,
   onClose,
@@ -167,8 +165,6 @@ export function TodoRoutineImportModal({
 }: TodoRoutineImportModalProps) {
   const { taskCollectionsQuery } = useTaskCollectionQuery();
   const collections = taskCollectionsQuery.data ?? [];
-  const [shouldRender, setShouldRender] = useState(isOpen);
-  const [isVisible, setIsVisible] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editableItems, setEditableItems] = useState<EditableRoutineItem[]>([]);
   const [isApplying, setIsApplying] = useState(false);
@@ -189,32 +185,6 @@ export function TodoRoutineImportModal({
   );
 
   useEffect(() => {
-    let rafId: number | null = null;
-    let timeoutId: number | null = null;
-
-    if (isOpen) {
-      setShouldRender(true);
-      rafId = window.requestAnimationFrame(() => {
-        setIsVisible(true);
-      });
-    } else {
-      setIsVisible(false);
-      timeoutId = window.setTimeout(() => {
-        setShouldRender(false);
-      }, 240);
-    }
-
-    return () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-      }
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
     if (!selectedId && routines.length > 0) {
       setSelectedId(routines[0]?.id ?? null);
       return;
@@ -224,12 +194,6 @@ export function TodoRoutineImportModal({
       setSelectedId(routines[0]?.id ?? null);
     }
   }, [routines, selectedId]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setIsEditMode(false);
-    }
-  }, [isOpen]);
 
   const selectedRoutine = useMemo(
     () => routines.find((routine) => routine.id === selectedId) ?? null,
@@ -340,147 +304,130 @@ export function TodoRoutineImportModal({
     }
   };
 
-  if (!shouldRender) {
-    return null;
-  }
-
   return (
-    <div
-      className={[
-        "absolute inset-0 z-40 transition-opacity duration-250 ease-out",
-        isVisible ? "opacity-100" : "opacity-0",
-      ].join(" ")}
-    >
-      <div
-        className={[
-          "absolute inset-0 flex flex-col bg-base-100 transition-[transform,opacity] duration-250 ease-out",
-          isVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-90",
-        ].join(" ")}
-      >
-        <header className="grid h-12 shrink-0 grid-cols-[44px_1fr_64px] items-center border-b border-base-300/80 px-2">
-          <Button variant="ghost" size="sm" circle aria-label="루틴 불러오기 닫기" onClick={onClose}>
-            <FiX size={18} />
-          </Button>
-          <h2 className="m-0 text-center text-sm font-semibold text-base-content">
-            {isEditMode ? "루틴 편집" : "루틴 불러오기"}
-          </h2>
-          <Button
-            variant="ghost"
-            size="xs"
-            className="justify-self-end rounded-full px-2 text-[11px]"
-            disabled={!selectedRoutine}
-            onClick={() => setIsEditMode((prev) => !prev)}
-          >
-            {isEditMode ? "완료" : "편집"}
-          </Button>
-        </header>
-
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 md:grid-cols-[12rem_minmax(0,1fr)]">
-          <div className="min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
-            <div className="no-scrollbar max-h-40 space-y-1.5 overflow-y-auto pr-0.5 md:h-full md:max-h-none">
-              {isLoading ? (
-                <p className="m-0 px-1 py-2 text-sm text-base-content/60">루틴 불러오는 중...</p>
-              ) : null}
-              {!isLoading && routines.length === 0 ? (
-                <p className="m-0 px-1 py-2 text-sm text-base-content/60">저장된 루틴이 없어요.</p>
-              ) : null}
-              {routines.map((routine) => {
-                const active = routine.id === selectedId;
-                return (
-                  <Button
-                    key={routine.id}
-                    block
-                    className={[
-                      "max-w-full overflow-hidden rounded-lg border px-2.5 py-2 text-left transition-colors",
-                      active
-                        ? "border-primary/60 bg-primary/12 text-primary"
-                        : "border-base-300/70 bg-base-100 text-base-content/80",
-                    ].join(" ")}
-                    onClick={() => setSelectedId(routine.id)}
-                  >
-                    <p className="m-0 truncate text-sm font-semibold">{routine.name}</p>
-                    <p className="m-0 mt-0.5 truncate text-xs text-base-content/60">{routine.items.length}개 항목</p>
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
-            {isEditMode ? (
-              <div className="mb-1 rounded-md border border-info/30 bg-info/10 px-2 py-1 text-[11px] text-info">
-                편집 모드: 드래그로 순서 변경, 휴지통으로 항목 삭제
-              </div>
+    <div className="flex min-h-0 flex-1 flex-col bg-base-100">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 md:grid-cols-[12rem_minmax(0,1fr)]">
+        <div className="min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
+          <div className="no-scrollbar max-h-40 space-y-1.5 overflow-y-auto pr-0.5 md:h-full md:max-h-none">
+            {isLoading ? (
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">루틴 불러오는 중...</p>
             ) : null}
-            <div className="no-scrollbar max-h-[40svh] space-y-1.5 overflow-y-auto pr-0.5 md:h-full md:max-h-none">
-              {selectedRoutine ? (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={isEditMode ? handleDragEnd : undefined}
+            {!isLoading && routines.length === 0 ? (
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">저장된 루틴이 없어요.</p>
+            ) : null}
+            {routines.map((routine) => {
+              const active = routine.id === selectedId;
+              return (
+                <Button
+                  key={routine.id}
+                  block
+                  className={[
+                    "max-w-full overflow-hidden rounded-lg border px-2.5 py-2 text-left transition-colors",
+                    active
+                      ? "border-primary/60 bg-primary/12 text-primary"
+                      : "border-base-300/70 bg-base-100 text-base-content/80",
+                  ].join(" ")}
+                  onClick={() => setSelectedId(routine.id)}
                 >
-                  <SortableContext
-                    items={editableItems.map((item) => item.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-1.5">
-                      {editableItems.map((item) => (
-                        <SortableRoutineItemRow
-                          key={item.id}
-                          item={item}
-                          collectionName={item.taskId ? collectionNameByTaskId.get(item.taskId) ?? null : null}
-                          onDelete={handleDeleteRoutineItem}
-                          editable={isEditMode}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                <p className="m-0 px-1 py-2 text-sm text-base-content/60">
-                  루틴을 선택하면 항목이 보입니다.
-                </p>
-              )}
-            </div>
+                  <p className="m-0 truncate text-sm font-semibold">{routine.name}</p>
+                  <p className="m-0 mt-0.5 truncate text-xs text-base-content/60">{routine.items.length}개 항목</p>
+                </Button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="shrink-0 space-y-1.5 border-t border-base-300/80 bg-base-100 p-2">
+        <div className="min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
           {isEditMode ? (
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                className="h-9 min-h-9 flex-1 rounded-xl"
-                disabled={!selectedRoutine || !hasUnsavedChanges || isSavingRoutine}
-                onClick={handleSaveRoutineChanges}
-              >
-                <FiSave size={14} />
-                {isSavingRoutine ? "저장 중..." : "루틴 변경 저장"}
-              </Button>
-              <Button
-                variant="outline"
-                className="h-9 min-h-9 rounded-xl border-error/40 text-error hover:border-error/60"
-                disabled={!selectedRoutine || isDeletingRoutine}
-                onClick={handleDeleteRoutine}
-              >
-                <FiTrash2 size={14} />
-                {isDeletingRoutine ? "삭제 중..." : "루틴 삭제"}
-              </Button>
+            <div className="mb-1 rounded-md border border-info/30 bg-info/10 px-2 py-1 text-[11px] text-info">
+              편집 모드: 드래그로 순서 변경, 휴지통으로 항목 삭제
             </div>
           ) : null}
-          {!isEditMode ? (
+          <div className="no-scrollbar max-h-[40svh] space-y-1.5 overflow-y-auto pr-0.5 md:h-full md:max-h-none">
+            {selectedRoutine ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={isEditMode ? handleDragEnd : undefined}
+              >
+                <SortableContext
+                  items={editableItems.map((item) => item.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-1.5">
+                    {editableItems.map((item) => (
+                      <SortableRoutineItemRow
+                        key={item.id}
+                        item={item}
+                        collectionName={item.taskId ? collectionNameByTaskId.get(item.taskId) ?? null : null}
+                        onDelete={handleDeleteRoutineItem}
+                        editable={isEditMode}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            ) : (
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">
+                루틴을 선택하면 항목이 보입니다.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="shrink-0 space-y-1.5 border-t border-base-300/80 bg-base-100 p-2">
+        {isEditMode ? (
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              className="h-9 min-h-9 flex-1 rounded-xl"
+              disabled={!selectedRoutine || !hasUnsavedChanges || isSavingRoutine}
+              onClick={handleSaveRoutineChanges}
+            >
+              <FiSave size={14} />
+              {isSavingRoutine ? "저장 중..." : "루틴 변경 저장"}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-9 min-h-9 rounded-xl border-error/40 text-error hover:border-error/60"
+              disabled={!selectedRoutine || isDeletingRoutine}
+              onClick={handleDeleteRoutine}
+            >
+              <FiTrash2 size={14} />
+              {isDeletingRoutine ? "삭제 중..." : "루틴 삭제"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="h-9 min-h-9 rounded-xl px-3"
+              onClick={() => setIsEditMode(false)}
+            >
+              편집 종료
+            </Button>
+          </div>
+        ) : null}
+        {!isEditMode ? (
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              className="h-10 min-h-10 rounded-xl"
+              disabled={!selectedRoutine}
+              onClick={() => setIsEditMode(true)}
+            >
+              편집
+            </Button>
             <Button
               variant="primary"
               block
-              className="h-10 min-h-10 rounded-xl"
+              className="h-10 min-h-10 flex-1 rounded-xl"
               disabled={!selectedRoutine || isApplying}
               onClick={handleApply}
             >
               <FiDownload size={14} />
               {isApplying ? "불러오는 중..." : "선택한 루틴 추가"}
             </Button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

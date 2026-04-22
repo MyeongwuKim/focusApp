@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { FiBell, FiCloud, FiSun } from "react-icons/fi";
 import { SettingsNotificationsView } from "../features/settings/components/SettingsNotificationsView";
@@ -69,10 +69,10 @@ export function SettingsPage({ forcedPathname }: SettingsPageProps) {
   };
 
   return (
-    <div className="min-h-0 h-full overflow-y-auto">
+    <div className="min-h-0 h-full overflow-y-auto px-0.5 pt-1 pb-2">
       {section === "home" ? (
-        <section className="space-y-4 rounded-2xl border border-base-300 bg-base-200/50 p-4">
-          <div className="space-y-2">
+        <section className="space-y-5 rounded-2xl border border-base-300 bg-base-200/50 p-4">
+          <div className="space-y-2.5">
             {SETTINGS_MENUS.map((menu) => (
               <SettingsMenuItem
                 key={menu.key}

@@ -104,19 +104,12 @@ function syncDailyLogsByMonthCache(queryClient: QueryClient, payload: DailyLogDe
 function applyDailyLogMutationCacheSync(
   queryClient: QueryClient,
   payload: DailyLogDetail,
-  options?: { syncMonthCache?: boolean; invalidateAllMonthLogs?: boolean }
+  options?: { syncMonthCache?: boolean }
 ) {
   syncDailyLogDetailCaches(queryClient, payload);
 
   if (options?.syncMonthCache) {
     syncDailyLogsByMonthCache(queryClient, payload);
-  }
-
-  if (options?.invalidateAllMonthLogs) {
-    void queryClient.invalidateQueries({
-      queryKey: ["daily-logs"],
-      exact: false,
-    });
   }
 }
 
@@ -156,11 +149,6 @@ export function useUpsertDailyLogMemoMutation(dateKey: string) {
           );
         }
       );
-
-      void queryClient.invalidateQueries({
-        queryKey: ["daily-logs"],
-        exact: false,
-      });
     },
   });
 }
@@ -173,7 +161,6 @@ export function useAddTodosToDailyLogMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -187,7 +174,6 @@ export function useDeleteTodoFromDailyLogMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -201,7 +187,6 @@ export function useStartTodoFromDailyLogMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -215,7 +200,6 @@ export function useCompleteTodoFromDailyLogMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -229,7 +213,6 @@ export function useResetTodoFromDailyLogMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -256,7 +239,6 @@ export function useUpdateTodoActualFocusMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -271,7 +253,6 @@ export function useUpdateTodoScheduleMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -307,7 +288,6 @@ export function useStartRestSessionMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
@@ -321,7 +301,6 @@ export function useStopRestSessionMutation() {
     onSuccess: (data) => {
       applyDailyLogMutationCacheSync(queryClient, data, {
         syncMonthCache: true,
-        invalidateAllMonthLogs: true,
       });
     },
   });
