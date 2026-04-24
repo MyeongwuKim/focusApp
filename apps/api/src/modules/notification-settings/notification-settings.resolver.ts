@@ -1,5 +1,6 @@
 import { gql } from "graphql-tag";
 import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
+import { requireUserId } from "../../common/utils/require-user-id.js";
 import type { GraphQLContext } from "../../graphql/context.js";
 import { NotificationSettingsRepository } from "./notification-settings.repository.js";
 import { NotificationSettingsService } from "./notification-settings.service.js";
@@ -109,5 +110,5 @@ function createNotificationSettingsService(context: GraphQLContext) {
 }
 
 function getUserId(context: GraphQLContext) {
-  return context.userId ?? "local-dev-user";
+  return requireUserId(context);
 }

@@ -1,5 +1,6 @@
 import { gql } from "graphql-tag";
 import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
+import { requireUserId } from "../../common/utils/require-user-id.js";
 import type { GraphQLContext } from "../../graphql/context.js";
 import { PushDeviceTokenRepository } from "./push-device-token.repository.js";
 import { PushDeviceTokenService } from "./push-device-token.service.js";
@@ -83,5 +84,5 @@ function createPushDeviceTokenService(context: GraphQLContext) {
 }
 
 function getUserId(context: GraphQLContext) {
-  return context.userId ?? "local-dev-user";
+  return requireUserId(context);
 }

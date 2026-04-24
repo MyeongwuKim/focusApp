@@ -40,10 +40,13 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   const lastAppliedSearchRef = useRef<string | null>(null);
 
   const monthKeys = useMemo(
-    () =>
-      [shiftMonth(viewMonth, -1), viewMonth, shiftMonth(viewMonth, 1)].map(
-        (month) => `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`
-      ),
+    () => {
+      const keys = [-2, -1, 0, 1, 2].map((offset) => {
+        const month = shiftMonth(viewMonth, offset);
+        return `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
+      });
+      return Array.from(new Set(keys));
+    },
     [viewMonth]
   );
   const { monthlyLogsQuery } = useDailyLogQuery({ monthKeys });

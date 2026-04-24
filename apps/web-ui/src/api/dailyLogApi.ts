@@ -270,6 +270,31 @@ const ADD_DEVIATION_QUERY = /* GraphQL */ `
   }
 `;
 
+const REORDER_TODOS_QUERY = /* GraphQL */ `
+  mutation ReorderTodos($input: ReorderTodosInput!) {
+    reorderTodos(input: $input) {
+      dateKey
+      memo
+      restAccumulatedSeconds
+      restStartedAt
+      todos {
+        id
+        taskId
+        titleSnapshot
+        content
+        done
+        order
+        startedAt
+        scheduledStartAt
+        pausedAt
+        completedAt
+        deviationSeconds
+        actualFocusSeconds
+      }
+    }
+  }
+`;
+
 const UPDATE_TODO_ACTUAL_FOCUS_QUERY = /* GraphQL */ `
   mutation UpdateTodoActualFocus($input: UpdateTodoActualFocusInput!) {
     updateTodoActualFocus(input: $input) {
@@ -462,6 +487,10 @@ type ResetTodoMutation = {
 
 type AddDeviationMutation = {
   addDeviation: DailyLogPayload;
+};
+
+type ReorderTodosMutation = {
+  reorderTodos: DailyLogPayload;
 };
 
 type UpdateTodoActualFocusMutation = {
@@ -817,6 +846,36 @@ export async function addTodoDeviationToDailyLog(input: {
   const next = result.data?.addDeviation;
   if (!next) {
     throw new Error("GraphQL addDeviation failed");
+  }
+  syncInProgressTodoSessionToNative(next);
+  return next;
+}
+
+export async function reorderTodosFromDailyLog(input: {
+  dateKey: string;
+  todoIds: string[];
+}) {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: JSON.stringify({
+      query: REORDER_TODOS_QUERY,
+      variables: { input },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Reorder todos failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<ReorderTodosMutation>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL reorderTodos failed");
+  }
+
+  const next = result.data?.reorderTodos;
+  if (!next) {
+    throw new Error("GraphQL reorderTodos failed");
   }
   syncInProgressTodoSessionToNative(next);
   return next;

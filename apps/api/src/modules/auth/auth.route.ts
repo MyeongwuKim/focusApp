@@ -341,12 +341,19 @@ async function signInWithProvider(
   const sessionToken = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + env.AUTH_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
 
-  await prisma.session.create({
-    data: {
-      token: sessionToken,
-      userId: user.id,
-      expiresAt,
-    },
+  // 새 기기 로그인 시 기존 세션을 모두 무효화하고 최신 세션만 유지한다.
+  await prisma.$transaction(async (tx) => {
+    await tx.session.deleteMany({
+      where: { userId: user.id },
+    });
+
+    await tx.session.create({
+      data: {
+        token: sessionToken,
+        userId: user.id,
+        expiresAt,
+      },
+    });
   });
 
   return {

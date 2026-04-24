@@ -7,6 +7,7 @@ import {
   deleteTodoFromDailyLog,
   type fetchDailyLogsByMonth,
   pauseTodoFromDailyLog,
+  reorderTodosFromDailyLog,
   resetTodoFromDailyLog,
   resumeTodoFromDailyLog,
   startRestSession,
@@ -230,6 +231,19 @@ export function useAddTodoDeviationToDailyLogMutation() {
   });
 }
 
+export function useReorderTodosMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { dateKey: string; todoIds: string[] }) => reorderTodosFromDailyLog(input),
+    onSuccess: (data) => {
+      applyDailyLogMutationCacheSync(queryClient, data, {
+        syncMonthCache: true,
+      });
+    },
+  });
+}
+
 export function useUpdateTodoActualFocusMutation() {
   const queryClient = useQueryClient();
 
@@ -314,6 +328,7 @@ export function useDailyLogMutation() {
   const resumeTodoMutation = useResumeTodoFromDailyLogMutation();
   const completeTodoMutation = useCompleteTodoFromDailyLogMutation();
   const resetTodoMutation = useResetTodoFromDailyLogMutation();
+  const reorderTodosMutation = useReorderTodosMutation();
   const updateTodoActualFocusMutation = useUpdateTodoActualFocusMutation();
   const updateTodoScheduleMutation = useUpdateTodoScheduleMutation();
   const startRestSessionMutation = useStartRestSessionMutation();
@@ -327,6 +342,7 @@ export function useDailyLogMutation() {
     resumeTodoMutation,
     completeTodoMutation,
     resetTodoMutation,
+    reorderTodosMutation,
     updateTodoActualFocusMutation,
     updateTodoScheduleMutation,
     startRestSessionMutation,

@@ -31,6 +31,10 @@ interface AddDeviationInput extends BaseInput {
   seconds: number;
 }
 
+interface ReorderTodosInput extends BaseInput {
+  todoIds: string[];
+}
+
 interface RestSessionInput extends BaseInput {}
 
 interface UpdateTodoActualFocusInput extends BaseInput {
@@ -414,6 +418,38 @@ export class DailyLogService {
     };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async reorderTodos(input: ReorderTodosInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const todoIds = input.todoIds;
+    const currentTodos = log.todos;
+    if (todoIds.length !== currentTodos.length) {
+      throw new Error("INVALID_TODO_ORDER_IDS");
+    }
+
+    const uniqueIds = new Set(todoIds);
+    if (uniqueIds.size !== todoIds.length) {
+      throw new Error("INVALID_TODO_ORDER_IDS");
+    }
+
+    const todoById = new Map(currentTodos.map((todo) => [todo.id, todo] as const));
+    const reorderedTodos = todoIds.map((todoId, index) => {
+      const targetTodo = todoById.get(todoId);
+      if (!targetTodo) {
+        throw new Error("INVALID_TODO_ORDER_IDS");
+      }
+      return {
+        ...targetTodo,
+        order: index,
+      };
+    });
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, reorderedTodos);
   }
 
   async updateTodoActualFocusSeconds(input: UpdateTodoActualFocusInput) {

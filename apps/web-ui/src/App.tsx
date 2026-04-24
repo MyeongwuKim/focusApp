@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SettingsPage } from "./pages/SettingsPage";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
@@ -37,6 +37,7 @@ import {
   markBackendOnline,
   subscribeBackendConnectivity,
 } from "./api/backendConnectivity";
+import { useEdgeSwipeClose } from "./hooks/useEdgeSwipeClose";
 
 const BACKEND_RECHECK_MS = 3000;
 const LOGIN_ROUTE_PATH = "/login";
@@ -132,12 +133,48 @@ function isOverlaySwipeBackBlockedTarget(target: EventTarget | null) {
   );
 }
 
-type OverlayTouchStart = {
-  x: number;
-  y: number;
-  canSwipeBack: boolean;
-  axis: "horizontal" | "vertical" | null;
+type BackendBootStatus = "idle" | "checking" | "ready" | "error";
+
+type BackendBootState = {
+  status: BackendBootStatus;
+  error: string | null;
+  retryKey: number;
 };
+
+type BackendBootAction =
+  | { type: "reset" }
+  | { type: "checking" }
+  | { type: "ready" }
+  | { type: "error"; error: string }
+  | { type: "setError"; error: string | null }
+  | { type: "retry" };
+
+const initialBackendBootState: BackendBootState = {
+  status: "idle",
+  error: null,
+  retryKey: 0,
+};
+
+function backendBootReducer(state: BackendBootState, action: BackendBootAction): BackendBootState {
+  switch (action.type) {
+    case "reset":
+      return { ...state, status: "idle", error: null };
+    case "checking":
+      return { ...state, status: "checking", error: null };
+    case "ready":
+      return { ...state, status: "ready", error: null };
+    case "error":
+      return { ...state, status: "error", error: action.error };
+    case "setError":
+      return { ...state, error: action.error };
+    case "retry":
+      return { ...state, retryKey: state.retryKey + 1 };
+    default: {
+      const _exhaustive: never = action;
+      return _exhaustive;
+    }
+  }
+}
 
 type NativeWeatherSnapshotPayload = {
   temperature?: number;
@@ -182,21 +219,36 @@ function App() {
   const isLoggedIn = Boolean(authToken);
   const isLoginRoute = location.pathname === LOGIN_ROUTE_PATH;
   const isAuthCallbackRoute = location.pathname === AUTH_CALLBACK_ROUTE_PATH;
+  const isAuthenticatedAppRoute = isLoggedIn && !isLoginRoute && !isAuthCallbackRoute;
   const overlayRoute = activeRoute === MAIN_ROUTE ? null : activeRoute;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [backendBootState, setBackendBootState] = useState<"idle" | "checking" | "ready" | "error">("idle");
-  const [backendBootError, setBackendBootError] = useState<string | null>(null);
-  const [backendBootRetryKey, setBackendBootRetryKey] = useState(0);
-  const overlayTouchStartRef = useRef<OverlayTouchStart | null>(null);
-  const overlaySwipeBackTimeoutRef = useRef<number | null>(null);
+  const [backendBoot, dispatchBackendBoot] = useReducer(backendBootReducer, initialBackendBootState);
+  const [isOverlayEntering, setIsOverlayEntering] = useState(false);
+  const backendBootState = backendBoot.status;
+  const backendBootError = backendBoot.error;
+  const backendBootRetryKey = backendBoot.retryKey;
+  const onOverlaySwipeCloseRef = useRef<() => void>(() => {});
+  const {
+    dragX: overlayDragX,
+    swipeState: overlaySwipeState,
+    startClosing: startOverlayClosing,
+    resetInteraction: resetOverlayInteraction,
+    handleTouchStart: handleOverlayTouchStart,
+    handleTouchMove: handleOverlayTouchMove,
+    handleTouchEnd: handleOverlayTouchEnd,
+    handleTouchCancel: handleOverlayTouchCancel,
+    handleTransitionEnd: handleOverlayTransitionEnd,
+  } = useEdgeSwipeClose({
+    onClose: () => onOverlaySwipeCloseRef.current(),
+    edgeStartMaxX: OVERLAY_EDGE_SWIPE_START_MAX_X,
+    minDistance: OVERLAY_EDGE_SWIPE_MIN_DISTANCE,
+    maxVerticalDrift: OVERLAY_EDGE_SWIPE_MAX_VERTICAL_DRIFT,
+    axisThreshold: OVERLAY_SWIPE_AXIS_THRESHOLD,
+    closeAnimationMs: OVERLAY_SWIPE_CLOSE_ANIMATION_MS,
+  });
   const overlayEnterAnimationTimeoutRef = useRef<number | null>(null);
   const overlayStackEntriesByIdxRef = useRef<Map<number, OverlayStackEntry>>(new Map());
   const overlayLastStackIndexRef = useRef<number | null>(null);
-  const [overlayDragX, setOverlayDragX] = useState(0);
-  const [overlaySwipeState, setOverlaySwipeState] = useState<"idle" | "dragging" | "settling" | "closing">(
-    "idle"
-  );
-  const [isOverlayEntering, setIsOverlayEntering] = useState(false);
   const lastOverlayEnterRef = useRef<{ path: string; at: number } | null>(null);
   const lastOverlayNavigationRef = useRef<{ path: string; at: number } | null>(null);
   const syncedNotificationAuthTokenRef = useRef<string | null>(null);
@@ -252,9 +304,8 @@ function App() {
   }, [activeRoute, isAuthCallbackRoute, isLoggedIn, isLoginRoute, location.pathname, navigate]);
 
   useEffect(() => {
-    if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
-      setBackendBootState("idle");
-      setBackendBootError(null);
+    if (!isAuthenticatedAppRoute) {
+      dispatchBackendBoot({ type: "reset" });
       return;
     }
 
@@ -264,8 +315,7 @@ function App() {
       abortController.abort();
     }, 7000);
 
-    setBackendBootState("checking");
-    setBackendBootError(null);
+    dispatchBackendBoot({ type: "checking" });
 
     void (async () => {
       try {
@@ -277,15 +327,16 @@ function App() {
           setAuthToken(null);
           return;
         }
-        setBackendBootState("ready");
-        setBackendBootError(null);
+        dispatchBackendBoot({ type: "ready" });
         markBackendOnline();
       } catch (error) {
         if (cancelled) {
           return;
         }
-        setBackendBootState("error");
-        setBackendBootError(getUserFacingErrorMessage(error, "서버 연결에 실패했어요."));
+        dispatchBackendBoot({
+          type: "error",
+          error: getUserFacingErrorMessage(error, "서버 연결에 실패했어요."),
+        });
         if (isLikelyBackendOfflineError(error)) {
           markBackendOffline();
         }
@@ -299,22 +350,20 @@ function App() {
       window.clearTimeout(timeoutId);
       abortController.abort();
     };
-  }, [backendBootRetryKey, isAuthCallbackRoute, isLoggedIn, isLoginRoute, setAuthToken]);
+  }, [backendBootRetryKey, isAuthenticatedAppRoute, setAuthToken]);
 
   useEffect(() => {
-    if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+    if (!isAuthenticatedAppRoute) {
       return;
     }
 
     const unsubscribe = subscribeBackendConnectivity((next, previous) => {
       if (next === "offline") {
-        setBackendBootState("error");
-        setBackendBootError("서버 연결에 실패했어요.");
+        dispatchBackendBoot({ type: "error", error: "서버 연결에 실패했어요." });
         return;
       }
 
-      setBackendBootState("ready");
-      setBackendBootError(null);
+      dispatchBackendBoot({ type: "ready" });
       if (previous === "offline") {
         void queryClient.resumePausedMutations();
         void queryClient.invalidateQueries();
@@ -323,17 +372,16 @@ function App() {
     });
 
     if (getBackendConnectivityState() === "offline") {
-      setBackendBootState("error");
-      setBackendBootError("서버 연결에 실패했어요.");
+      dispatchBackendBoot({ type: "error", error: "서버 연결에 실패했어요." });
     }
 
     return () => {
       unsubscribe();
     };
-  }, [isAuthCallbackRoute, isLoggedIn, isLoginRoute]);
+  }, [isAuthenticatedAppRoute]);
 
   useEffect(() => {
-    if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+    if (!isAuthenticatedAppRoute) {
       return;
     }
     if (getBackendConnectivityState() !== "offline") {
@@ -358,7 +406,10 @@ function App() {
           return;
         }
         if (!isLikelyBackendOfflineError(error)) {
-          setBackendBootError(getUserFacingErrorMessage(error, "서버 연결에 실패했어요."));
+          dispatchBackendBoot({
+            type: "setError",
+            error: getUserFacingErrorMessage(error, "서버 연결에 실패했어요."),
+          });
         }
       }
     };
@@ -372,7 +423,7 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [backendBootState, isAuthCallbackRoute, isLoggedIn, isLoginRoute, setAuthToken]);
+  }, [backendBootState, isAuthenticatedAppRoute, setAuthToken]);
 
   useEffect(() => {
     if (!weatherEnabled) {
@@ -692,6 +743,10 @@ function App() {
     goPage(ROUTE_PATH[MAIN_ROUTE], { replace: true });
     setIsDrawerOpen(false);
   };
+  onOverlaySwipeCloseRef.current = () => {
+    performGoBackNavigation();
+    resetOverlayInteraction();
+  };
 
   const goBack = (options?: { animated?: boolean }) => {
     const prefersAnimatedBack = options?.animated ?? true;
@@ -710,22 +765,7 @@ function App() {
       return;
     }
 
-    if (overlaySwipeBackTimeoutRef.current !== null) {
-      window.clearTimeout(overlaySwipeBackTimeoutRef.current);
-      overlaySwipeBackTimeoutRef.current = null;
-    }
-
-    const viewportWidth = window.innerWidth || 390;
-    setIsOverlayEntering(false);
-    setOverlaySwipeState("closing");
-    setOverlayDragX(viewportWidth);
-    overlaySwipeBackTimeoutRef.current = window.setTimeout(() => {
-      overlaySwipeBackTimeoutRef.current = null;
-      performGoBackNavigation();
-      overlayTouchStartRef.current = null;
-      setOverlaySwipeState("idle");
-      setOverlayDragX(0);
-    }, OVERLAY_SWIPE_CLOSE_ANIMATION_MS);
+    startOverlayClosing();
   };
 
   useEffect(() => {
@@ -740,9 +780,7 @@ function App() {
   }, [activeRoute, location.pathname, location.search]);
 
   useLayoutEffect(() => {
-    overlayTouchStartRef.current = null;
-    setOverlayDragX(0);
-    setOverlaySwipeState("idle");
+    resetOverlayInteraction();
     const stackIndex = getHistoryStackIndex();
     const previousStackIndex = overlayLastStackIndexRef.current;
     overlayLastStackIndexRef.current = stackIndex;
@@ -763,11 +801,6 @@ function App() {
     }
     setIsOverlayEntering(shouldAnimateOverlayEnter);
 
-    if (overlaySwipeBackTimeoutRef.current !== null) {
-      window.clearTimeout(overlaySwipeBackTimeoutRef.current);
-      overlaySwipeBackTimeoutRef.current = null;
-    }
-
     if (overlayEnterAnimationTimeoutRef.current !== null) {
       window.clearTimeout(overlayEnterAnimationTimeoutRef.current);
       overlayEnterAnimationTimeoutRef.current = null;
@@ -783,9 +816,6 @@ function App() {
 
   useEffect(() => {
     return () => {
-      if (overlaySwipeBackTimeoutRef.current !== null) {
-        window.clearTimeout(overlaySwipeBackTimeoutRef.current);
-      }
       if (overlayEnterAnimationTimeoutRef.current !== null) {
         window.clearTimeout(overlayEnterAnimationTimeoutRef.current);
       }
@@ -918,7 +948,7 @@ function App() {
         <BackendConnectionBanner
           state={backendBootState}
           errorMessage={backendBootError}
-          onRetry={() => setBackendBootRetryKey((prev) => prev + 1)}
+          onRetry={() => dispatchBackendBoot({ type: "retry" })}
         />
 
         <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
@@ -970,142 +1000,20 @@ function App() {
                       isActiveEntry
                         ? (event) => {
                             const touch = event.touches[0];
-                            overlayTouchStartRef.current = {
-                              x: touch.clientX,
-                              y: touch.clientY,
+                            handleOverlayTouchStart(event, {
                               canSwipeBack:
                                 touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X &&
                                 !isOverlaySwipeBackBlockedTarget(event.target) &&
                                 !(entry.route === "dateTasks" && isDateTasksMainPath(entry.pathname)),
-                              axis: null,
-                            };
-                            if (touch.clientX <= OVERLAY_EDGE_SWIPE_START_MAX_X) {
-                              setIsOverlayEntering(false);
-                            }
+                              onEdgeTouchStart: () => setIsOverlayEntering(false),
+                            });
                           }
                         : undefined
                     }
-                    onTouchMove={
-                      isActiveEntry
-                        ? (event) => {
-                            const start = overlayTouchStartRef.current;
-                            if (!start || !start.canSwipeBack || overlaySwipeState === "closing") {
-                              return;
-                            }
-
-                            const touch = event.touches[0];
-                            const deltaX = touch.clientX - start.x;
-                            const deltaY = touch.clientY - start.y;
-
-                            if (!start.axis) {
-                              if (
-                                Math.abs(deltaX) < OVERLAY_SWIPE_AXIS_THRESHOLD &&
-                                Math.abs(deltaY) < OVERLAY_SWIPE_AXIS_THRESHOLD
-                              ) {
-                                return;
-                              }
-                              start.axis = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
-                            }
-
-                            if (start.axis !== "horizontal") {
-                              return;
-                            }
-
-                            if (deltaX <= 0) {
-                              if (overlayDragX !== 0) {
-                                setOverlayDragX(0);
-                              }
-                              setOverlaySwipeState("dragging");
-                              return;
-                            }
-
-                            event.preventDefault();
-                            setOverlaySwipeState("dragging");
-                            const viewportWidth = window.innerWidth || 390;
-                            const limitedDeltaX = Math.min(deltaX, viewportWidth * 1.08);
-                            const dragX =
-                              limitedDeltaX <= viewportWidth
-                                ? limitedDeltaX
-                                : viewportWidth + (limitedDeltaX - viewportWidth) * 0.24;
-                            setOverlayDragX(dragX);
-                          }
-                        : undefined
-                    }
-                    onTouchEnd={
-                      isActiveEntry
-                        ? (event) => {
-                            const start = overlayTouchStartRef.current;
-                            if (!start) {
-                              return;
-                            }
-
-                            if (!start.canSwipeBack || start.axis !== "horizontal") {
-                              overlayTouchStartRef.current = null;
-                              if (overlaySwipeState === "dragging" && overlayDragX > 0) {
-                                setOverlaySwipeState("settling");
-                                setOverlayDragX(0);
-                              } else {
-                                setOverlaySwipeState("idle");
-                              }
-                              return;
-                            }
-
-                            const touch = event.changedTouches[0];
-                            const deltaX = touch.clientX - start.x;
-                            const deltaY = touch.clientY - start.y;
-                            const closeThreshold = Math.max(
-                              OVERLAY_EDGE_SWIPE_MIN_DISTANCE,
-                              Math.min(window.innerWidth * 0.24, 112)
-                            );
-                            const shouldClose =
-                              deltaX > closeThreshold &&
-                              Math.abs(deltaY) <= OVERLAY_EDGE_SWIPE_MAX_VERTICAL_DRIFT &&
-                              Math.abs(deltaX) > Math.abs(deltaY);
-
-                            if (shouldClose) {
-                              const viewportWidth = window.innerWidth || 390;
-                              setOverlaySwipeState("closing");
-                              setOverlayDragX(viewportWidth);
-                              overlaySwipeBackTimeoutRef.current = window.setTimeout(() => {
-                                overlaySwipeBackTimeoutRef.current = null;
-                                performGoBackNavigation();
-                                overlayTouchStartRef.current = null;
-                                setOverlaySwipeState("idle");
-                                setOverlayDragX(0);
-                              }, OVERLAY_SWIPE_CLOSE_ANIMATION_MS);
-                            } else {
-                              if (overlayDragX > 0) {
-                                setOverlaySwipeState("settling");
-                                setOverlayDragX(0);
-                              } else {
-                                setOverlaySwipeState("idle");
-                              }
-                            }
-                            overlayTouchStartRef.current = null;
-                          }
-                        : undefined
-                    }
-                    onTouchCancel={
-                      isActiveEntry
-                        ? () => {
-                            overlayTouchStartRef.current = null;
-                            setOverlaySwipeState(overlayDragX > 0 ? "settling" : "idle");
-                            setOverlayDragX(0);
-                          }
-                        : undefined
-                    }
-                    onTransitionEnd={
-                      isActiveEntry
-                        ? (event) => {
-                            if (event.currentTarget !== event.target) {
-                              return;
-                            }
-                            if (overlaySwipeState === "settling") {
-                              setOverlaySwipeState("idle");
-                            }
-                          }
-                        : undefined
-                    }
+                    onTouchMove={isActiveEntry ? handleOverlayTouchMove : undefined}
+                    onTouchEnd={isActiveEntry ? handleOverlayTouchEnd : undefined}
+                    onTouchCancel={isActiveEntry ? () => handleOverlayTouchCancel() : undefined}
+                    onTransitionEnd={isActiveEntry ? handleOverlayTransitionEnd : undefined}
                   >
                     <PageHeader route={entry.route} forcedPathname={entry.pathname} forcedSearch={entry.search} />
                     <div className="relative min-h-0 flex flex-1 flex-col overflow-hidden">

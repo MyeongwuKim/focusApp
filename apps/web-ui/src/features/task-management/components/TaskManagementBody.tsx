@@ -3,25 +3,18 @@ import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
   closestCenter,
-  pointerWithin,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   defaultAnimateLayoutChanges,
-  sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useSortableItem } from "../../../hooks/useSortableItem";
 import { FiArrowRight, FiEdit3, FiTrash2 } from "react-icons/fi";
+import { useSortableSensors } from "../../../hooks/useSortableSensors";
 import { actionSheet, confirm, toast } from "../../../stores";
 import {
   useTaskManagementActions,
@@ -58,7 +51,7 @@ const parseCollectionDropId = (dropId: string) =>
 const isUncategorizedCollection = (name: string) =>
   name.trim().toLowerCase() === UNCATEGORIZED_COLLECTION_NAME.toLowerCase();
 
-const TASK_DRAG_START_DISTANCE_THRESHOLD = 6;
+const DRAG_START_DISTANCE_THRESHOLD = 10;
 
 const isTaskDragContainerId = (containerId: string) => containerId.startsWith(TASK_DRAG_ID_PREFIX);
 const isCollectionContainerId = (containerId: string) => containerId.startsWith(COLLECTION_DROP_ID_PREFIX);
@@ -87,19 +80,14 @@ function DraggableTaskItem({
   onSelect: () => void;
   onOpenMenu: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
     id: toTaskDragId(task.id),
     animateLayoutChanges,
+    stylePreset: "fadeOutOnDrag",
   });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: isDragging ? undefined : transition,
-    opacity: isDragging ? 0 : 1,
-  };
-
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+    <div ref={setNodeRef} style={style} {...dragHandleProps}>
       <TaskManagementTaskItem
         label={task.label}
         collectionName={collectionName}
@@ -136,20 +124,14 @@ function DroppableCollectionItem({
   onSelect: () => void;
   onOpenMenu?: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
+  const { setNodeRef, style, isOver, dragHandleProps } = useSortableItem({
     id: toCollectionDropId(collectionId),
     animateLayoutChanges,
+    stylePreset: "fadeOutOnDrag",
   });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: isDragging ? undefined : transition,
-    zIndex: isDragging ? 20 : undefined,
-    position: isDragging ? ("relative" as const) : undefined,
-  };
-
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+    <div ref={setNodeRef} style={style} {...dragHandleProps}>
       <TaskManagementCollectionItem
         name={name}
         count={count}
@@ -181,10 +163,19 @@ export function TaskManagementBody() {
   const [draggingCollectionId, setDraggingCollectionId] = useState<string | null>(null);
   const [dragStartPointer, setDragStartPointer] = useState<{ x: number; y: number } | null>(null);
   const [draggingTaskWidth, setDraggingTaskWidth] = useState<number | null>(null);
+  const [draggingCollectionWidth, setDraggingCollectionWidth] = useState<number | null>(null);
   const collectionPaneRef = useRef<HTMLElement | null>(null);
   const draggingTask = useMemo(
     () => (draggingTaskId ? tasks.find((task) => task.id === draggingTaskId) ?? null : null),
     [draggingTaskId, tasks]
+  );
+  const draggingCollection = useMemo(
+    () => (draggingCollectionId ? collections.find((collection) => collection.id === draggingCollectionId) ?? null : null),
+    [collections, draggingCollectionId]
+  );
+  const draggingCollectionHasMenu = useMemo(
+    () => (draggingCollection ? !isUncategorizedCollection(draggingCollection.name) : false),
+    [draggingCollection]
   );
 
   const collectionCountMap = useMemo(() => {
@@ -216,17 +207,7 @@ export function TaskManagementBody() {
     [collections]
   );
 
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { distance: 2 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 120, tolerance: 3 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const sensors = useSortableSensors("quick");
 
   const collisionDetection = (args: Parameters<typeof closestCenter>[0]) => {
     const activeId = String(args.active.id);
@@ -235,22 +216,16 @@ export function TaskManagementBody() {
       const containersExcludingActive = args.droppableContainers.filter(
         (container) => String(container.id) !== activeId
       );
-      const scopedArgs = {
-        ...args,
-        droppableContainers: containersExcludingActive,
-      };
 
-      const pointerCollisions = pointerWithin(scopedArgs);
-      if (pointerCollisions.length > 0) {
-        return pointerCollisions;
-      }
-
-      if (dragStartPointer && args.pointerCoordinates) {
+      if (dragStartPointer) {
+        if (!args.pointerCoordinates) {
+          return [];
+        }
         const distanceFromStart = Math.hypot(
           args.pointerCoordinates.x - dragStartPointer.x,
           args.pointerCoordinates.y - dragStartPointer.y
         );
-        if (distanceFromStart < TASK_DRAG_START_DISTANCE_THRESHOLD) {
+        if (distanceFromStart < DRAG_START_DISTANCE_THRESHOLD) {
           return [];
         }
       }
@@ -288,7 +263,7 @@ export function TaskManagementBody() {
       return [];
     }
 
-    const activeCollectionId = parseCollectionDropId(activeId);
+      const activeCollectionId = parseCollectionDropId(activeId);
     if (!activeCollectionId) {
       return closestCenter(args);
     }
@@ -302,9 +277,17 @@ export function TaskManagementBody() {
       droppableContainers: collectionOnlyContainers,
     };
 
-    const pointerCollisions = pointerWithin(collectionScopedArgs);
-    if (pointerCollisions.length > 0) {
-      return pointerCollisions;
+    if (dragStartPointer) {
+      if (!args.pointerCoordinates) {
+        return [];
+      }
+      const distanceFromStart = Math.hypot(
+        args.pointerCoordinates.x - dragStartPointer.x,
+        args.pointerCoordinates.y - dragStartPointer.y
+      );
+      if (distanceFromStart < DRAG_START_DISTANCE_THRESHOLD) {
+        return [];
+      }
     }
 
     return closestCenter(collectionScopedArgs);
@@ -315,6 +298,7 @@ export function TaskManagementBody() {
     setDraggingCollectionId(null);
     setDragStartPointer(null);
     setDraggingTaskWidth(null);
+    setDraggingCollectionWidth(null);
     if (!event.over) {
       return;
     }
@@ -354,7 +338,9 @@ export function TaskManagementBody() {
     setDraggingTaskId(parseTaskDragId(activeId));
     setDraggingCollectionId(parseCollectionDropId(activeId));
     const activeRectWidth = event.active.rect.current.initial?.width;
-    setDraggingTaskWidth(typeof activeRectWidth === "number" ? activeRectWidth : null);
+    const nextWidth = typeof activeRectWidth === "number" ? activeRectWidth : null;
+    setDraggingTaskWidth(nextWidth);
+    setDraggingCollectionWidth(nextWidth);
 
     const activatorEvent = event.activatorEvent as {
       clientX?: unknown;
@@ -546,14 +532,12 @@ export function TaskManagementBody() {
             setDraggingCollectionId(null);
             setDragStartPointer(null);
             setDraggingTaskWidth(null);
+            setDraggingCollectionWidth(null);
           }}
         >
           <div className="min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
             <div
-              className={[
-                "no-scrollbar h-full space-y-1.5 pr-0.5",
-                draggingTaskId ? "overflow-visible" : "overflow-y-auto",
-              ].join(" ")}
+              className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5"
             >
               {isAllCollectionSelected ? (
                 <p className="m-0 px-1 py-1 text-[11px] text-base-content/55">
@@ -634,6 +618,20 @@ export function TaskManagementBody() {
                           ariaLabel: "할일 옵션",
                           onClick: () => {},
                         }}
+                      />
+                    </div>
+                  ) : draggingCollection ? (
+                    <div
+                      className="rounded-lg"
+                      style={draggingCollectionWidth ? { width: `${draggingCollectionWidth}px` } : undefined}
+                    >
+                      <TaskManagementCollectionItem
+                        name={draggingCollection.name}
+                        count={collectionCountMap.get(draggingCollection.id) ?? 0}
+                        active={selectedCollectionId === draggingCollection.id}
+                        disableInteraction
+                        onSelect={() => {}}
+                        onOpenMenu={draggingCollectionHasMenu ? () => {} : undefined}
                       />
                     </div>
                   ) : null}

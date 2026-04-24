@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FiCheckCircle, FiChevronRight, FiChevronUp, FiClipboard } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
+import { useHorizontalSwipeGesture } from "../../../hooks/useHorizontalSwipeGesture";
 import { useAppStore } from "../../../stores";
 import { formatDateKey } from "../../../utils/holidays";
 import { formatDateLabel } from "../utils/date";
@@ -17,13 +18,6 @@ type DateSelectionSheetProps = {
   onRequestOpenTasks: () => void;
   onShiftSelectedDate: (days: number) => void;
 };
-
-type TouchPoint = {
-  x: number;
-  y: number;
-};
-
-type SwipeAxis = "horizontal" | "vertical" | null;
 
 function getEmptyMessageByDate(selectedDateKey: string) {
   const todayDateKey = formatDateKey(new Date());
@@ -56,14 +50,39 @@ export function DateSelectionSheet({
   const emptyMessage = selectedDateKey
     ? getEmptyMessageByDate(selectedDateKey)
     : { title: "", description: "" };
-  const touchStartRef = useRef<TouchPoint | null>(null);
-  const swipeAxisRef = useRef<SwipeAxis>(null);
   const handleTouchStartYRef = useRef<number | null>(null);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [motion, setMotion] = useState<"enter" | "leave">("enter");
   const [isDragging, setIsDragging] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [bodyDragX, setBodyDragX] = useState(0);
+  const {
+    handleTouchStart: handleBodySwipeTouchStart,
+    handleTouchMove: handleBodySwipeTouchMove,
+    handleTouchEnd: handleBodySwipeTouchEnd,
+    handleTouchCancel: handleBodySwipeTouchCancel,
+  } = useHorizontalSwipeGesture({
+    onStart: () => {
+      setIsDragging(true);
+    },
+    onHorizontalMove: ({ deltaX }) => {
+      setBodyDragX(deltaX);
+    },
+    onEnd: ({ axis, deltaX }) => {
+      const swipeThreshold = 52;
+
+      if (axis === "horizontal" && Math.abs(deltaX) > swipeThreshold) {
+        onShiftSelectedDate(deltaX < 0 ? 1 : -1);
+      }
+
+      setBodyDragX(0);
+      setIsDragging(false);
+    },
+    onCancel: () => {
+      setIsDragging(false);
+      setBodyDragX(0);
+    },
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -115,52 +134,6 @@ export function DateSelectionSheet({
     }
 
     handleTouchStartYRef.current = null;
-    setIsDragging(false);
-  };
-
-  const handleBodyTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
-    const touch = event.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    swipeAxisRef.current = null;
-    setIsDragging(true);
-  };
-
-  const handleBodyTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
-    const start = touchStartRef.current;
-    if (!start) {
-      return;
-    }
-
-    const touch = event.touches[0];
-    const deltaX = touch.clientX - start.x;
-    const deltaY = touch.clientY - start.y;
-
-    if (!swipeAxisRef.current) {
-      const axisThreshold = 8;
-      if (Math.abs(deltaX) < axisThreshold && Math.abs(deltaY) < axisThreshold) {
-        return;
-      }
-      swipeAxisRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
-    }
-
-    if (swipeAxisRef.current !== "horizontal") {
-      return;
-    }
-
-    event.preventDefault();
-    setBodyDragX(deltaX);
-  };
-
-  const handleBodyTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
-    const swipeThreshold = 52;
-
-    if (swipeAxisRef.current === "horizontal" && Math.abs(bodyDragX) > swipeThreshold) {
-      onShiftSelectedDate(bodyDragX < 0 ? 1 : -1);
-    }
-
-    setBodyDragX(0);
-    touchStartRef.current = null;
-    swipeAxisRef.current = null;
     setIsDragging(false);
   };
 
@@ -220,15 +193,10 @@ export function DateSelectionSheet({
         </div>
         <div
           className="mt-2 flex-1 overflow-hidden"
-          onTouchStart={handleBodyTouchStart}
-          onTouchMove={handleBodyTouchMove}
-          onTouchEnd={handleBodyTouchEnd}
-          onTouchCancel={() => {
-            setIsDragging(false);
-            setBodyDragX(0);
-            touchStartRef.current = null;
-            swipeAxisRef.current = null;
-          }}
+          onTouchStart={handleBodySwipeTouchStart}
+          onTouchMove={handleBodySwipeTouchMove}
+          onTouchEnd={handleBodySwipeTouchEnd}
+          onTouchCancel={handleBodySwipeTouchCancel}
         >
           <div
             className="h-full space-y-2 overflow-y-auto overscroll-contain"

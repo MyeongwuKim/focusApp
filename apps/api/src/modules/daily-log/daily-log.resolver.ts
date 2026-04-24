@@ -3,6 +3,7 @@ import type { GraphQLContext } from "../../graphql/context.js";
 import { DailyLogRepository } from "./daily-log.repository.js";
 import { DailyLogService } from "./daily-log.service.js";
 import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
+import { requireUserId } from "../../common/utils/require-user-id.js";
 
 export const dailyLogTypeDefs = gql`
   type TodoItem {
@@ -71,6 +72,11 @@ export const dailyLogTypeDefs = gql`
     seconds: Int!
   }
 
+  input ReorderTodosInput {
+    dateKey: String!
+    todoIds: [ID!]!
+  }
+
   input RestSessionInput {
     dateKey: String!
   }
@@ -103,6 +109,7 @@ export const dailyLogTypeDefs = gql`
     resetTodo(input: TodoActionInput!): DailyLog!
     deleteTodo(input: TodoActionInput!): DailyLog!
     addDeviation(input: AddDeviationInput!): DailyLog!
+    reorderTodos(input: ReorderTodosInput!): DailyLog!
     updateTodoActualFocus(input: UpdateTodoActualFocusInput!): DailyLog!
     updateTodoSchedule(input: UpdateTodoScheduleInput!): DailyLog!
     startRestSession(input: RestSessionInput!): DailyLog!
@@ -125,6 +132,7 @@ const dailyLogErrorMapping = {
   ANOTHER_TODO_ALREADY_IN_PROGRESS: { message: "진행 중인 할일이 있어요." },
   TODO_NOT_IN_PROGRESS: { message: "진행 중인 할일이 아니에요." },
   TODO_NOT_DONE: { message: "완료된 할일만 수정할 수 있어요." },
+  INVALID_TODO_ORDER_IDS: { message: "정렬할 할일 목록이 올바르지 않아요." },
   INVALID_ACTUAL_FOCUS_SECONDS: { message: "집중 시간이 올바르지 않아요." },
   INVALID_SCHEDULED_START_AT: { message: "시작 예정 시간이 올바르지 않아요." },
   SCHEDULE_MUST_BE_FUTURE_FOR_TODAY: { message: "오늘 일정은 현재 시각 이후로만 설정할 수 있어요." },
@@ -320,6 +328,22 @@ export const dailyLogResolvers = {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
+    reorderTodos: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoIds: string[] } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.reorderTodos({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoIds: args.input.todoIds,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
     updateTodoActualFocus: async (
       _parent: unknown,
       args: { input: { dateKey: string; todoId: string; actualFocusSeconds: number } },
@@ -393,5 +417,5 @@ export const dailyLogResolvers = {
 };
 
 function getUserId(context: GraphQLContext) {
-  return context.userId ?? "local-dev-user";
+  return requireUserId(context);
 }

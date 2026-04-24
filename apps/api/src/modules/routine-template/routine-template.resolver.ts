@@ -1,5 +1,6 @@
 import { gql } from "graphql-tag";
 import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
+import { requireUserId } from "../../common/utils/require-user-id.js";
 import type { GraphQLContext } from "../../graphql/context.js";
 import { createRoutineTemplateService } from "./factory/create-routine-template-service.js";
 
@@ -155,5 +156,5 @@ export const routineTemplateResolvers = {
 };
 
 function getUserId(context: GraphQLContext) {
-  return context.userId ?? "local-dev-user";
+  return requireUserId(context);
 }

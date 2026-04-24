@@ -183,6 +183,15 @@ function isSameTaskItems(a: TaskItem[], b: TaskItem[]) {
   return true;
 }
 
+function reorderTaskItemsByIds(items: TaskItem[], orderedIdsValue: string[]) {
+  const itemMap = new Map(items.map((item) => [item.id, item] as const));
+  const reordered = orderedIdsValue
+    .map((id) => itemMap.get(id))
+    .filter((item): item is TaskItem => Boolean(item));
+  const remaining = items.filter((item) => !orderedIdsValue.includes(item.id));
+  return [...reordered, ...remaining];
+}
+
 export function DateTodosRouteProvider({
   dateKey,
   restFinishedRequested = false,
@@ -222,6 +231,7 @@ export function DateTodosRouteProvider({
   const completionWatchReadyRef = useRef(false);
   const pendingRestFinishedAutoStopRef = useRef(false);
   const restFinishedAutoStopInFlightRef = useRef(false);
+  const reorderPersistRequestIdRef = useRef(0);
 
   const { dailyLogByDateQuery: dailyLogQuery } = useDailyLogQuery({ dateKey });
   const { routineTemplatesQuery } = useRoutineTemplateQuery();
@@ -238,6 +248,7 @@ export function DateTodosRouteProvider({
     resumeTodoMutation,
     completeTodoMutation,
     resetTodoMutation,
+    reorderTodosMutation,
     updateTodoActualFocusMutation,
     updateTodoScheduleMutation,
     startRestSessionMutation,
@@ -333,14 +344,40 @@ export function DateTodosRouteProvider({
   }, [activeRestDurationMin, isRestActive]);
 
   const reorderTasksByIds = (orderedIdsValue: string[]) => {
-    setDateTasksRouteItems((prevItems) => {
-      const itemMap = new Map(prevItems.map((item) => [item.id, item]));
-      const reordered = orderedIdsValue
-        .map((id) => itemMap.get(id))
-        .filter((item): item is TaskItem => Boolean(item));
-      const remaining = prevItems.filter((item) => !orderedIdsValue.includes(item.id));
-      return [...reordered, ...remaining];
-    });
+    if (!dateKey) {
+      return;
+    }
+
+    const nextItems = reorderTaskItemsByIds(dateTasksRouteItems, orderedIdsValue);
+    setDateTasksRouteItems(nextItems);
+
+    const requestId = reorderPersistRequestIdRef.current + 1;
+    reorderPersistRequestIdRef.current = requestId;
+
+    void (async () => {
+      try {
+        const nextLog = await reorderTodosMutation.mutateAsync({
+          dateKey,
+          todoIds: nextItems.map((item) => item.id),
+        });
+        if (requestId !== reorderPersistRequestIdRef.current) {
+          return;
+        }
+        applyDailyLog(nextLog);
+      } catch (error) {
+        if (requestId !== reorderPersistRequestIdRef.current) {
+          return;
+        }
+        const message = getUserFacingErrorMessage(error, "할일 순서 저장 중 오류가 발생했어요.");
+        toast.show({
+          type: "error",
+          title: "순서 저장 실패",
+          message,
+          duration: 2200,
+        });
+        void dailyLogQuery.refetch();
+      }
+    })();
   };
 
   useEffect(() => {

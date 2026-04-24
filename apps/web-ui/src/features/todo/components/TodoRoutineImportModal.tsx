@@ -1,27 +1,21 @@
 import {
   DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
   closestCenter,
-  useSensor,
-  useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
 import { FiDownload, FiMenu, FiSave, FiTag, FiTrash2 } from "react-icons/fi";
 import type { RoutineTemplate, RoutineTemplateItem } from "../../../api/routineTemplateApi";
 import { Button } from "../../../components/ui/Button";
+import { useSortableItem } from "../../../hooks/useSortableItem";
+import { useSortableSensors } from "../../../hooks/useSortableSensors";
 import { useTaskCollectionQuery } from "../../../queries";
 import { confirm } from "../../../stores";
+import { reorderById } from "../../../utils/dnd";
 
 type TodoRoutineImportModalProps = {
   routines: RoutineTemplate[];
@@ -93,15 +87,10 @@ function SortableRoutineItemRow({
   onDelete: (itemId: string) => void;
   editable: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
     id: item.id,
     disabled: !editable,
   });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   return (
     <div
@@ -120,8 +109,7 @@ function SortableRoutineItemRow({
             circle
             aria-label="루틴 항목 순서 변경"
             className="text-base-content/50"
-            {...attributes}
-            {...listeners}
+            {...dragHandleProps}
           >
             <FiMenu size={12} />
           </Button>
@@ -172,17 +160,7 @@ export function TodoRoutineImportModal({
   const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
 
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const sensors = useSortableSensors();
 
   useEffect(() => {
     if (!selectedId && routines.length > 0) {
@@ -242,13 +220,7 @@ export function TodoRoutineImportModal({
       return;
     }
 
-    const oldIndex = editableItems.findIndex((item) => item.id === String(active.id));
-    const newIndex = editableItems.findIndex((item) => item.id === String(over.id));
-    if (oldIndex < 0 || newIndex < 0) {
-      return;
-    }
-
-    setEditableItems((prev) => arrayMove(prev, oldIndex, newIndex));
+    setEditableItems((prev) => reorderById(prev, String(active.id), String(over.id), (item) => item.id));
   };
 
   const handleDeleteRoutineItem = (itemId: string) => {

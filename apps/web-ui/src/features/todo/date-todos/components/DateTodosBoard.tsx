@@ -1,27 +1,22 @@
 import {
   DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
   closestCenter,
-  useSensor,
-  useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiClipboard, FiDownload, FiPlus } from "react-icons/fi";
 import { fetchDailyLogByDate } from "../../../../api/dailyLogApi";
 import { Button } from "../../../../components/ui/Button";
+import { useHorizontalSwipeGesture } from "../../../../hooks/useHorizontalSwipeGesture";
+import { useSortableItem } from "../../../../hooks/useSortableItem";
+import { useSortableSensors } from "../../../../hooks/useSortableSensors";
 import { dailyLogByDateQueryKey } from "../../../../queries/daily-log/queries";
+import { reorderStringIdsByDrag } from "../../../../utils/dnd";
 import { formatDateKey } from "../../../../utils/holidays";
 import { shiftDateKey } from "../../../calendar/utils/date";
 import { TodoItemCard } from "../../components/TodoItemCard";
@@ -31,12 +26,6 @@ import { useDateTodosRouteContext } from "../DateTodosRouteProvider";
 type DateTodosBoardProps = {
   dateKey: string;
   onShiftDate: (days: number) => void;
-};
-
-type SwipeAxis = "horizontal" | "vertical" | null;
-type TouchPoint = {
-  x: number;
-  y: number;
 };
 
 type DailyLogPreview = {
@@ -53,8 +42,8 @@ type DailyLogPreview = {
   }>;
 } | null;
 
-const SWIPE_AXIS_THRESHOLD = 8;
 const SWIPE_DISTANCE_THRESHOLD = 56;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 function toEpochMillis(value: string | null) {
   if (!value) {
@@ -62,6 +51,35 @@ function toEpochMillis(value: string | null) {
   }
   const epoch = new Date(value).getTime();
   return Number.isFinite(epoch) ? epoch : null;
+}
+
+function parseDateKeyToLocalDate(dateKey: string) {
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
 }
 
 function mapPreviewLogToTaskItems(dateKey: string, log: DailyLogPreview): TaskItem[] {
@@ -135,17 +153,12 @@ function SortableTaskRow({
   disableActions: boolean;
   isLongPressActive: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
     id: item.id,
   });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...dragHandleProps}>
       <TodoItemCard
         item={item}
         onTaskAction={onTaskAction}
@@ -220,8 +233,69 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   const [pendingShiftDays, setPendingShiftDays] = useState<-1 | 0 | 1>(0);
   const [isSettling, setIsSettling] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const touchStartRef = useRef<TouchPoint | null>(null);
-  const swipeAxisRef = useRef<SwipeAxis>(null);
+  const todayDateKey = formatDateKey(new Date());
+  const isPastDate = dateKey < todayDateKey;
+  const isFutureDate = dateKey > todayDateKey;
+  const daysToToday = useMemo(() => {
+    const selectedDate = parseDateKeyToLocalDate(dateKey);
+    const todayDate = parseDateKeyToLocalDate(todayDateKey);
+    if (!selectedDate || !todayDate) {
+      return 0;
+    }
+    return Math.round((todayDate.getTime() - selectedDate.getTime()) / DAY_IN_MS);
+  }, [dateKey, todayDateKey]);
+  const {
+    handleTouchStart: handleBoardSwipeTouchStart,
+    handleTouchMove: handleBoardSwipeTouchMove,
+    handleTouchEnd: handleBoardSwipeTouchEnd,
+    handleTouchCancel: handleBoardSwipeTouchCancel,
+  } = useHorizontalSwipeGesture({
+    canStart: (event) => !(draggingId || isSettling || isSwipeBlockedTarget(event.target)),
+    onStart: () => {
+      setDragX(0);
+    },
+    onHorizontalMove: ({ deltaX }) => {
+      setDragX(deltaX);
+    },
+    onEnd: ({ axis, deltaX }) => {
+      if (axis !== "horizontal") {
+        setDragX(0);
+        setPendingShiftDays(0);
+        setSettleDirection(0);
+        setIsSettling(false);
+        return;
+      }
+
+      if (Math.abs(deltaX) > SWIPE_DISTANCE_THRESHOLD) {
+        const nextDirection = deltaX < 0 ? -1 : 1;
+        const nextShiftDays = deltaX < 0 ? 1 : -1;
+        setPendingShiftDays(nextShiftDays as -1 | 1);
+        setSettleDirection(nextDirection);
+        setIsSettling(true);
+        setDragX(0);
+        return;
+      }
+
+      if (Math.abs(deltaX) <= 0.5) {
+        setPendingShiftDays(0);
+        setSettleDirection(0);
+        setIsSettling(false);
+        setDragX(0);
+        return;
+      }
+
+      setPendingShiftDays(0);
+      setSettleDirection(0);
+      setIsSettling(true);
+      setDragX(0);
+    },
+    onCancel: () => {
+      setDragX(0);
+      setPendingShiftDays(0);
+      setSettleDirection(0);
+      setIsSettling(false);
+    },
+  });
 
   const previousDateKey = useMemo(() => shiftDateKey(dateKey, -1), [dateKey]);
   const nextDateKey = useMemo(() => shiftDateKey(dateKey, 1), [dateKey]);
@@ -255,17 +329,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     [nextDateKey, nextQuery.data]
   );
 
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const sensors = useSortableSensors();
 
   useEffect(() => {
     setOrderedIds((prev) => {
@@ -307,6 +371,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     const baseOrderedIds = orderedIds.length > 0 ? orderedIds : items.map((item) => item.id);
     return baseOrderedIds.map((id) => itemMap.get(id)).filter((item): item is TaskItem => Boolean(item));
   }, [items, orderedIds]);
+  const sortableIds = useMemo(() => orderedItems.map((item) => item.id), [orderedItems]);
 
   const clearDraggingState = () => {
     setDraggingId(null);
@@ -326,16 +391,13 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
       return;
     }
 
-    setOrderedIds((prev) => {
-      const oldIndex = prev.indexOf(String(active.id));
-      const newIndex = prev.indexOf(String(over.id));
-      if (oldIndex < 0 || newIndex < 0) {
-        return prev;
-      }
-      const next = arrayMove(prev, oldIndex, newIndex);
-      reorderTasksByIds(next);
-      return next;
-    });
+    const next = reorderStringIdsByDrag(sortableIds, String(active.id), String(over.id));
+    if (next === sortableIds) {
+      return;
+    }
+
+    setOrderedIds(next);
+    reorderTasksByIds(next);
   };
 
   useEffect(() => {
@@ -349,91 +411,15 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     return () => window.clearTimeout(timer);
   }, [draggingId]);
 
-  const handleSwipeTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
-    if (draggingId || isSettling || isSwipeBlockedTarget(event.target)) {
-      touchStartRef.current = null;
-      swipeAxisRef.current = null;
-      return;
-    }
-
-    const touch = event.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    swipeAxisRef.current = null;
-    setDragX(0);
-  };
-
-  const handleSwipeTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
-    const start = touchStartRef.current;
-    if (!start || isSettling) {
-      return;
-    }
-
-    const touch = event.touches[0];
-    const deltaX = touch.clientX - start.x;
-    const deltaY = touch.clientY - start.y;
-
-    if (!swipeAxisRef.current) {
-      if (Math.abs(deltaX) < SWIPE_AXIS_THRESHOLD && Math.abs(deltaY) < SWIPE_AXIS_THRESHOLD) {
-        return;
-      }
-      swipeAxisRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
-    }
-
-    if (swipeAxisRef.current !== "horizontal") {
-      return;
-    }
-
-    event.preventDefault();
-    setDragX(deltaX);
-  };
-
-  const handleSwipeTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
-    const axis = swipeAxisRef.current;
-    const currentDragX = dragX;
-    touchStartRef.current = null;
-    swipeAxisRef.current = null;
-
-    if (axis !== "horizontal") {
-      setDragX(0);
-      setPendingShiftDays(0);
-      setSettleDirection(0);
-      setIsSettling(false);
-      return;
-    }
-
-    if (Math.abs(currentDragX) > SWIPE_DISTANCE_THRESHOLD) {
-      const nextDirection = currentDragX < 0 ? -1 : 1;
-      const nextShiftDays = currentDragX < 0 ? 1 : -1;
-      setPendingShiftDays(nextShiftDays as -1 | 1);
-      setSettleDirection(nextDirection);
-      setIsSettling(true);
-      setDragX(0);
-      return;
-    }
-
-    if (Math.abs(currentDragX) <= 0.5) {
-      setPendingShiftDays(0);
-      setSettleDirection(0);
-      setIsSettling(false);
-      setDragX(0);
-      return;
-    }
-
-    setPendingShiftDays(0);
-    setSettleDirection(0);
-    setIsSettling(true);
-    setDragX(0);
-  };
-
   return (
     <div className="min-h-0 flex-1 rounded-xl border border-base-300/80 bg-base-100/65 p-2.5">
       <div
         ref={viewportRef}
         className="min-h-0 h-full overflow-hidden touch-pan-y"
-        onTouchStartCapture={handleSwipeTouchStart}
-        onTouchMoveCapture={handleSwipeTouchMove}
-        onTouchEndCapture={handleSwipeTouchEnd}
-        onTouchCancelCapture={handleSwipeTouchEnd}
+        onTouchStartCapture={handleBoardSwipeTouchStart}
+        onTouchMoveCapture={handleBoardSwipeTouchMove}
+        onTouchEndCapture={handleBoardSwipeTouchEnd}
+        onTouchCancelCapture={handleBoardSwipeTouchCancel}
       >
         <div
           className={`flex h-full w-[300%] ${isSettling ? "transition-transform duration-220 ease-out" : ""}`}
@@ -475,22 +461,52 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
                   <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-base-200 text-base-content/60">
                     <FiClipboard size={20} />
                   </span>
-                  <div className="space-y-1">
-                    <p className="m-0 text-base font-semibold tracking-tight text-base-content/85">
-                      오늘 할 일이 비어 있어요
-                    </p>
-                    <p className="m-0 text-xs text-base-content/60">루틴을 불러오거나 새 루틴을 만들어 빠르게 시작해보세요.</p>
-                  </div>
-                  <div className="flex w-full max-w-xs gap-2" data-disable-date-sheet-swipe="true">
-                    <Button variant="primary" className="flex-1 rounded-lg" onClick={openRoutineImport}>
-                      <FiDownload size={13} />
-                      루틴 불러오기
-                    </Button>
-                    <Button variant="outline" className="flex-1 rounded-lg" onClick={openRoutineCreate}>
-                      <FiPlus size={13} />
-                      루틴 만들기
-                    </Button>
-                  </div>
+                  {isPastDate ? (
+                    <>
+                      <div className="space-y-1">
+                        <p className="m-0 text-base font-semibold tracking-tight text-base-content/85">
+                          지난 날짜에 등록된 할일이 없어요
+                        </p>
+                        <p className="m-0 text-xs text-base-content/60">
+                          이 날짜는 기록 확인용으로 두고, 오늘 계획을 먼저 잡아보는 게 좋아요.
+                        </p>
+                      </div>
+                      <div className="flex w-full max-w-xs gap-2" data-disable-date-sheet-swipe="true">
+                        <Button
+                          variant="primary"
+                          className="flex-1 rounded-lg"
+                          onClick={() => {
+                            if (daysToToday !== 0) {
+                              onShiftDate(daysToToday);
+                            }
+                          }}
+                        >
+                          오늘로 이동
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1">
+                        <p className="m-0 text-base font-semibold tracking-tight text-base-content/85">
+                          {isFutureDate ? "이 날짜에 예정된 할일이 없어요" : "오늘 할 일이 비어 있어요"}
+                        </p>
+                        <p className="m-0 text-xs text-base-content/60">
+                          루틴을 불러오거나 새 루틴을 만들어 빠르게 시작해보세요.
+                        </p>
+                      </div>
+                      <div className="flex w-full max-w-xs gap-2" data-disable-date-sheet-swipe="true">
+                        <Button variant="primary" className="flex-1 rounded-lg" onClick={openRoutineImport}>
+                          <FiDownload size={13} />
+                          루틴 불러오기
+                        </Button>
+                        <Button variant="outline" className="flex-1 rounded-lg" onClick={openRoutineCreate}>
+                          <FiPlus size={13} />
+                          루틴 만들기
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <DndContext
@@ -500,7 +516,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
                   onDragEnd={handleDragEnd}
                   onDragCancel={clearDraggingState}
                 >
-                  <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
+                  <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
                     <div className="space-y-2">
                       {orderedItems.map((item) => (
                         <SortableTaskRow

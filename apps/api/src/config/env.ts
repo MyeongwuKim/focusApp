@@ -5,6 +5,21 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().min(1),
   WEB_UI_ORIGIN: z.url().default("http://localhost:5173"),
+  CORS_ALLOWED_ORIGINS: z
+    .string()
+    .optional()
+    .transform((value) =>
+      value
+        ? value
+            .split(",")
+            .map((origin) => origin.trim())
+            .filter((origin) => origin.length > 0)
+        : []
+    ),
+  CORS_ALLOW_NULL_ORIGIN: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
   AUTH_SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
   AUTH_SESSION_REFRESH_WINDOW_DAYS: z.coerce.number().int().positive().default(7),
   OAUTH_STATE_SECRET: z.string().min(1).default("dev-oauth-state-secret"),

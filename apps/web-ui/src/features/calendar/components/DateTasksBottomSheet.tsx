@@ -53,10 +53,12 @@ export function DateTasksBottomSheet({
   const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
   const [viewportHeight, setViewportHeight] = useState(getViewportHeight);
+  const [sheetContainerHeight, setSheetContainerHeight] = useState(0);
   const [dragY, setDragY] = useState(0);
   const [isHeaderDragging, setIsHeaderDragging] = useState(false);
   const [localOverlayLayer, setLocalOverlayLayer] = useState<LocalOverlayLayer>(null);
   const [barHeight, setBarHeight] = useState(94);
+  const sheetContainerRef = useRef<HTMLDivElement | null>(null);
   const headerTouchStartYRef = useRef<number | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
 
@@ -74,7 +76,8 @@ export function DateTasksBottomSheet({
   const todayDateKey = formatDateKey(new Date());
   const canGoToday = resolvedDateKey !== todayDateKey;
   const isLocalRoutineOverlayOpen = localOverlayLayer !== null;
-  const collapsedOffset = Math.max(0, viewportHeight - barHeight);
+  const effectiveContainerHeight = sheetContainerHeight > 0 ? sheetContainerHeight : viewportHeight;
+  const collapsedOffset = Math.max(0, effectiveContainerHeight - barHeight);
 
   const baseOffset = isExpanded ? 0 : collapsedOffset;
   const translateY = Math.min(collapsedOffset, Math.max(0, baseOffset + dragY));
@@ -83,9 +86,38 @@ export function DateTasksBottomSheet({
     if (typeof window === "undefined") {
       return;
     }
-    const handleResize = () => setViewportHeight(getViewportHeight());
+    const handleResize = () => {
+      setViewportHeight(getViewportHeight());
+      const nextHeight = Math.round(sheetContainerRef.current?.getBoundingClientRect().height ?? 0);
+      if (Number.isFinite(nextHeight) && nextHeight > 0) {
+        setSheetContainerHeight(nextHeight);
+      }
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" && sheetContainerRef.current
+        ? new ResizeObserver(() => {
+            const nextHeight = Math.round(sheetContainerRef.current?.getBoundingClientRect().height ?? 0);
+            if (Number.isFinite(nextHeight) && nextHeight > 0) {
+              setSheetContainerHeight(nextHeight);
+            }
+          })
+        : null;
+    if (resizeObserver && sheetContainerRef.current) {
+      resizeObserver.observe(sheetContainerRef.current);
+    }
+
+    const visualViewport = window.visualViewport;
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    visualViewport?.addEventListener("resize", handleResize);
+
+    handleResize();
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      visualViewport?.removeEventListener("resize", handleResize);
+      resizeObserver?.disconnect();
+    };
   }, []);
 
   useEffect(() => {
@@ -176,7 +208,7 @@ export function DateTasksBottomSheet({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30">
+    <div ref={sheetContainerRef} className="pointer-events-none absolute inset-0 z-30">
       <section
         className={[
           "pointer-events-auto absolute inset-x-0 top-0 bottom-0 flex flex-col border border-base-300 bg-base-100/98 shadow-[0_-14px_40px_rgba(15,23,42,0.24)]",

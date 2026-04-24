@@ -1,29 +1,23 @@
 import {
   DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
   closestCenter,
-  useSensor,
-  useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
 import { FiCheck, FiClock, FiMenu, FiPlus, FiTag, FiX } from "react-icons/fi";
 import { SelectDropbox } from "../../../components/SelectDropbox";
 import { TimePickerBottomSheet } from "../../../components/TimePickerBottomSheet";
 import { Button } from "../../../components/ui/Button";
 import { InputField } from "../../../components/ui/InputField";
+import { useSortableItem } from "../../../hooks/useSortableItem";
+import { useSortableSensors } from "../../../hooks/useSortableSensors";
 import { useTaskCollectionMutation, useTaskCollectionQuery } from "../../../queries";
 import { actionSheet, toast } from "../../../stores";
+import { reorderStringIdsByDrag } from "../../../utils/dnd";
 import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 
 type RoutineDraftItem = {
@@ -60,14 +54,9 @@ function SortableSelectedTaskRow({
   onOpenTimePicker,
   onChangeTime,
 }: SortableSelectedTaskRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
     id: task.id,
   });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   return (
     <div
@@ -86,8 +75,7 @@ function SortableSelectedTaskRow({
             circle
             aria-label="순서 변경"
             className="text-base-content/45"
-            {...attributes}
-            {...listeners}
+            {...dragHandleProps}
           >
             <FiMenu size={12} />
           </Button>
@@ -149,17 +137,7 @@ export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateM
   const [quickTaskCollectionId, setQuickTaskCollectionId] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [isQuickSaving, setIsQuickSaving] = useState(false);
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const sensors = useSortableSensors();
 
   const allTasks = useMemo(
     () =>
@@ -222,13 +200,7 @@ export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateM
       return;
     }
 
-    const oldIndex = selectedTaskIds.findIndex((id) => id === String(active.id));
-    const newIndex = selectedTaskIds.findIndex((id) => id === String(over.id));
-    if (oldIndex < 0 || newIndex < 0) {
-      return;
-    }
-
-    setSelectedTaskIds((prev) => arrayMove(prev, oldIndex, newIndex));
+    setSelectedTaskIds((prev) => reorderStringIdsByDrag(prev, String(active.id), String(over.id)));
   };
 
   const handleSave = async () => {
