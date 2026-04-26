@@ -14,6 +14,7 @@ apps/mobile/src/features/webui/embeddedWebUiBundle.ts
 apps/mobile/.expo/
 apps/mobile/expo-env.d.ts
 apps/api/.env
+apps/api/.env.local
 
 # OS files
 .DS_Store

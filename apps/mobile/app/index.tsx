@@ -568,6 +568,9 @@ export default function WebViewScreen() {
   const applyScaleScript = useMemo(
     () =>
       `(() => {
+        if (window.location.protocol !== 'file:') {
+          return true;
+        }
         const root = document.documentElement;
         root.style.setProperty('--ui-scale', '${uiScale.toFixed(3)}');
         root.style.setProperty('--calendar-cell-min-h', '${calendarLayoutVars.cellMinHeightRem.toFixed(

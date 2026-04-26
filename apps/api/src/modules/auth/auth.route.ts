@@ -14,6 +14,7 @@ interface ProviderProfile {
 interface OAuthStatePayload {
   provider: OAuthProvider;
   redirectTo: string;
+  oauthRedirectUri?: string;
   issuedAt: number;
   nonce: string;
 }
@@ -29,6 +30,44 @@ interface OAuthCallbackQuery {
 }
 
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
+const DEV_ALLOWED_REDIRECT_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"] as const;
+
+function normalizeOrigin(origin: string) {
+  return origin.replace(/\/+$/, "");
+}
+
+function isLoopbackHost(hostname: string) {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
+function resolveAllowedRedirectOrigins() {
+  const rawOrigins = [
+    env.WEB_UI_ORIGIN,
+    ...env.CORS_ALLOWED_ORIGINS,
+    ...(process.env.NODE_ENV === "production" ? [] : DEV_ALLOWED_REDIRECT_ORIGINS),
+  ];
+  return new Set(rawOrigins.map((origin) => normalizeOrigin(origin)));
+}
+
+const ALLOWED_REDIRECT_ORIGINS = resolveAllowedRedirectOrigins();
+
+function resolveKakaoRedirectUriForRequest(defaultRedirectUri: string, redirectTo: string, requestHost?: string) {
+  if (!redirectTo.startsWith("mobile:") || !requestHost) {
+    return defaultRedirectUri;
+  }
+
+  try {
+    const parsedDefault = new URL(defaultRedirectUri);
+    if (!isLoopbackHost(parsedDefault.hostname)) {
+      return defaultRedirectUri;
+    }
+
+    return `${parsedDefault.protocol}//${requestHost}${parsedDefault.pathname}`;
+  } catch {
+    return defaultRedirectUri;
+  }
+}
 
 function toBase64Url(input: string) {
   return Buffer.from(input, "utf8").toString("base64url");
@@ -86,7 +125,7 @@ function resolveRedirectTo(rawRedirectTo: unknown): string {
     return parsed.toString();
   }
 
-  if (parsed.origin !== env.WEB_UI_ORIGIN) {
+  if (!ALLOWED_REDIRECT_ORIGINS.has(normalizeOrigin(parsed.origin))) {
     throw new Error("INVALID_REDIRECT_TO");
   }
 
@@ -175,13 +214,14 @@ function getNaverConfig() {
   };
 }
 
-async function fetchKakaoProfile(code: string): Promise<ProviderProfile> {
+async function fetchKakaoProfile(code: string, redirectUriOverride?: string): Promise<ProviderProfile> {
   const config = getKakaoConfig();
+  const redirectUri = redirectUriOverride ?? config.redirectUri;
 
   const tokenBody = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: config.clientId,
-    redirect_uri: config.redirectUri,
+    redirect_uri: redirectUri,
     code,
   });
 
@@ -367,19 +407,29 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
     try {
       const query = parseOAuthStartQuery(request.query);
       const redirectTo = resolveRedirectTo(query.redirectTo);
-      const state = signOAuthState({
-        provider,
-        redirectTo,
-        issuedAt: Date.now(),
-        nonce: randomBytes(12).toString("base64url"),
-      });
+      const requestHost =
+        typeof request.headers["x-forwarded-host"] === "string"
+          ? request.headers["x-forwarded-host"]
+          : request.headers.host;
 
       if (provider === "kakao") {
-        const config = getKakaoConfig();
+        const kakaoConfig = getKakaoConfig();
+        const oauthRedirectUri = resolveKakaoRedirectUriForRequest(
+          kakaoConfig.redirectUri,
+          redirectTo,
+          requestHost
+        );
+        const state = signOAuthState({
+          provider,
+          redirectTo,
+          oauthRedirectUri,
+          issuedAt: Date.now(),
+          nonce: randomBytes(12).toString("base64url"),
+        });
         const authUrl = new URL("https://kauth.kakao.com/oauth/authorize");
         authUrl.searchParams.set("response_type", "code");
-        authUrl.searchParams.set("client_id", config.clientId);
-        authUrl.searchParams.set("redirect_uri", config.redirectUri);
+        authUrl.searchParams.set("client_id", kakaoConfig.clientId);
+        authUrl.searchParams.set("redirect_uri", oauthRedirectUri ?? kakaoConfig.redirectUri);
         authUrl.searchParams.set("state", state);
         authUrl.searchParams.set("prompt", "login");
         authUrl.searchParams.set("scope", "profile_nickname account_email");
@@ -387,6 +437,12 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
       }
 
       const config = getNaverConfig();
+      const state = signOAuthState({
+        provider,
+        redirectTo,
+        issuedAt: Date.now(),
+        nonce: randomBytes(12).toString("base64url"),
+      });
       const authUrl = new URL("https://nid.naver.com/oauth2.0/authorize");
       authUrl.searchParams.set("response_type", "code");
       authUrl.searchParams.set("client_id", config.clientId);
@@ -419,7 +475,7 @@ function registerProviderCallbackRoute(app: FastifyInstance, provider: OAuthProv
 
       const profile =
         provider === "kakao"
-          ? await fetchKakaoProfile(query.code)
+          ? await fetchKakaoProfile(query.code, parsedState.oauthRedirectUri)
           : await fetchNaverProfile(query.code, query.state);
 
       const authResult = await signInWithProvider(provider, profile);

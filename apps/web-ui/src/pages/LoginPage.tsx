@@ -2,12 +2,13 @@ import { getApiOrigin } from "../api/graphqlEndpoint";
 import { SiKakaotalk, SiNaver } from "react-icons/si";
 
 function buildOAuthStartUrl(provider: "kakao" | "naver") {
-  const apiOrigin = getApiOrigin() || "http://localhost:4000";
+  const apiOrigin = getApiOrigin();
   const redirectTo =
     window.location.protocol === "file:"
       ? "mobile://auth/callback"
       : `${window.location.origin}/#/auth/callback`;
-  const url = new URL(`${apiOrigin}/auth/${provider}/start`);
+  const authStartPath = apiOrigin ? `${apiOrigin}/auth/${provider}/start` : `/auth/${provider}/start`;
+  const url = new URL(authStartPath, window.location.origin);
   url.searchParams.set("redirectTo", redirectTo);
   return url.toString();
 }

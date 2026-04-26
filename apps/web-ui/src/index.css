@@ -213,9 +213,11 @@
     font-size: 0.84rem;
     line-height: 1.35;
     opacity: 0.95;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
-    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
   .toast-card__close {

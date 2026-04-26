@@ -4,10 +4,11 @@ import { getApiOrigin } from "./graphqlEndpoint";
 
 export async function logout() {
   const token = useAuthStore.getState().token;
-  const apiOrigin = getApiOrigin() || "http://localhost:4000";
+  const apiOrigin = getApiOrigin();
+  const logoutUrl = apiOrigin ? `${apiOrigin}/auth/logout` : "/auth/logout";
 
   if (token) {
-    await fetchWithBackendStatus(`${apiOrigin}/auth/logout`, {
+    await fetchWithBackendStatus(logoutUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

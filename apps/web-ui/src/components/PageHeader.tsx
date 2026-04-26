@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MAIN_ROUTE, ROUTE_LABEL } from "../routes/route-config";
 import type { RouteKey } from "../routes/types";
 import { useLocation } from "react-router-dom";
@@ -14,10 +14,13 @@ import {
   FiSettings,
   FiSun,
   FiMenu,
+  FiHelpCircle,
 } from "react-icons/fi";
 import { useAppStore, useWeatherStore } from "../stores";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 import { Button } from "./ui/Button";
+import { getPageHelpGuide } from "../config/pageHelpGuide";
+import { PageHelpModal } from "./PageHelpModal";
 
 type PageHeaderProps = {
   route: RouteKey;
@@ -70,6 +73,8 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
   const weather = useWeatherStore((state) => state.weather);
   const pathname = forcedPathname ?? location.pathname;
   const search = forcedSearch ?? location.search;
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const helpGuide = useMemo(() => getPageHelpGuide(pathname), [pathname]);
   const routeTitle = useMemo(() => {
     if (route === "dateTasks") {
       const normalizedPath = pathname.replace(/\/+$/, "") || "/";
@@ -114,67 +119,114 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
     return ROUTE_LABEL[route];
   }, [pathname, route, search]);
 
+  useEffect(() => {
+    setIsHelpModalOpen(false);
+  }, [pathname, search]);
+
   if (route === MAIN_ROUTE) {
     return (
+      <>
+        <header className="relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            circle
+            className="absolute left-2 top-1/2 -translate-y-1/2"
+            onClick={openMenu}
+            aria-label="메뉴 열기"
+          >
+            <FiMenu size={18} />
+          </Button>
+
+          <div className="flex justify-center">
+            <MonthDropdown month={viewMonth} onChange={setViewMonth} />
+          </div>
+          {weatherEnabled && weather ? (
+            <div className="pointer-events-none absolute top-1/2 right-[5.25rem] -translate-y-1/2">
+              <div
+                className={[
+                  "inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium",
+                  weatherMood === "cinematic"
+                    ? "border border-sky-200/80 bg-slate-900/70 text-sky-100"
+                    : "border border-base-300/80 bg-base-100/85 text-base-content/80",
+                ].join(" ")}
+              >
+                <WeatherIcon code={weather.weatherCode} isDay={weather.isDay} />
+                <span>{Math.round(weather.temperature)}°</span>
+              </div>
+            </div>
+          ) : null}
+          {helpGuide ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              circle
+              className="absolute right-12 top-1/2 -translate-y-1/2"
+              onClick={() => setIsHelpModalOpen(true)}
+              aria-label="페이지 안내 보기"
+            >
+              <FiHelpCircle size={17} />
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            circle
+            className="absolute right-2 top-1/2 -translate-y-1/2"
+            onClick={() => goPage("/settings")}
+            aria-label="옵션으로 이동"
+          >
+            <FiSettings size={18} />
+          </Button>
+        </header>
+        <PageHelpModal
+          isOpen={isHelpModalOpen}
+          guide={helpGuide}
+          onClose={() => setIsHelpModalOpen(false)}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
       <header className="relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
         <Button
           variant="ghost"
           size="sm"
           circle
           className="absolute left-2 top-1/2 -translate-y-1/2"
-          onClick={openMenu}
-          aria-label="메뉴 열기"
+          onClick={() => (onBack ? onBack() : goBack({ animated: false }))}
+          aria-label="뒤로가기"
         >
-          <FiMenu size={18} />
+          <FiChevronLeft size={18} />
         </Button>
-
-        <div className="flex justify-center">
-          <MonthDropdown month={viewMonth} onChange={setViewMonth} />
-        </div>
-        {weatherEnabled && weather ? (
-          <div className="pointer-events-none absolute top-1/2 right-12 -translate-y-1/2">
-            <div
-              className={[
-                "inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium",
-                weatherMood === "cinematic"
-                  ? "border border-sky-200/80 bg-slate-900/70 text-sky-100"
-                  : "border border-base-300/80 bg-base-100/85 text-base-content/80",
-              ].join(" ")}
-            >
-              <WeatherIcon code={weather.weatherCode} isDay={weather.isDay} />
-              <span>{Math.round(weather.temperature)}°</span>
-            </div>
-          </div>
+        <h1
+          className={[
+            "m-0 truncate px-2 text-center text-lg font-semibold text-base-content",
+            helpGuide ? "max-w-[calc(100%-8rem)]" : "max-w-[calc(100%-4rem)]",
+          ].join(" ")}
+        >
+          {routeTitle}
+        </h1>
+        {helpGuide ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            circle
+            className="absolute right-2 top-1/2 -translate-y-1/2"
+            onClick={() => setIsHelpModalOpen(true)}
+            aria-label="페이지 안내 보기"
+          >
+            <FiHelpCircle size={17} />
+          </Button>
         ) : null}
-        <Button
-          variant="ghost"
-          size="sm"
-          circle
-          className="absolute right-2 top-1/2 -translate-y-1/2"
-          onClick={() => goPage("/settings")}
-          aria-label="옵션으로 이동"
-        >
-          <FiSettings size={18} />
-        </Button>
       </header>
-    );
-  }
-
-  return (
-    <header className="relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
-      <Button
-        variant="ghost"
-        size="sm"
-        circle
-        className="absolute left-2 top-1/2 -translate-y-1/2"
-        onClick={() => (onBack ? onBack() : goBack({ animated: false }))}
-        aria-label="뒤로가기"
-      >
-        <FiChevronLeft size={18} />
-      </Button>
-      <h1 className="m-0 max-w-[calc(100%-4rem)] truncate px-2 text-center text-lg font-semibold text-base-content">
-        {routeTitle}
-      </h1>
-    </header>
+      <PageHelpModal
+        isOpen={isHelpModalOpen}
+        guide={helpGuide}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
+    </>
   );
 }

@@ -8,7 +8,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useEffect, useMemo, useState } from "react";
-import { FiDownload, FiMenu, FiSave, FiTag, FiTrash2 } from "react-icons/fi";
+import { FiDownload, FiSave, FiTag, FiTrash2 } from "react-icons/fi";
 import type { RoutineTemplate, RoutineTemplateItem } from "../../../api/routineTemplateApi";
 import { Button } from "../../../components/ui/Button";
 import { useSortableItem } from "../../../hooks/useSortableItem";
@@ -96,24 +96,15 @@ function SortableRoutineItemRow({
     <div
       ref={setNodeRef}
       style={style}
+      {...(editable ? dragHandleProps : {})}
       className={[
-        "rounded-lg border border-base-300/70 bg-base-100 px-2 py-1.5 text-sm text-base-content/80",
-        isDragging ? "shadow-md" : "",
+        "rounded-lg border border-base-300/70 bg-base-100 px-2 py-1.5 text-sm text-base-content/80 transition-[border-color,background-color,box-shadow]",
+        isDragging
+          ? "border-primary/65 bg-base-100 shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_24px_rgba(0,0,0,0.22)]"
+          : "",
       ].join(" ")}
     >
       <div className="flex items-center gap-1.5">
-        {editable ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            circle
-            aria-label="루틴 항목 순서 변경"
-            className="text-base-content/50"
-            {...dragHandleProps}
-          >
-            <FiMenu size={12} />
-          </Button>
-        ) : null}
         <div className="min-w-0 flex-1">
           <p className="m-0 truncate">{item.content}</p>
           <div className="mt-0.5 flex min-w-0 items-center gap-2">

@@ -8,7 +8,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useEffect, useMemo, useState } from "react";
-import { FiCheck, FiClock, FiMenu, FiPlus, FiTag, FiX } from "react-icons/fi";
+import { FiCheck, FiClock, FiPlus, FiTag, FiX } from "react-icons/fi";
 import { SelectDropbox } from "../../../components/SelectDropbox";
 import { TimePickerBottomSheet } from "../../../components/TimePickerBottomSheet";
 import { Button } from "../../../components/ui/Button";
@@ -62,23 +62,16 @@ function SortableSelectedTaskRow({
     <div
       ref={setNodeRef}
       style={style}
+      {...dragHandleProps}
       className={[
-        "rounded-lg border border-base-300/70 bg-base-100 px-2.5 py-2 transition-shadow",
-        isDragging ? "shadow-md" : "",
+        "rounded-lg border border-base-300/70 bg-base-100 px-2.5 py-2 transition-[border-color,background-color,box-shadow]",
+        isDragging
+          ? "border-primary/65 bg-base-100 shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_24px_rgba(0,0,0,0.22)]"
+          : "",
       ].join(" ")}
     >
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="xs"
-            circle
-            aria-label="순서 변경"
-            className="text-base-content/45"
-            {...dragHandleProps}
-          >
-            <FiMenu size={12} />
-          </Button>
+        <div className="min-w-0">
           <div className="min-w-0">
             <p className="m-0 truncate text-sm font-medium text-base-content/80">{task.title}</p>
             <p className="m-0 mt-0.5 truncate text-[11px] text-base-content/55">
@@ -353,7 +346,7 @@ export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateM
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-base-100">
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+      <div className="min-h-0 flex flex-1 flex-col gap-2 overflow-hidden p-2">
         <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
           <label className="mb-1 block text-xs font-semibold text-base-content/75">루틴 이름</label>
           <InputField
@@ -364,148 +357,148 @@ export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateM
           />
         </div>
 
-        <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
-            <div className="mb-2 flex items-center gap-2">
-              <SelectDropbox
-                className="h-9 min-h-9 flex-1 rounded-lg"
-                value={selectedCollectionId}
-                onValueChange={setSelectedCollectionId}
-                options={[
-                  { value: "all", label: "전체" },
-                  ...collections.map((collection) => ({
+        <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
+          <div className="mb-2 flex items-center gap-2">
+            <SelectDropbox
+              className="h-9 min-h-9 flex-1 rounded-lg"
+              value={selectedCollectionId}
+              onValueChange={setSelectedCollectionId}
+              options={[
+                { value: "all", label: "전체" },
+                ...collections.map((collection) => ({
+                  value: collection.id,
+                  label: collection.name,
+                })),
+              ]}
+            />
+            <Button
+              variant="outline"
+              square
+              className="h-9 min-h-9 w-9 rounded-lg"
+              aria-label="컬렉션 또는 할일 추가"
+              onClick={() => {
+                void handleOpenQuickCreateMenu();
+              }}
+            >
+              <FiPlus size={14} />
+            </Button>
+          </div>
+          {quickCreateMode ? (
+            <div className="mb-2 rounded-lg border border-base-300/70 bg-base-100 p-2">
+              <p className="m-0 mb-1 text-xs font-semibold text-base-content/70">
+                {quickCreateMode === "collection" ? "컬렉션 추가" : "할일 추가"}
+              </p>
+              {quickCreateMode === "task" ? (
+                <SelectDropbox
+                  className="mb-1.5 h-8 min-h-8 w-full rounded-lg text-xs"
+                  value={quickTaskCollectionId}
+                  onValueChange={setQuickTaskCollectionId}
+                  options={collections.map((collection) => ({
                     value: collection.id,
                     label: collection.name,
-                  })),
-                ]}
-              />
-              <Button
-                variant="outline"
-                square
-                className="h-9 min-h-9 w-9 rounded-lg"
-                aria-label="컬렉션 또는 할일 추가"
-                onClick={() => {
-                  void handleOpenQuickCreateMenu();
-                }}
-              >
-                <FiPlus size={14} />
-              </Button>
-            </div>
-            {quickCreateMode ? (
-              <div className="mb-2 rounded-lg border border-base-300/70 bg-base-100 p-2">
-                <p className="m-0 mb-1 text-xs font-semibold text-base-content/70">
-                  {quickCreateMode === "collection" ? "컬렉션 추가" : "할일 추가"}
-                </p>
-                {quickCreateMode === "task" ? (
-                  <SelectDropbox
-                    className="mb-1.5 h-8 min-h-8 w-full rounded-lg text-xs"
-                    value={quickTaskCollectionId}
-                    onValueChange={setQuickTaskCollectionId}
-                    options={collections.map((collection) => ({
-                      value: collection.id,
-                      label: collection.name,
-                    }))}
-                  />
-                ) : null}
-                <div className="flex items-center gap-1.5">
-                  <InputField
-                    className="h-8 min-h-8 flex-1 rounded-lg text-sm"
-                    placeholder={quickCreateMode === "collection" ? "새 컬렉션 이름" : "새 할일 이름"}
-                    value={quickName}
-                    onChange={(event) => setQuickName(event.target.value)}
-                  />
-                  <Button
-                    variant="primary"
-                    size="xs"
-                    className="h-8 min-h-8 rounded-lg px-2.5"
-                    onClick={() => {
-                      void handleSaveQuickCreate();
-                    }}
-                    disabled={!quickName.trim() || isQuickSaving}
-                  >
-                    저장
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="h-8 min-h-8 rounded-lg px-2.5"
-                    onClick={() => {
-                      setQuickCreateMode(null);
-                      setQuickName("");
-                    }}
-                  >
-                    취소
-                  </Button>
-                </div>
+                  }))}
+                />
+              ) : null}
+              <div className="flex items-center gap-1.5">
+                <InputField
+                  className="h-8 min-h-8 flex-1 rounded-lg text-sm"
+                  placeholder={quickCreateMode === "collection" ? "새 컬렉션 이름" : "새 할일 이름"}
+                  value={quickName}
+                  onChange={(event) => setQuickName(event.target.value)}
+                />
+                <Button
+                  variant="primary"
+                  size="xs"
+                  className="h-8 min-h-8 rounded-lg px-2.5"
+                  onClick={() => {
+                    void handleSaveQuickCreate();
+                  }}
+                  disabled={!quickName.trim() || isQuickSaving}
+                >
+                  저장
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="h-8 min-h-8 rounded-lg px-2.5"
+                  onClick={() => {
+                    setQuickCreateMode(null);
+                    setQuickName("");
+                  }}
+                >
+                  취소
+                </Button>
               </div>
-            ) : null}
-            <div className="no-scrollbar h-56 space-y-1.5 overflow-y-auto pr-0.5 md:h-72">
-              {isTaskLoading ? (
-                <p className="m-0 px-1 py-2 text-sm text-base-content/60">할일 불러오는 중...</p>
-              ) : null}
-              {!isTaskLoading && visibleTasks.length === 0 ? (
-                <p className="m-0 px-1 py-2 text-sm text-base-content/60">선택 가능한 할일이 없어요.</p>
-              ) : null}
-              {visibleTasks.map((task) => {
-                const selected = selectedTaskIds.includes(task.id);
-                return (
-                  <Button
-                    key={task.id}
-                    className={[
-                      "flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left transition-colors",
-                      selected
-                        ? "border-primary/60 bg-primary/12 text-primary"
-                        : "border-base-300/70 bg-base-100 text-base-content/80",
-                    ].join(" ")}
-                    onClick={() => toggleTaskSelection(task.id)}
-                  >
-                    <div>
-                      <p className="m-0 text-sm font-medium">{task.title}</p>
-                      <p className="m-0 mt-0.5 text-xs text-base-content/60">
-                        <FiTag size={11} className="mr-1 inline-block" />
-                        {task.collectionName}
-                      </p>
-                    </div>
-                    {selected ? <FiCheck size={14} /> : null}
-                  </Button>
-                );
-              })}
             </div>
+          ) : null}
+          <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
+            {isTaskLoading ? (
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">할일 불러오는 중...</p>
+            ) : null}
+            {!isTaskLoading && visibleTasks.length === 0 ? (
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">선택 가능한 할일이 없어요.</p>
+            ) : null}
+            {visibleTasks.map((task) => {
+              const selected = selectedTaskIds.includes(task.id);
+              return (
+                <Button
+                  key={task.id}
+                  className={[
+                    "flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left transition-colors",
+                    selected
+                      ? "border-primary/60 bg-primary/12 text-primary"
+                      : "border-base-300/70 bg-base-100 text-base-content/80",
+                  ].join(" ")}
+                  onClick={() => toggleTaskSelection(task.id)}
+                >
+                  <div>
+                    <p className="m-0 text-sm font-medium">{task.title}</p>
+                    <p className="m-0 mt-0.5 text-xs text-base-content/60">
+                      <FiTag size={11} className="mr-1 inline-block" />
+                      {task.collectionName}
+                    </p>
+                  </div>
+                  {selected ? <FiCheck size={14} /> : null}
+                </Button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
-            <p className="m-0 mb-2 text-xs font-semibold text-base-content/75">
-              선택한 할일 ({selectedTaskIds.length})
-            </p>
-            <div className="no-scrollbar max-h-44 space-y-1.5 overflow-y-auto pr-0.5 md:max-h-56">
-              {selectedTasks.length === 0 ? (
-                <p className="m-0 px-1 py-2 text-sm text-base-content/60">
-                  위 목록에서 루틴에 넣을 할일을 선택해 주세요.
-                </p>
-              ) : null}
-              {selectedTasks.length > 0 ? (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSelectedTaskDragEnd}>
-                  <SortableContext items={selectedTaskIds} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-1.5">
-                      {selectedTasks.map((task) => (
-                        <SortableSelectedTaskRow
-                          key={`selected-${task.id}`}
-                          task={task}
-                          scheduledTime={selectedTaskTimes[task.id] ?? null}
-                          onRemove={toggleTaskSelection}
-                          onOpenTimePicker={setEditingTimeTaskId}
-                          onChangeTime={(taskId, nextTime) =>
-                            setSelectedTaskTimes((prev) => ({
-                              ...prev,
-                              [taskId]: nextTime,
-                            }))
-                          }
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : null}
-            </div>
+        <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
+          <p className="m-0 mb-2 text-xs font-semibold text-base-content/75">
+            선택한 할일 ({selectedTaskIds.length})
+          </p>
+          <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
+            {selectedTasks.length === 0 ? (
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">
+                위 목록에서 루틴에 넣을 할일을 선택해 주세요.
+              </p>
+            ) : null}
+            {selectedTasks.length > 0 ? (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSelectedTaskDragEnd}>
+                <SortableContext items={selectedTaskIds} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-1.5">
+                    {selectedTasks.map((task) => (
+                      <SortableSelectedTaskRow
+                        key={`selected-${task.id}`}
+                        task={task}
+                        scheduledTime={selectedTaskTimes[task.id] ?? null}
+                        onRemove={toggleTaskSelection}
+                        onOpenTimePicker={setEditingTimeTaskId}
+                        onChangeTime={(taskId, nextTime) =>
+                          setSelectedTaskTimes((prev) => ({
+                            ...prev,
+                            [taskId]: nextTime,
+                          }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            ) : null}
+          </div>
         </div>
       </div>
 

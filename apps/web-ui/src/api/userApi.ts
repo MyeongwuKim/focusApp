@@ -27,6 +27,10 @@ export async function fetchMe(options?: { signal?: AbortSignal }) {
     signal: options?.signal,
   });
 
+  if (response.status === 401) {
+    return null;
+  }
+
   if (!response.ok) {
     throw new Error(`Me fetch failed: ${response.status}`);
   }

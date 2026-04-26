@@ -1,5 +1,16 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
+
+const envFileDir = path.dirname(fileURLToPath(import.meta.url));
+const apiRootDir = path.resolve(envFileDir, "../../");
+const shouldLoadEnvLocal = process.env.USE_ENV_LOCAL !== "false";
+
+dotenv.config({ path: path.join(apiRootDir, ".env") });
+if (shouldLoadEnvLocal) {
+  dotenv.config({ path: path.join(apiRootDir, ".env.local"), override: true });
+}
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(4000),

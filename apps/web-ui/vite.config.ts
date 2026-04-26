@@ -6,17 +6,26 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   base: './',
   server: {
+    host: "0.0.0.0",
     proxy: {
+      "/auth": {
+        target: "http://127.0.0.1:4000",
+        changeOrigin: true,
+      },
+      "/api": {
+        target: "http://127.0.0.1:4000",
+        changeOrigin: true,
+      },
       "/graphql": {
-        target: "http://localhost:4000",
+        target: "http://127.0.0.1:4000",
         changeOrigin: true,
       },
       "/daily-log": {
-        target: "http://localhost:4000",
+        target: "http://127.0.0.1:4000",
         changeOrigin: true,
       },
       "/daily-logs": {
-        target: "http://localhost:4000",
+        target: "http://127.0.0.1:4000",
         changeOrigin: true,
       },
     },

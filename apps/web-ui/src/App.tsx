@@ -15,7 +15,7 @@ import { BackendConnectionBanner } from "./components/BackendConnectionBanner";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { GoPageOptions, NavigateOptions } from "./providers/AppNavigationProvider";
 import { MAIN_ROUTE } from "./routes/route-config";
-import { useAuthStore, useWeatherStore } from "./stores";
+import { toast, useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import {
   getNativeExpoPushToken,
@@ -35,6 +35,7 @@ import {
   isLikelyBackendOfflineError,
   markBackendOffline,
   markBackendOnline,
+  subscribeAuthExpired,
   subscribeBackendConnectivity,
 } from "./api/backendConnectivity";
 import { useEdgeSwipeClose } from "./hooks/useEdgeSwipeClose";
@@ -351,6 +352,18 @@ function App() {
       abortController.abort();
     };
   }, [backendBootRetryKey, isAuthenticatedAppRoute, setAuthToken]);
+
+  useEffect(() => {
+    return subscribeAuthExpired(() => {
+      const { token, clearAuth } = useAuthStore.getState();
+      if (!token) {
+        return;
+      }
+
+      clearAuth();
+      toast.error("세션이 만료되어 로그아웃되었어요. 다시 로그인해 주세요.", "세션 만료");
+    });
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticatedAppRoute) {
@@ -929,16 +942,24 @@ function App() {
   const overlayFrontOpacity = Math.max(1 - overlaySwipeProgress * 0.2, 0.8);
 
   if (!isLoggedIn && !isAuthCallbackRoute) {
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage />
+        <Toast />
+      </>
+    );
   }
 
   if (isAuthCallbackRoute) {
     return (
-      <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
-        <section className="app-shell mx-auto flex h-full w-full items-center justify-center border border-base-300 bg-base-100/95">
-          <p className="text-sm text-base-content/70">로그인 처리 중...</p>
-        </section>
-      </main>
+      <>
+        <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
+          <section className="app-shell mx-auto flex h-full w-full items-center justify-center border border-base-300 bg-base-100/95">
+            <p className="text-sm text-base-content/70">로그인 처리 중...</p>
+          </section>
+        </main>
+        <Toast />
+      </>
     );
   }
 
