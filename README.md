@@ -20,6 +20,7 @@
 - OAuth 로그인 화면과 콜백 처리 흐름 구현
 - TanStack Query 기반 데이터 요청/캐시 처리 적용
 - Zustand 기반 인증/테마/토스트/앱 상태 전역 관리 적용
+- GraphQL Codegen 기반 쿼리/뮤테이션 타입 자동 생성(`src/graphql/generated.ts`)
 - Vitest + Testing Library 단위/통합 테스트 구성
 - Playwright 기반 인증 플로우 E2E 시나리오 구성
 
@@ -162,6 +163,21 @@ pnpm e2e
 pnpm e2e:headed
 pnpm e2e:ui
 ```
+
+### GraphQL 타입 생성 (`apps/web-ui` 기준)
+
+```bash
+# 1회 생성
+pnpm graphql:codegen
+
+# watch 모드
+pnpm graphql:codegen:watch
+```
+
+동작 방식:
+- `apps/api/src/graphql/schema.ts`와 resolver를 기준으로 스키마 로드
+- `apps/web-ui/src/**/*.{ts,tsx,graphql,gql}` 문서 스캔
+- 결과 타입을 `apps/web-ui/src/graphql/generated.ts`로 생성
 
 ## 🧩 Project Structure
 
