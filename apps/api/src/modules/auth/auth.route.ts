@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { prisma } from "../../common/prisma.js";
 import { env } from "../../config/env.js";
 
@@ -173,6 +173,38 @@ function appendErrorToRedirect(redirectTo: string, code: string): string {
   const url = new URL(redirectTo);
   url.searchParams.set("error", code);
   return url.toString();
+}
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function replyWithHistorySafeRedirect(reply: FastifyReply, targetUrl: string) {
+  const safeTargetUrl = escapeHtmlAttribute(targetUrl);
+  const inlineScriptTarget = JSON.stringify(targetUrl);
+  return reply
+    .code(200)
+    .type("text/html; charset=utf-8")
+    .send(`<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>로그인 이동 중</title>
+    <noscript><meta http-equiv="refresh" content="0;url=${safeTargetUrl}" /></noscript>
+  </head>
+  <body>
+    <script>
+      window.location.replace(${inlineScriptTarget});
+    </script>
+    <p>로그인 페이지로 이동 중...</p>
+  </body>
+</html>`);
 }
 
 function buildSyntheticEmail(provider: OAuthProvider, providerUserId: string): string {
@@ -433,7 +465,7 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
         authUrl.searchParams.set("state", state);
         authUrl.searchParams.set("prompt", "login");
         authUrl.searchParams.set("scope", "profile_nickname account_email");
-        return reply.redirect(authUrl.toString());
+        return replyWithHistorySafeRedirect(reply, authUrl.toString());
       }
 
       const config = getNaverConfig();
@@ -448,7 +480,7 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
       authUrl.searchParams.set("client_id", config.clientId);
       authUrl.searchParams.set("redirect_uri", config.redirectUri);
       authUrl.searchParams.set("state", state);
-      return reply.redirect(authUrl.toString());
+      return replyWithHistorySafeRedirect(reply, authUrl.toString());
     } catch (error) {
       request.log.error({ error }, `[auth] ${provider} start failed`);
       return reply.code(500).send({ message: "OAuth 시작 중 오류가 발생했어요." });

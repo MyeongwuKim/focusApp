@@ -428,6 +428,7 @@ export default function WebViewScreen() {
   const isWebViewReadyRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
+  const [isExternalNavigation, setIsExternalNavigation] = useState(false);
   const [isPermissionIntroReady, setIsPermissionIntroReady] = useState(false);
   const [isPermissionIntroVisible, setIsPermissionIntroVisible] = useState(false);
   const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
@@ -1133,7 +1134,7 @@ export default function WebViewScreen() {
             originWhitelist={["*"]}
             javaScriptEnabled
             domStorageEnabled
-            allowsBackForwardNavigationGestures={false}
+            allowsBackForwardNavigationGestures={isExternalNavigation}
             bounces={false}
             overScrollMode="never"
             injectedJavaScriptBeforeContentLoaded={injectedBeforeContentLoaded}
@@ -1196,6 +1197,8 @@ export default function WebViewScreen() {
             }}
             onNavigationStateChange={(navState) => {
               setCanGoBack(navState.canGoBack);
+              const nextUrl = navState.url ?? "";
+              setIsExternalNavigation(!nextUrl.startsWith("file://"));
             }}
             onMessage={handleMessage}
             onHttpError={(event) => {
