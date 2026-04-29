@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { FiX } from "react-icons/fi";
 import { Button } from "../../../../components/ui/Button";
 import { TodoCompletedAtModal } from "../../components/TodoCompletedAtModal";
-import { TodoCompletionPanel } from "../../components/TodoCompletionPanel";
 import { TodoScheduleTimeModal } from "../../components/TodoScheduleTimeModal";
 import { TodoTaskPickerModal } from "../../components/TodoTaskPickerModal";
 import { MemoEditorPanel } from "../../../memo/containers/MemoEditorPanel";
@@ -24,9 +23,6 @@ export function DateTodosOverlays({
   const {
     handleDateAddTasks,
     resolvedMemoDateKey,
-    shouldRenderCompletionPanel,
-    isCompletionPanelVisible,
-    closeCompletionPanel,
     editingActualFocus,
     closeEditingActualFocus,
     handleSaveActualFocus,
@@ -101,10 +97,6 @@ export function DateTodosOverlays({
             </div>
           </div>
         </div>
-      ) : null}
-
-      {shouldRenderCompletionPanel ? (
-        <TodoCompletionPanel isVisible={isCompletionPanelVisible} onClose={closeCompletionPanel} />
       ) : null}
 
       <TodoCompletedAtModal

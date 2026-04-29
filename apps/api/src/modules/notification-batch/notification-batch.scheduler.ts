@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger } from "fastify";
+import { captureServerError, resolveErrorCode } from "../../common/observability/sentry.js";
 import { prisma } from "../../common/prisma.js";
 import { env } from "../../config/env.js";
 import { runNotificationBatch } from "./notification-batch.service.js";
@@ -23,6 +24,14 @@ export function startNotificationBatchScheduler(logger: FastifyBaseLogger) {
       });
     } catch (error) {
       logger.error(error, "[notification-batch] scheduled run failed");
+      captureServerError(error, {
+        requestId: "notification-batch-scheduler",
+        method: "SCHEDULED_TASK",
+        route: "/internal/notification-batch/scheduler",
+        userId: null,
+        statusCode: 500,
+        errorCode: resolveErrorCode(error),
+      });
     }
   };
 

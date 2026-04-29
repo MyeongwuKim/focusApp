@@ -50,6 +50,8 @@ const envSchema = z.object({
   NOTIFICATION_BATCH_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
   NOTIFICATION_BATCH_TIMEZONE: z.string().min(1).default("Asia/Seoul"),
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  SENTRY_DSN: z.url().optional(),
+  SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
 });
 
 const parsed = envSchema.safeParse(process.env);

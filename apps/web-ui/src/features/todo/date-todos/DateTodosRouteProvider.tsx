@@ -82,10 +82,6 @@ type DateTodosRouteContextValue = {
 
   resolvedMemoDateKey: string;
 
-  shouldRenderCompletionPanel: boolean;
-  isCompletionPanelVisible: boolean;
-  closeCompletionPanel: () => void;
-
   editingActualFocus: {
     taskId: string;
     initialMinutes: number;
@@ -212,9 +208,6 @@ export function DateTodosRouteProvider({
   const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
 
   const [dateTasksRouteItems, setDateTasksRouteItems] = useState<TaskItem[]>([]);
-  const [isCompletionPanelOpen, setIsCompletionPanelOpen] = useState(false);
-  const [shouldRenderCompletionPanel, setShouldRenderCompletionPanel] = useState(false);
-  const [isCompletionPanelVisible, setIsCompletionPanelVisible] = useState(false);
   const [editingActualFocus, setEditingActualFocus] = useState<{
     taskId: string;
     initialMinutes: number;
@@ -227,8 +220,6 @@ export function DateTodosRouteProvider({
   const [activeRestDurationMin, setActiveRestDurationMin] = useState<number | null>(null);
   const [hydratedDateKey, setHydratedDateKey] = useState<string | null>(null);
 
-  const wasAllDoneRef = useRef(false);
-  const completionWatchReadyRef = useRef(false);
   const pendingRestFinishedAutoStopRef = useRef(false);
   const restFinishedAutoStopInFlightRef = useRef(false);
   const reorderPersistRequestIdRef = useRef(0);
@@ -274,9 +265,6 @@ export function DateTodosRouteProvider({
     if (!dateKey) {
       setDateTasksRouteItems([]);
       setActiveRestDurationMin(null);
-      setIsCompletionPanelOpen(false);
-      wasAllDoneRef.current = false;
-      completionWatchReadyRef.current = false;
       pendingRestFinishedAutoStopRef.current = false;
       restFinishedAutoStopInFlightRef.current = false;
       setHydratedDateKey(null);
@@ -285,9 +273,6 @@ export function DateTodosRouteProvider({
 
     setDateTasksRouteItems([]);
     setActiveRestDurationMin(null);
-    setIsCompletionPanelOpen(false);
-    wasAllDoneRef.current = false;
-    completionWatchReadyRef.current = false;
     pendingRestFinishedAutoStopRef.current = false;
     restFinishedAutoStopInFlightRef.current = false;
     setHydratedDateKey(null);
@@ -379,32 +364,6 @@ export function DateTodosRouteProvider({
       }
     })();
   };
-
-  useEffect(() => {
-    let rafId: number | null = null;
-    let timeoutId: number | null = null;
-
-    if (isCompletionPanelOpen) {
-      setShouldRenderCompletionPanel(true);
-      rafId = window.requestAnimationFrame(() => {
-        setIsCompletionPanelVisible(true);
-      });
-    } else {
-      setIsCompletionPanelVisible(false);
-      timeoutId = window.setTimeout(() => {
-        setShouldRenderCompletionPanel(false);
-      }, 220);
-    }
-
-    return () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-      }
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [isCompletionPanelOpen]);
 
   const applyDailyLog = (nextLog: DailyLogWithTodos) => {
     if (!dateKey) {
@@ -623,21 +582,6 @@ export function DateTodosRouteProvider({
     return hydratedDateKey !== dateKey;
   }, [dateKey, dailyLogQuery.isError, hydratedDateKey]);
 
-  useEffect(() => {
-    const isAllDone = summary.totalCount > 0 && summary.completedCount === summary.totalCount;
-
-    if (!completionWatchReadyRef.current) {
-      completionWatchReadyRef.current = true;
-      wasAllDoneRef.current = isAllDone;
-      return;
-    }
-
-    if (isAllDone && !wasAllDoneRef.current) {
-      setIsCompletionPanelOpen(true);
-    }
-    wasAllDoneRef.current = isAllDone;
-  }, [summary.completedCount, summary.totalCount]);
-
   const session = useMemo(() => {
     const nowMs = Date.now();
     const todos = dailyLogQuery.data?.todos ?? [];
@@ -712,10 +656,6 @@ export function DateTodosRouteProvider({
     handleDeleteRoutineTemplate,
 
     resolvedMemoDateKey,
-
-    shouldRenderCompletionPanel,
-    isCompletionPanelVisible,
-    closeCompletionPanel: () => setIsCompletionPanelOpen(false),
 
     editingActualFocus,
     closeEditingActualFocus: () => setEditingActualFocus(null),

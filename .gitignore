@@ -15,6 +15,8 @@ apps/mobile/.expo/
 apps/mobile/expo-env.d.ts
 apps/api/.env
 apps/api/.env.local
+apps/web-ui/.env
+apps/web-ui/.env.local
 
 # OS files
 .DS_Store

@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { prisma } from "../../common/prisma.js";
+import { captureServerError, resolveErrorCode } from "../../common/observability/sentry.js";
 import { runNotificationBatch } from "./notification-batch.service.js";
 
 const requestSchema = z.object({
@@ -57,6 +58,15 @@ export async function registerNotificationBatchRoute(app: FastifyInstance) {
       return reply.send(result);
     } catch (error) {
       request.log.error(error, "[notification-batch] run failed");
+      captureServerError(error, {
+        requestId: request.id,
+        method: request.method,
+        route: request.url.split("?")[0] ?? request.url,
+        userId: null,
+        statusCode: 500,
+        errorCode: resolveErrorCode(error),
+        requestInput: request.body,
+      });
       return reply.code(500).send({
         message: "알림 배치 실행 중 오류가 발생했어요.",
       });

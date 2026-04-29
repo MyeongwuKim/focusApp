@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { captureServerError, resolveErrorCode } from "../../common/observability/sentry.js";
 import { env } from "../../config/env.js";
 
 const requestSchema = z.object({
@@ -123,8 +124,7 @@ async function requestCommentary(payload: StatsCommentaryRequest) {
 
   const fallbackText = result.output
     ?.flatMap((item) => item.content ?? [])
-    .find((item) => item.type === "output_text" && typeof item.text === "string")
-    ?.text;
+    .find((item) => item.type === "output_text" && typeof item.text === "string")?.text;
 
   const text = (result.output_text ?? fallbackText ?? "").trim();
   if (!text) {
@@ -151,21 +151,58 @@ export async function registerStatsCommentaryRoute(app: FastifyInstance) {
     } catch (error) {
       request.log.error(error);
       const code = (error as { code?: ServiceErrorCode })?.code;
+      const route = request.url.split("?")[0] ?? request.url;
       if (code === "OPENAI_KEY_MISSING") {
+        captureServerError(error, {
+          requestId: request.id,
+          method: request.method,
+          route,
+          userId: null,
+          statusCode: 503,
+          errorCode: resolveErrorCode(error),
+          requestInput: parsed.data,
+        });
         return reply.code(503).send({
           message: "서버 OpenAI API 키가 설정되지 않았어요.",
         });
       }
       if (code === "OPENAI_REQUEST_FAILED") {
+        captureServerError(error, {
+          requestId: request.id,
+          method: request.method,
+          route,
+          userId: null,
+          statusCode: 502,
+          errorCode: resolveErrorCode(error),
+          requestInput: parsed.data,
+        });
         return reply.code(502).send({
           message: "통계 코멘트 생성 요청에 실패했어요.",
         });
       }
       if (code === "OPENAI_EMPTY_RESPONSE") {
+        captureServerError(error, {
+          requestId: request.id,
+          method: request.method,
+          route,
+          userId: null,
+          statusCode: 502,
+          errorCode: resolveErrorCode(error),
+          requestInput: parsed.data,
+        });
         return reply.code(502).send({
           message: "통계 코멘트 응답이 비어 있어요.",
         });
       }
+      captureServerError(error, {
+        requestId: request.id,
+        method: request.method,
+        route,
+        userId: null,
+        statusCode: 500,
+        errorCode: resolveErrorCode(error),
+        requestInput: parsed.data,
+      });
       return reply.code(500).send({
         message: "통계 코멘트 생성 중 오류가 발생했어요.",
       });

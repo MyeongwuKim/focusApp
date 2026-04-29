@@ -147,6 +147,7 @@ export function StatsAiCommentaryCard({
     queryKey: ["stats-commentary", payload],
     queryFn: () => fetchStatsCommentary(payload),
     enabled: canUseCommentary && !isDataFetching && isVisible,
+    meta: { skipGlobalErrorToast: true },
     staleTime: 60 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -169,12 +170,8 @@ export function StatsAiCommentaryCard({
         <AiCommentaryLoading />
       ) : commentaryQuery.isError ? (
         <div className="mt-2 space-y-1">
-          <p className="text-sm text-base-content/70">
-            이번 주 흐름은 나쁘지 않아요. 작은 목표 하나만 더 정해서 이어가봐요.
-          </p>
-          <p className="text-xs text-base-content/55">
-            {(commentaryQuery.error as Error | null)?.message ?? "AI 코멘트 생성 중 오류"}
-          </p>
+          <p className="text-sm text-base-content/70">AI 메시지를 가져오는데 실패했습니다.</p>
+          <p className="text-xs text-base-content/55">잠시 후 다시 시도해 주세요.</p>
         </div>
       ) : (
         <AiCommentaryResult text={commentaryQuery.data ?? ""} />

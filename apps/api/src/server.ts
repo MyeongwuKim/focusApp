@@ -4,6 +4,9 @@ import {
   startNotificationBatchScheduler,
   stopNotificationBatchScheduler,
 } from "./modules/notification-batch/notification-batch.scheduler.js";
+import { flushSentry, initSentry } from "./common/observability/sentry.js";
+
+initSentry();
 
 const app = await createApp();
 
@@ -15,12 +18,14 @@ try {
   startNotificationBatchScheduler(app.log);
 } catch (error) {
   app.log.error(error);
+  await flushSentry();
   process.exit(1);
 }
 
 const shutdown = async () => {
   stopNotificationBatchScheduler();
   await app.close();
+  await flushSentry();
   process.exit(0);
 };
 
