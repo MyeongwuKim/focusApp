@@ -1,50 +1,42 @@
-# Welcome to your Expo app 👋
+# Mobile App (`apps/mobile`)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo + React Native 기반 모바일 앱입니다.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## 1) 빠른 시작
 
 ```bash
-npm run reset-project
+# 루트에서
+pnpm install
+
+# 모바일 개발 서버 실행
+pnpm -C apps/mobile start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 2) 환경변수
 
-## Learn more
+`apps/mobile/.env.local` 파일을 사용합니다.
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+EXPO_PUBLIC_API_ORIGIN=http://localhost:4000
+EXPO_PUBLIC_WEATHER_RENDERER=legacy
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `EXPO_PUBLIC_API_ORIGIN` 미설정 시 앱이 자동으로 host를 추론해 API origin을 구성합니다.
+- `EXPO_PUBLIC_WEATHER_RENDERER`는 `legacy` 또는 `skia`를 사용할 수 있습니다.
 
-## Join the community
+## 3) 주요 스크립트
 
-Join our community of developers creating universal apps.
+```bash
+pnpm -C apps/mobile start
+pnpm -C apps/mobile hybrid
+pnpm -C apps/mobile android
+pnpm -C apps/mobile ios
+pnpm -C apps/mobile web
+pnpm -C apps/mobile lint
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 4) 테스트
+
+현재 `apps/mobile`은 별도 테스트 러너 스크립트가 없습니다.
+테스트를 추가할 경우 `package.json`에 `test` 스크립트를 먼저 정의해서 사용하면 됩니다.
+

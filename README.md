@@ -2,6 +2,12 @@
 
 > React + Fastify + Expo 기반 하이브리드 Todo/Calendar 프로젝트
 
+## 📚 App README
+
+- [API README](./apps/api/README.md)
+- [Web UI README](./apps/web-ui/README.md)
+- [Mobile README](./apps/mobile/README.md)
+
 ## 📌 Overview
 
 - 일 단위 할일, 루틴, 휴식, 집중시간을 한 흐름에서 관리하는 하이브리드 생산성 앱

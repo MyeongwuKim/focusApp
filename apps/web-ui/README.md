@@ -1,73 +1,57 @@
-# React + TypeScript + Vite
+# Web UI (`apps/web-ui`)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite 기반 웹 클라이언트입니다.
 
-Currently, two official plugins are available:
+## 1) 빠른 시작
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+# 루트에서
+pnpm install
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 웹 개발 서버 실행
+pnpm -C apps/web-ui dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- 기본 주소: `http://localhost:5173`
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 2) 환경변수
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+`apps/web-ui/.env` 또는 `apps/web-ui/.env.local` 파일을 사용합니다.
+
+```bash
+VITE_API_ORIGIN=http://localhost:4000
+VITE_SENTRY_DSN=
 ```
+
+- `VITE_API_ORIGIN`이 없으면 현재 origin 기준 상대 경로(`/graphql`)를 사용합니다.
+- Sentry를 쓰지 않으면 `VITE_SENTRY_DSN`은 비워도 됩니다.
+
+## 3) 주요 스크립트
+
+```bash
+pnpm -C apps/web-ui dev
+pnpm -C apps/web-ui hybrid
+pnpm -C apps/web-ui build
+pnpm -C apps/web-ui preview
+pnpm -C apps/web-ui lint
+```
+
+## 4) 테스트
+
+단위/컴포넌트 테스트(Vitest):
+
+```bash
+pnpm -C apps/web-ui test
+pnpm -C apps/web-ui test:watch
+pnpm -C apps/web-ui test:coverage
+```
+
+E2E 테스트(Playwright):
+
+```bash
+pnpm -C apps/web-ui e2e:install
+pnpm -C apps/web-ui e2e
+pnpm -C apps/web-ui e2e:ui
+pnpm -C apps/web-ui e2e:headed
+```
+
