@@ -19,7 +19,7 @@
     "embed:web-ui": "pnpm web:sync-mobile",
     "hybrid:prepare": "pnpm web:build && pnpm web:sync-mobile",
     "mobile:start": "pnpm -C apps/mobile start -c",
-    "mobile:start:lan": "pnpm lan:sync && pnpm -C apps/mobile start -c --dev-client --host lan",
+    "mobile:start:lan": "pnpm lan:sync && pnpm -C apps/mobile start -c --dev-client --host lan --port 8081",
     "mobile:ios": "pnpm -C apps/mobile ios",
     "mobile:android": "pnpm -C apps/mobile android",
     "hybrid:start": "pnpm hybrid:prepare && pnpm mobile:start",

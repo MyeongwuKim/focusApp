@@ -23,12 +23,13 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
   const { activeRoute, closeMenu, navigateTo, goPage } = useAppNavigation();
   const token = useAuthStore((state) => state.token);
   const authUser = useAuthStore((state) => state.user);
+  const authProvider = useAuthStore((state) => state.provider);
   const setAuthUser = useAuthStore((state) => state.setAuthUser);
   const hasToken = Boolean(token);
   const meQuery = useQuery({
-    queryKey: ["me"],
+    queryKey: ["me", token],
     queryFn: fetchMe,
-    enabled: isOpen && hasToken,
+    enabled: hasToken,
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
     meta: {
@@ -36,16 +37,23 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
     },
   });
   useEffect(() => {
-    if (meQuery.data) {
-      setAuthUser(meQuery.data);
+    if (!hasToken) {
+      setAuthUser(null);
+      return;
     }
-  }, [meQuery.data, setAuthUser]);
+
+    if (meQuery.isSuccess) {
+      setAuthUser(meQuery.data ?? null);
+    }
+  }, [hasToken, meQuery.data, meQuery.isSuccess, setAuthUser]);
 
   const handleNavigateFromDrawer = (route: RouteKey) => {
     navigateTo(route);
   };
 
-  const accountEmail = authUser?.email ?? meQuery.data?.email ?? "guest";
+  const accountEmail = meQuery.data?.email ?? authUser?.email ?? "guest";
+  const providerLabel =
+    authProvider === "kakao" ? "카카오 로그인" : authProvider === "naver" ? "네이버 로그인" : null;
 
   return (
     <div
@@ -74,6 +82,7 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
         <div className="mb-3">
           <p className="m-0 text-xs font-medium uppercase tracking-wide text-base-content/55">ACCOUNT</p>
           <p className="mt-1 text-sm font-medium text-base-content/80 break-all">{accountEmail}</p>
+          {providerLabel ? <p className="mt-1 text-xs text-base-content/55">{providerLabel}</p> : null}
         </div>
         <div className="mb-3 h-px w-full bg-base-300/90" />
 

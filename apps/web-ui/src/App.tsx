@@ -211,12 +211,20 @@ function getCallbackParam(name: string, routeSearch: string): string | null {
   return null;
 }
 
+function parseAuthProvider(rawValue: string | null) {
+  if (rawValue === "kakao" || rawValue === "naver") {
+    return rawValue;
+  }
+  return null;
+}
+
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const activeRoute = getRouteFromPath(location.pathname);
   const authToken = useAuthStore((state) => state.token);
   const setAuthToken = useAuthStore((state) => state.setAuthToken);
+  const setAuthProvider = useAuthStore((state) => state.setAuthProvider);
   const isLoggedIn = Boolean(authToken);
   const isLoginRoute = location.pathname === LOGIN_ROUTE_PATH;
   const isAuthCallbackRoute = location.pathname === AUTH_CALLBACK_ROUTE_PATH;
@@ -252,6 +260,7 @@ function App() {
   const overlayLastStackIndexRef = useRef<number | null>(null);
   const lastOverlayEnterRef = useRef<{ path: string; at: number } | null>(null);
   const lastOverlayNavigationRef = useRef<{ path: string; at: number } | null>(null);
+  const previousAuthTokenRef = useRef<string | null | undefined>(undefined);
   const syncedNotificationAuthTokenRef = useRef<string | null>(null);
   const backgroundEnteredAtMsRef = useRef<number | null>(null);
   const backgroundSyncInFlightRef = useRef(false);
@@ -261,10 +270,34 @@ function App() {
   const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
 
   useEffect(() => {
+    const previousToken = previousAuthTokenRef.current;
+    if (previousToken === undefined) {
+      previousAuthTokenRef.current = authToken;
+      return;
+    }
+
+    if (previousToken === authToken) {
+      return;
+    }
+
+    previousAuthTokenRef.current = authToken;
+    syncedNotificationAuthTokenRef.current = null;
+
+    if (!authToken) {
+      queryClient.clear();
+      return;
+    }
+
+    void queryClient.invalidateQueries({ refetchType: "all" });
+  }, [authToken]);
+
+  useEffect(() => {
     if (isAuthCallbackRoute) {
       const token = getCallbackParam("token", location.search);
       if (token) {
+        const provider = parseAuthProvider(getCallbackParam("provider", location.search));
         setAuthToken(token);
+        setAuthProvider(provider);
         if (window.location.protocol === "file:") {
           window.history.replaceState(null, "", "#/calendar");
         } else {
@@ -302,7 +335,16 @@ function App() {
     ) {
       navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
     }
-  }, [activeRoute, isAuthCallbackRoute, isLoggedIn, isLoginRoute, location.pathname, navigate]);
+  }, [
+    activeRoute,
+    isAuthCallbackRoute,
+    isLoggedIn,
+    isLoginRoute,
+    location.pathname,
+    navigate,
+    setAuthProvider,
+    setAuthToken,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticatedAppRoute) {

@@ -6,14 +6,18 @@ type AuthUser = {
   email: string;
 };
 
+export type AuthProvider = "kakao" | "naver";
+
 type AuthState = {
   token: string | null;
   user: AuthUser | null;
+  provider: AuthProvider | null;
 };
 
 type AuthActions = {
   setAuthToken: (token: string | null) => void;
   setAuthUser: (user: AuthUser | null) => void;
+  setAuthProvider: (provider: AuthProvider | null) => void;
   clearAuth: () => void;
 };
 
@@ -24,16 +28,26 @@ export const useAuthStore = create<AuthStore>()(
     (set) => ({
       token: null,
       user: null,
+      provider: null,
       setAuthToken: (token) => {
-        set({ token: token?.trim() || null });
+        const nextToken = token?.trim() || null;
+        set((state) => ({
+          token: nextToken,
+          user: state.token === nextToken ? state.user : null,
+          provider: state.token === nextToken ? state.provider : null,
+        }));
       },
       setAuthUser: (user) => {
         set({ user });
+      },
+      setAuthProvider: (provider) => {
+        set({ provider });
       },
       clearAuth: () => {
         set({
           token: null,
           user: null,
+          provider: null,
         });
       },
     }),
@@ -42,6 +56,7 @@ export const useAuthStore = create<AuthStore>()(
       partialize: (state) => ({
         token: state.token,
         user: state.user,
+        provider: state.provider,
       }),
     }
   )

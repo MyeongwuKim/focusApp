@@ -17,6 +17,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import {
+  login as loginWithKakaoTalk,
+  unlink as unlinkKakao,
+  type KakaoOAuthToken,
+} from "@react-native-seoul/kakao-login";
+import NaverLogin from "@react-native-seoul/naver-login";
 import { useRestNotificationBridge } from "../src/features/notifications/hooks/useRestNotificationBridge";
 import {
   PermissionIntroModal,
@@ -95,6 +101,121 @@ type NativeWeatherSnapshot = {
   updatedAt: string;
 };
 
+type NativeKakaoAuthResult = {
+  token: string;
+  userId: string;
+};
+type NativeNaverAuthResult = {
+  token: string;
+  userId: string;
+};
+const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
+const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
+const NAVER_NATIVE_URL_SCHEME = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim() ?? "";
+const NAVER_NATIVE_APP_NAME =
+  process.env.EXPO_PUBLIC_NAVER_APP_NAME?.trim() ??
+  (Constants.expoConfig?.name?.trim() || "focus-hybrid");
+const NAVER_DISABLE_APP_AUTH_IOS = process.env.EXPO_PUBLIC_NAVER_DISABLE_APP_AUTH_IOS === "true";
+let isNaverLoginInitialized = false;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorCode: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(errorCode));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
+function readUnknownRecord(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readUnknownString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function resolveNativeErrorSignals(error: unknown) {
+  const signals = new Set<string>();
+
+  if (error instanceof Error) {
+    const errorMessage = readUnknownString(error.message);
+    if (errorMessage) {
+      signals.add(errorMessage.toLowerCase());
+    }
+  }
+
+  const errorRecord = readUnknownRecord(error);
+  if (errorRecord) {
+    const message = readUnknownString(errorRecord.message);
+    const code = readUnknownString(errorRecord.code);
+    if (message) {
+      signals.add(message.toLowerCase());
+    }
+    if (code) {
+      signals.add(code.toLowerCase());
+    }
+
+    const userInfo = readUnknownRecord(errorRecord.userInfo);
+    const nativeMessage = readUnknownString(userInfo?.nativeErrorMessage);
+    if (nativeMessage) {
+      signals.add(nativeMessage.toLowerCase());
+    }
+  }
+
+  const asString = readUnknownString(typeof error === "string" ? error : "");
+  if (asString) {
+    signals.add(asString.toLowerCase());
+  }
+
+  return Array.from(signals);
+}
+
+function resolveNativeErrorCode(error: unknown, fallbackCode: string) {
+  const errorRecord = readUnknownRecord(error);
+  const code = readUnknownString(errorRecord?.code);
+  if (code) {
+    return code;
+  }
+
+  if (error instanceof Error) {
+    const message = readUnknownString(error.message);
+    if (message) {
+      return message;
+    }
+  }
+
+  const message = readUnknownString(errorRecord?.message);
+  if (message) {
+    return message;
+  }
+
+  return fallbackCode;
+}
+
+function isNativeLoginCancelledError(error: unknown) {
+  const signals = resolveNativeErrorSignals(error);
+  return signals.some(
+    (signal) =>
+      signal.includes("cancel") ||
+      signal.includes("canceled") ||
+      signal.includes("cancelled") ||
+      signal.includes("usercancel")
+  );
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -137,6 +258,138 @@ function resolveHybridApiOrigin() {
   return "http://localhost:4000";
 }
 
+async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
+  try {
+    return await withTimeout(loginWithKakaoTalk(), 25000, "KAKAO_NATIVE_TALK_LOGIN_TIMEOUT");
+  } catch (talkError) {
+    if (isNativeLoginCancelledError(talkError)) {
+      throw new Error("KAKAO_NATIVE_LOGIN_CANCELLED");
+    }
+    throw talkError;
+  }
+}
+
+function initializeNaverLoginSdk() {
+  if (isNaverLoginInitialized) {
+    return;
+  }
+
+  if (!NAVER_NATIVE_CONSUMER_KEY || !NAVER_NATIVE_CONSUMER_SECRET || !NAVER_NATIVE_URL_SCHEME) {
+    throw new Error("NAVER_NATIVE_CONFIG_MISSING");
+  }
+
+  NaverLogin.initialize({
+    appName: NAVER_NATIVE_APP_NAME,
+    consumerKey: NAVER_NATIVE_CONSUMER_KEY,
+    consumerSecret: NAVER_NATIVE_CONSUMER_SECRET,
+    serviceUrlSchemeIOS: NAVER_NATIVE_URL_SCHEME,
+    disableNaverAppAuthIOS: NAVER_DISABLE_APP_AUTH_IOS,
+  });
+  isNaverLoginInitialized = true;
+}
+
+async function requestNativeNaverAccessToken(): Promise<string> {
+  initializeNaverLoginSdk();
+  const loginResult = await withTimeout(
+    NaverLogin.login(),
+    25000,
+    "NAVER_NATIVE_LOGIN_TIMEOUT"
+  );
+  if (loginResult.isSuccess) {
+    const accessToken = loginResult.successResponse?.accessToken?.trim();
+    if (accessToken) {
+      return accessToken;
+    }
+    throw new Error("NAVER_NATIVE_ACCESS_TOKEN_MISSING");
+  }
+
+  const failureMessage = loginResult.failureResponse?.message?.trim();
+  if (loginResult.failureResponse?.isCancel) {
+    throw new Error("NAVER_NATIVE_LOGIN_CANCELLED");
+  }
+  throw new Error(failureMessage || "NAVER_NATIVE_LOGIN_FAILED");
+}
+
+async function exchangeKakaoAccessTokenForSession(input: {
+  apiOrigin: string;
+  accessToken: string;
+}): Promise<NativeKakaoAuthResult> {
+  const response = await withTimeout(
+    fetch(`${input.apiOrigin}/auth/kakao/native`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        accessToken: input.accessToken,
+      }),
+    }),
+    12000,
+    "KAKAO_NATIVE_EXCHANGE_TIMEOUT"
+  );
+
+  if (!response.ok) {
+    throw new Error(`KAKAO_NATIVE_AUTH_HTTP_${response.status}`);
+  }
+
+  const parsed = (await response.json()) as {
+    token?: unknown;
+    userId?: unknown;
+  };
+  if (typeof parsed.token !== "string" || typeof parsed.userId !== "string") {
+    throw new Error("KAKAO_NATIVE_AUTH_INVALID_RESPONSE");
+  }
+
+  return {
+    token: parsed.token,
+    userId: parsed.userId,
+  };
+}
+
+async function exchangeNaverAccessTokenForSession(input: {
+  apiOrigin: string;
+  accessToken: string;
+}): Promise<NativeNaverAuthResult> {
+  const response = await withTimeout(
+    fetch(`${input.apiOrigin}/auth/naver/native`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        accessToken: input.accessToken,
+      }),
+    }),
+    12000,
+    "NAVER_NATIVE_EXCHANGE_TIMEOUT"
+  );
+
+  if (!response.ok) {
+    throw new Error(`NAVER_NATIVE_AUTH_HTTP_${response.status}`);
+  }
+
+  const parsed = (await response.json()) as {
+    token?: unknown;
+    userId?: unknown;
+  };
+  if (typeof parsed.token !== "string" || typeof parsed.userId !== "string") {
+    throw new Error("NAVER_NATIVE_AUTH_INVALID_RESPONSE");
+  }
+
+  return {
+    token: parsed.token,
+    userId: parsed.userId,
+  };
+}
+
+async function unlinkKakaoAccountWithTimeout() {
+  return await withTimeout(unlinkKakao(), 10000, "KAKAO_NATIVE_UNLINK_TIMEOUT");
+}
+
+async function unlinkNaverAccountWithTimeout() {
+  initializeNaverLoginSdk();
+  return await withTimeout(NaverLogin.deleteToken(), 10000, "NAVER_NATIVE_UNLINK_TIMEOUT");
+}
 function readCallbackValue(url: URL, key: string) {
   const fromSearch = url.searchParams.get(key);
   if (fromSearch) {
@@ -1034,6 +1287,196 @@ export default function WebViewScreen() {
         await Linking.openSettings().catch((error) => {
           console.log("Failed to open settings from web bridge:", error);
         });
+        return;
+      }
+
+      if (parsedData?.type === "REST_AUTH_NAVER_LOGIN_REQUEST") {
+        const requestId =
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        if (!requestId) {
+          return;
+        }
+
+        try {
+          const accessToken = await requestNativeNaverAccessToken();
+          const session = await exchangeNaverAccessTokenForSession({
+            apiOrigin: hybridApiOrigin,
+            accessToken,
+          });
+
+          const bridgeMessage = {
+            type: "REST_AUTH_NAVER_LOGIN_RESULT",
+            requestId,
+            payload: {
+              ok: true,
+              token: session.token,
+              userId: session.userId,
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        } catch (error) {
+          console.log("Native Naver login bridge failed:", error);
+
+          const bridgeMessage = {
+            type: "REST_AUTH_NAVER_LOGIN_RESULT",
+            requestId,
+            payload: {
+              ok: false,
+              error: resolveNativeErrorCode(error, "NAVER_NATIVE_LOGIN_FAILED"),
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        }
+        return;
+      }
+
+      if (parsedData?.type === "REST_AUTH_KAKAO_LOGIN_REQUEST") {
+        const requestId =
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        if (!requestId) {
+          return;
+        }
+
+        try {
+          const oauthToken = await requestNativeKakaoOAuthToken();
+          if (!oauthToken?.accessToken) {
+            throw new Error("KAKAO_NATIVE_ACCESS_TOKEN_MISSING");
+          }
+
+          const session = await exchangeKakaoAccessTokenForSession({
+            apiOrigin: hybridApiOrigin,
+            accessToken: oauthToken.accessToken,
+          });
+
+          const bridgeMessage = {
+            type: "REST_AUTH_KAKAO_LOGIN_RESULT",
+            requestId,
+            payload: {
+              ok: true,
+              token: session.token,
+              userId: session.userId,
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        } catch (error) {
+          console.log("Native Kakao login bridge failed:", error);
+
+          const bridgeMessage = {
+            type: "REST_AUTH_KAKAO_LOGIN_RESULT",
+            requestId,
+            payload: {
+              ok: false,
+              error: resolveNativeErrorCode(error, "KAKAO_NATIVE_LOGIN_FAILED"),
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        }
+        return;
+      }
+
+      if (parsedData?.type === "REST_AUTH_NAVER_UNLINK_REQUEST") {
+        const requestId =
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        if (!requestId) {
+          return;
+        }
+
+        try {
+          await unlinkNaverAccountWithTimeout();
+          const bridgeMessage = {
+            type: "REST_AUTH_NAVER_UNLINK_RESULT",
+            requestId,
+            payload: {
+              ok: true,
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        } catch (error) {
+          console.log("Native Naver unlink bridge failed:", error);
+          const bridgeMessage = {
+            type: "REST_AUTH_NAVER_UNLINK_RESULT",
+            requestId,
+            payload: {
+              ok: false,
+              error:
+                error instanceof Error && error.message ? error.message : "NAVER_NATIVE_UNLINK_FAILED",
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        }
+        return;
+      }
+
+      if (parsedData?.type === "REST_AUTH_KAKAO_UNLINK_REQUEST") {
+        const requestId =
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        if (!requestId) {
+          return;
+        }
+
+        try {
+          await unlinkKakaoAccountWithTimeout();
+          const bridgeMessage = {
+            type: "REST_AUTH_KAKAO_UNLINK_RESULT",
+            requestId,
+            payload: {
+              ok: true,
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        } catch (error) {
+          console.log("Native Kakao unlink bridge failed:", error);
+          const bridgeMessage = {
+            type: "REST_AUTH_KAKAO_UNLINK_RESULT",
+            requestId,
+            payload: {
+              ok: false,
+              error:
+                error instanceof Error && error.message ? error.message : "KAKAO_NATIVE_UNLINK_FAILED",
+            },
+          };
+          webViewRef.current?.injectJavaScript(
+            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+              bridgeMessage
+            )} })); true;`
+          );
+        }
         return;
       }
 

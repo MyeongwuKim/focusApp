@@ -29,6 +29,10 @@ interface OAuthCallbackQuery {
   error?: string;
 }
 
+interface OAuthNativeAuthRequestBody {
+  accessToken?: string;
+}
+
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const DEV_ALLOWED_REDIRECT_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"] as const;
 
@@ -38,7 +42,9 @@ function normalizeOrigin(origin: string) {
 
 function isLoopbackHost(hostname: string) {
   const normalized = hostname.trim().toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+  return (
+    normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]"
+  );
 }
 
 function resolveAllowedRedirectOrigins() {
@@ -52,7 +58,11 @@ function resolveAllowedRedirectOrigins() {
 
 const ALLOWED_REDIRECT_ORIGINS = resolveAllowedRedirectOrigins();
 
-function resolveKakaoRedirectUriForRequest(defaultRedirectUri: string, redirectTo: string, requestHost?: string) {
+function resolveKakaoRedirectUriForRequest(
+  defaultRedirectUri: string,
+  redirectTo: string,
+  requestHost?: string
+) {
   if (!redirectTo.startsWith("mobile:") || !requestHost) {
     return defaultRedirectUri;
   }
@@ -79,9 +89,7 @@ function fromBase64Url(input: string) {
 
 function signOAuthState(payload: OAuthStatePayload): string {
   const encodedPayload = toBase64Url(JSON.stringify(payload));
-  const signature = createHmac("sha256", env.OAUTH_STATE_SECRET)
-    .update(encodedPayload)
-    .digest("base64url");
+  const signature = createHmac("sha256", env.OAUTH_STATE_SECRET).update(encodedPayload).digest("base64url");
   return `${encodedPayload}.${signature}`;
 }
 
@@ -187,10 +195,7 @@ function escapeHtmlAttribute(value: string) {
 function replyWithHistorySafeRedirect(reply: FastifyReply, targetUrl: string) {
   const safeTargetUrl = escapeHtmlAttribute(targetUrl);
   const inlineScriptTarget = JSON.stringify(targetUrl);
-  return reply
-    .code(200)
-    .type("text/html; charset=utf-8")
-    .send(`<!doctype html>
+  return reply.code(200).type("text/html; charset=utf-8").send(`<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
@@ -288,6 +293,28 @@ async function fetchKakaoProfile(code: string, redirectUriOverride?: string): Pr
   };
 }
 
+async function fetchKakaoProfileFromAccessToken(accessToken: string): Promise<ProviderProfile> {
+  const profile = await fetchJson<{
+    id: number;
+    kakao_account?: {
+      email?: string;
+      profile?: {
+        nickname?: string;
+      };
+    };
+  }>("https://kapi.kakao.com/v2/user/me", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return {
+    providerUserId: String(profile.id),
+    email: profile.kakao_account?.email ?? null,
+    name: profile.kakao_account?.profile?.nickname ?? null,
+  };
+}
+
 async function fetchNaverProfile(code: string, state: string): Promise<ProviderProfile> {
   const config = getNaverConfig();
 
@@ -327,6 +354,32 @@ async function fetchNaverProfile(code: string, state: string): Promise<ProviderP
   };
 }
 
+async function fetchNaverProfileFromAccessToken(accessToken: string): Promise<ProviderProfile> {
+  const profile = await fetchJson<{
+    response?: {
+      id?: string;
+      email?: string;
+      name?: string;
+      nickname?: string;
+    };
+  }>("https://openapi.naver.com/v1/nid/me", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const response = profile.response;
+  if (!response?.id) {
+    throw new Error("NAVER_PROFILE_MISSING_ID");
+  }
+
+  return {
+    providerUserId: response.id,
+    email: response.email ?? null,
+    name: response.name ?? response.nickname ?? null,
+  };
+}
+
 async function signInWithProvider(
   provider: OAuthProvider,
   profile: ProviderProfile
@@ -350,10 +403,34 @@ async function signInWithProvider(
 
     if (existingAccount) {
       const shouldUpdateName = !!profile.name && profile.name !== existingAccount.user.name;
-      const shouldUpdateEmail =
-        !!profile.email &&
-        profile.email !== existingAccount.user.email &&
-        !existingAccount.user.email.endsWith("@oauth.local");
+      const requestedEmail = profile.email?.trim() ?? "";
+      const requestedEmailOwner = requestedEmail
+        ? await tx.user.findUnique({
+            where: { email: requestedEmail },
+            select: { id: true },
+          })
+        : null;
+      const shouldRelinkAccountToRequestedEmailOwner =
+        !!requestedEmailOwner &&
+        requestedEmailOwner.id !== existingAccount.user.id &&
+        existingAccount.user.email.endsWith("@oauth.local");
+
+      if (shouldRelinkAccountToRequestedEmailOwner) {
+        await tx.account.update({
+          where: { id: existingAccount.id },
+          data: {
+            userId: requestedEmailOwner.id,
+          },
+        });
+
+        return tx.user.findUniqueOrThrow({
+          where: { id: requestedEmailOwner.id },
+        });
+      }
+
+      const canAdoptRequestedEmail =
+        !!requestedEmail && (!requestedEmailOwner || requestedEmailOwner.id === existingAccount.user.id);
+      const shouldUpdateEmail = canAdoptRequestedEmail && requestedEmail !== existingAccount.user.email;
 
       if (shouldUpdateName || shouldUpdateEmail) {
         const updateData: {
@@ -365,8 +442,8 @@ async function signInWithProvider(
           updateData.name = profile.name;
         }
 
-        if (shouldUpdateEmail && profile.email) {
-          updateData.email = profile.email;
+        if (shouldUpdateEmail) {
+          updateData.email = requestedEmail;
         }
 
         return tx.user.update({
@@ -384,17 +461,24 @@ async function signInWithProvider(
           where: {
             email: requestedEmail,
           },
-          select: {
-            id: true,
-          },
         })
       : null;
 
+    if (requestedEmailOwner) {
+      await tx.account.create({
+        data: {
+          provider,
+          providerUserId: profile.providerUserId,
+          userId: requestedEmailOwner.id,
+        },
+      });
+
+      return requestedEmailOwner;
+    }
+
     const targetUser = await tx.user.create({
       data: {
-        email: requestedEmail && !requestedEmailOwner
-          ? requestedEmail
-          : buildSyntheticEmail(provider, profile.providerUserId),
+        email: requestedEmail || buildSyntheticEmail(provider, profile.providerUserId),
         name: profile.name,
       },
     });
@@ -443,7 +527,6 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
         typeof request.headers["x-forwarded-host"] === "string"
           ? request.headers["x-forwarded-host"]
           : request.headers.host;
-
       if (provider === "kakao") {
         const kakaoConfig = getKakaoConfig();
         const oauthRedirectUri = resolveKakaoRedirectUriForRequest(
@@ -480,6 +563,7 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
       authUrl.searchParams.set("client_id", config.clientId);
       authUrl.searchParams.set("redirect_uri", config.redirectUri);
       authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("auth_type", "reprompt");
       return replyWithHistorySafeRedirect(reply, authUrl.toString());
     } catch (error) {
       request.log.error({ error }, `[auth] ${provider} start failed`);
@@ -520,10 +604,12 @@ function registerProviderCallbackRoute(app: FastifyInstance, provider: OAuthProv
         const nextHashParams = new URLSearchParams(rawHashQuery ?? "");
         nextHashParams.set("token", authResult.sessionToken);
         nextHashParams.set("userId", authResult.userId);
+        nextHashParams.set("provider", provider);
         redirectUrl.hash = `${nextHashPath}?${nextHashParams.toString()}`;
       } else {
         redirectUrl.searchParams.set("token", authResult.sessionToken);
         redirectUrl.searchParams.set("userId", authResult.userId);
+        redirectUrl.searchParams.set("provider", provider);
       }
 
       return reply.redirect(redirectUrl.toString());
@@ -534,7 +620,65 @@ function registerProviderCallbackRoute(app: FastifyInstance, provider: OAuthProv
   });
 }
 
+function parseOAuthNativeAuthBody(body: unknown): OAuthNativeAuthRequestBody {
+  if (!body || typeof body !== "object") {
+    return {};
+  }
+
+  const asRecord = body as Record<string, unknown>;
+  const accessToken = readQueryValue(asRecord.accessToken);
+  return { accessToken };
+}
+
 export async function registerAuthRoute(app: FastifyInstance) {
+  app.post("/auth/kakao/native", async (request, reply) => {
+    try {
+      const body = parseOAuthNativeAuthBody(request.body);
+      const accessToken = body.accessToken?.trim();
+      if (!accessToken) {
+        return reply.code(400).send({ message: "카카오 access token이 필요해요." });
+      }
+
+      const profile = await fetchKakaoProfileFromAccessToken(accessToken);
+      const authResult = await signInWithProvider("kakao", profile);
+
+      return reply.send({
+        token: authResult.sessionToken,
+        userId: authResult.userId,
+      });
+    } catch (error) {
+      request.log.error({ error }, "[auth] kakao native login failed");
+      if (error instanceof Error && error.message.startsWith("OAUTH_HTTP_")) {
+        return reply.code(401).send({ message: "카카오 인증 토큰이 유효하지 않아요." });
+      }
+      return reply.code(500).send({ message: "카카오 네이티브 로그인 처리 중 오류가 발생했어요." });
+    }
+  });
+
+  app.post("/auth/naver/native", async (request, reply) => {
+    try {
+      const body = parseOAuthNativeAuthBody(request.body);
+      const accessToken = body.accessToken?.trim();
+      if (!accessToken) {
+        return reply.code(400).send({ message: "네이버 access token이 필요해요." });
+      }
+
+      const profile = await fetchNaverProfileFromAccessToken(accessToken);
+      const authResult = await signInWithProvider("naver", profile);
+
+      return reply.send({
+        token: authResult.sessionToken,
+        userId: authResult.userId,
+      });
+    } catch (error) {
+      request.log.error({ error }, "[auth] naver native login failed");
+      if (error instanceof Error && error.message.startsWith("OAUTH_HTTP_")) {
+        return reply.code(401).send({ message: "네이버 인증 토큰이 유효하지 않아요." });
+      }
+      return reply.code(500).send({ message: "네이버 네이티브 로그인 처리 중 오류가 발생했어요." });
+    }
+  });
+
   app.post("/auth/logout", async (request, reply) => {
     const authHeader = request.headers.authorization;
     const token = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : null;
