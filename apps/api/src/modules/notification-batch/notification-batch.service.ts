@@ -1,9 +1,11 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { env } from "../../config/env.js";
+import { computeNextReminderAtAfterRun } from "./notification-reminder-schedule.js";
 
 type ReminderTone = "soft" | "balanced" | "firm";
 type ReminderKind = "focus_start" | "empty_todo_start" | "incomplete_todo" | "scheduled_todo_start";
+type TodoReminderStatus = "not_started" | "in_progress" | "paused" | "done";
 
 type RunNotificationBatchInput = {
   prisma: PrismaClient;
@@ -48,9 +50,9 @@ const EMPTY_TODO_COPY: Record<ReminderTone, string> = {
 };
 
 const INCOMPLETE_COPY_BY_TONE: Record<ReminderTone, string> = {
-  soft: "아직 진행하지 않은 작업이에요. 가볍게 시작해볼까요?",
-  balanced: "아직 진행 중인 작업이 남아 있어요. 지금 이어가면 흐름을 유지할 수 있어요.",
-  firm: "진행 중인 작업이 남아 있습니다. 지금 바로 시작해 주세요.",
+  soft: "아직 시작하지 않았거나 잠시 멈춘 작업이에요. 가볍게 다시 시작해볼까요?",
+  balanced: "아직 시작하지 않았거나 멈춘 작업이 남아 있어요. 지금 이어가면 흐름을 유지할 수 있어요.",
+  firm: "아직 시작하지 않았거나 멈춘 작업이 남아 있습니다. 지금 바로 시작해 주세요.",
 };
 
 const SCHEDULED_START_COPY_BY_TONE: Record<ReminderTone, string> = {
@@ -72,7 +74,10 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
     where: {
       pushEnabled: true,
       systemPermission: "granted",
-      OR: [{ typeFocusStart: true }, { typeIncomplete: true }],
+      AND: [
+        { OR: [{ typeFocusStart: true }, { typeIncomplete: true }] },
+        ...(force ? [] : [{ OR: [{ nextReminderAt: { lte: now } }, { nextReminderAt: null }] }]),
+      ],
     },
   });
 
@@ -117,8 +122,34 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
 
     const todos = dailyLog?.todos ?? [];
     const todoCount = dailyLog?.todoCount ?? todos.length;
-    const incompleteCount = todos.filter((todo) => !todo.done).length;
+    const firstOpenTodo = pickFirstOpenTodo(todos);
+    const firstOpenTodoStatus = firstOpenTodo ? getTodoReminderStatus(firstOpenTodo) : null;
     const tone = normalizeTone(settings.tone);
+    const scheduleNextReminder = async () => {
+      if (dryRun) {
+        return;
+      }
+      await input.prisma.notificationSettings.update({
+        where: { userId: settings.userId },
+        data: {
+          nextReminderAt: computeNextReminderAtAfterRun({
+            settings: {
+              userId: settings.userId,
+              pushEnabled: settings.pushEnabled,
+              intervalMinutes: settings.intervalMinutes,
+              activeStartTime: settings.activeStartTime,
+              activeEndTime: settings.activeEndTime,
+              dayMode: settings.dayMode,
+              typeIncomplete: settings.typeIncomplete,
+              typeFocusStart: settings.typeFocusStart,
+              systemPermission: settings.systemPermission,
+            },
+            now,
+            timezone,
+          }),
+        },
+      });
+    };
     const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
     const scheduledTargets = pickDueScheduledTodos({
       todos,
@@ -135,6 +166,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       });
 
       if (dedupeTargets.length === 0) {
+        await scheduleNextReminder();
         continue;
       }
 
@@ -186,21 +218,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         }
       }
 
-      continue;
-    }
-
-    if (
-      !force &&
-      !isReminderDue({
-        now,
-        nowDateKey: nowInTimezone.dateKey,
-        nowMinutes: nowInTimezone.hour * 60 + nowInTimezone.minute,
-        startMinutes: parseHHmmToMinutes(settings.activeStartTime) ?? 0,
-        lastSentAt: settings.lastFocusReminderSentAt,
-        intervalMinutes: settings.intervalMinutes,
-        timezone,
-      })
-    ) {
+      await scheduleNextReminder();
       continue;
     }
 
@@ -247,11 +265,16 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
           });
         }
       }
+      await scheduleNextReminder();
       continue;
     }
 
-    if (incompleteCount > 0 && settings.typeIncomplete) {
-      const incompleteLabel = pickFirstIncompleteTodoLabel(todos) ?? "미완료 작업";
+    if (
+      settings.typeIncomplete &&
+      firstOpenTodo &&
+      (firstOpenTodoStatus === "not_started" || firstOpenTodoStatus === "paused")
+    ) {
+      const incompleteLabel = getTodoLabel(firstOpenTodo);
       const incompleteBody = `${incompleteLabel}, ${INCOMPLETE_COPY_BY_TONE[tone]}`;
 
       deliveries.push({
@@ -289,10 +312,17 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
           });
         }
       }
+      await scheduleNextReminder();
       continue;
     }
 
     if (!settings.typeFocusStart) {
+      await scheduleNextReminder();
+      continue;
+    }
+
+    if (firstOpenTodoStatus === "in_progress") {
+      await scheduleNextReminder();
       continue;
     }
 
@@ -330,6 +360,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         });
       }
     }
+    await scheduleNextReminder();
   }
 
   if (deliveries.length > 0) {
@@ -508,51 +539,11 @@ function isWithinWindow(nowMinutes: number, startMinutes: number, endMinutes: nu
   return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
 }
 
-function isReminderDue(input: {
-  now: Date;
-  nowDateKey: string;
-  nowMinutes: number;
-  startMinutes: number;
-  lastSentAt: Date | null;
-  intervalMinutes: number;
-  timezone: string;
-}) {
-  if (!Number.isFinite(input.intervalMinutes) || input.intervalMinutes <= 0) {
-    return false;
-  }
-
-  if (!input.lastSentAt) {
-    return input.nowMinutes >= input.startMinutes;
-  }
-
-  const lastSentDateKey = getDateKeyInTimezone(input.lastSentAt, input.timezone);
-  if (lastSentDateKey !== input.nowDateKey) {
-    return input.nowMinutes >= input.startMinutes;
-  }
-
-  const diffMs = input.now.getTime() - input.lastSentAt.getTime();
-  if (diffMs < 0) {
-    return false;
-  }
-
-  return diffMs >= input.intervalMinutes * 60 * 1000;
-}
-
 function normalizeTone(value: string): ReminderTone {
   if (value === "balanced" || value === "firm") {
     return value;
   }
   return "soft";
-}
-
-function getDateKeyInTimezone(date: Date, timezone: string) {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return formatter.format(date);
 }
 
 function getZonedNow(now: Date, timezone: string) {
@@ -585,21 +576,43 @@ function getZonedNow(now: Date, timezone: string) {
   };
 }
 
-function pickFirstIncompleteTodoLabel(
-  todos: Array<{ done: boolean; content?: string | null; titleSnapshot?: string | null; order?: number }>
-) {
-  const sorted = [...todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const firstIncomplete = sorted.find((todo) => !todo.done);
-  if (!firstIncomplete) {
-    return null;
-  }
+type TodoReminderEntry = {
+  id?: string;
+  done: boolean;
+  startedAt?: Date | null;
+  pausedAt?: Date | null;
+  completedAt?: Date | null;
+  scheduledStartAt?: Date | null;
+  content?: string | null;
+  titleSnapshot?: string | null;
+  order?: number;
+};
 
-  const snapshot = firstIncomplete.titleSnapshot?.trim();
+function getTodoReminderStatus(todo: TodoReminderEntry): TodoReminderStatus {
+  if (todo.done || todo.completedAt) {
+    return "done";
+  }
+  if (!todo.startedAt) {
+    return "not_started";
+  }
+  if (todo.pausedAt) {
+    return "paused";
+  }
+  return "in_progress";
+}
+
+function pickFirstOpenTodo(todos: TodoReminderEntry[]) {
+  const sorted = [...todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  return sorted.find((todo) => getTodoReminderStatus(todo) !== "done") ?? null;
+}
+
+function getTodoLabel(todo: TodoReminderEntry) {
+  const snapshot = todo.titleSnapshot?.trim();
   if (snapshot) {
     return snapshot;
   }
 
-  const content = firstIncomplete.content?.trim();
+  const content = todo.content?.trim();
   if (content) {
     return content;
   }
@@ -608,17 +621,7 @@ function pickFirstIncompleteTodoLabel(
 }
 
 function pickDueScheduledTodos(input: {
-  todos: Array<{
-    id?: string;
-    done: boolean;
-    startedAt?: Date | null;
-    pausedAt?: Date | null;
-    completedAt?: Date | null;
-    scheduledStartAt?: Date | null;
-    content?: string | null;
-    titleSnapshot?: string | null;
-    order?: number;
-  }>;
+  todos: TodoReminderEntry[];
   now: Date;
   scheduleWindowMs: number;
 }) {

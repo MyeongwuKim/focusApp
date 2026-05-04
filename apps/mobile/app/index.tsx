@@ -1,12 +1,14 @@
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
+import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
+  Animated,
   Alert,
   AppState,
   type AppStateStatus,
   BackHandler,
+  Easing,
   Linking,
   NativeModules,
   PermissionsAndroid,
@@ -50,6 +52,13 @@ const WEATHER_FALLBACK_COORDINATES: NativeCoordinates = {
 const PERMISSION_INTRO_FILE_URI = `${
   FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
 }native-permission-intro-v2.json`;
+const LAUNCH_ANIMATION_RING_DURATION_MS = 900;
+const LAUNCH_ANIMATION_CHECK_DURATION_MS = 300;
+const LAUNCH_ANIMATION_PAUSE_MS = 350;
+
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // no-op: splash may already be controlled by runtime
+});
 
 type NativePermissionState = "granted" | "denied" | "undetermined";
 type LocationPermissionSnapshot = {
@@ -676,6 +685,110 @@ async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot> {
   };
 }
 
+function FocusLaunchOverlay() {
+  const sweepProgress = useRef(new Animated.Value(0)).current;
+  const checkShortProgress = useRef(new Animated.Value(0)).current;
+  const checkLongProgress = useRef(new Animated.Value(0)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.8)).current;
+
+  useEffect(() => {
+    const animationLoop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(sweepProgress, {
+            toValue: 1,
+            duration: LAUNCH_ANIMATION_RING_DURATION_MS,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.sequence([
+            Animated.timing(pulseOpacity, {
+              toValue: 1,
+              duration: 420,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseOpacity, {
+              toValue: 0.8,
+              duration: 420,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+        ]),
+        Animated.timing(checkShortProgress, {
+          toValue: 1,
+          duration: LAUNCH_ANIMATION_CHECK_DURATION_MS,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: false,
+        }),
+        Animated.timing(checkLongProgress, {
+          toValue: 1,
+          duration: LAUNCH_ANIMATION_CHECK_DURATION_MS,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: false,
+        }),
+        Animated.delay(LAUNCH_ANIMATION_PAUSE_MS),
+        Animated.parallel([
+          Animated.timing(sweepProgress, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+          Animated.timing(checkShortProgress, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: false,
+          }),
+          Animated.timing(checkLongProgress, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: false,
+          }),
+        ]),
+      ])
+    );
+
+    animationLoop.start();
+    return () => {
+      animationLoop.stop();
+    };
+  }, [checkLongProgress, checkShortProgress, pulseOpacity, sweepProgress]);
+
+  const ringRotate = sweepProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-90deg", "270deg"],
+  });
+
+  const shortCheckWidth = checkShortProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 28],
+  });
+
+  const longCheckWidth = checkLongProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 64],
+  });
+
+  return (
+    <View style={styles.launchOverlay}>
+      <Animated.View style={[styles.launchBadge, { opacity: pulseOpacity }]}>
+        <View style={styles.launchRingTrack} />
+        <Animated.View
+          style={[
+            styles.launchRingSweep,
+            {
+              transform: [{ rotate: ringRotate }],
+            },
+          ]}
+        />
+        <Animated.View style={[styles.launchCheckShort, { width: shortCheckWidth }]} />
+        <Animated.View style={[styles.launchCheckLong, { width: longCheckWidth }]} />
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function WebViewScreen() {
   const pendingNotificationPathRef = useRef<string | null>(null);
   const isWebViewReadyRef = useRef(false);
@@ -782,6 +895,7 @@ export default function WebViewScreen() {
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
+  const [hasInitialWebViewLoaded, setHasInitialWebViewLoaded] = useState(false);
   const { width, fontScale } = useWindowDimensions();
   const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
 
@@ -1550,19 +1664,20 @@ export default function WebViewScreen() {
   };
 
   const showPermissionIntro = isPermissionIntroReady && isPermissionIntroVisible;
+  const shouldShowLaunchOverlay =
+    isPreparingLocalFile || !isPermissionIntroReady || (!showPermissionIntro && !hasInitialWebViewLoaded);
+
+  useEffect(() => {
+    if (!shouldShowLaunchOverlay) {
+      void SplashScreen.hideAsync().catch(() => {
+        // no-op: splash may already be hidden
+      });
+    }
+  }, [shouldShowLaunchOverlay]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {isPreparingLocalFile ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" />
-        </View>
-      ) : null}
-      {!isPermissionIntroReady ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" />
-        </View>
-      ) : null}
+      {shouldShowLaunchOverlay ? <FocusLaunchOverlay /> : null}
       {source && !showPermissionIntro ? (
         <View style={styles.webViewContainer}>
           <View
@@ -1621,6 +1736,7 @@ export default function WebViewScreen() {
             onLoadEnd={() => {
               console.log("WebView load end:", source?.uri);
               isWebViewReadyRef.current = true;
+              setHasInitialWebViewLoaded(true);
               if (webViewRef.current) {
                 webViewRef.current.injectJavaScript(applyScaleScript);
               }
@@ -1655,12 +1771,6 @@ export default function WebViewScreen() {
               console.log("WebView error:", msg);
               Alert.alert("WebView Error", msg);
             }}
-            startInLoadingState
-            renderLoading={() => (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" />
-              </View>
-            )}
           />
         </View>
       ) : null}
@@ -1689,11 +1799,59 @@ export default function WebViewScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#0B1220",
   },
-  loadingContainer: {
-    flex: 1,
+  launchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+    backgroundColor: "#0B1220",
     alignItems: "center",
     justifyContent: "center",
+  },
+  launchBadge: {
+    width: 164,
+    height: 164,
+    borderRadius: 48,
+    backgroundColor: "#0F172A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  launchRingTrack: {
+    position: "absolute",
+    width: 106,
+    height: 106,
+    borderRadius: 53,
+    borderWidth: 9,
+    borderColor: "rgba(44, 230, 166, 0.22)",
+  },
+  launchRingSweep: {
+    position: "absolute",
+    width: 106,
+    height: 106,
+    borderRadius: 53,
+    borderWidth: 9,
+    borderTopColor: "#2CE6A6",
+    borderRightColor: "#2CE6A6",
+    borderBottomColor: "transparent",
+    borderLeftColor: "transparent",
+  },
+  launchCheckShort: {
+    position: "absolute",
+    left: 58,
+    top: 90,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F8FAFC",
+    transform: [{ rotate: "45deg" }],
+  },
+  launchCheckLong: {
+    position: "absolute",
+    left: 70,
+    top: 90,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F8FAFC",
+    transform: [{ rotate: "-45deg" }],
   },
   webViewContainer: {
     flex: 1,

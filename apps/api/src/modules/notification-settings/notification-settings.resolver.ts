@@ -4,6 +4,8 @@ import { requireUserId } from "../../common/utils/require-user-id.js";
 import type { GraphQLContext } from "../../graphql/context.js";
 import { NotificationSettingsRepository } from "./notification-settings.repository.js";
 import { NotificationSettingsService } from "./notification-settings.service.js";
+import { refreshReminderScheduleForUser } from "../notification-batch/notification-reminder-schedule.js";
+import { env } from "../../config/env.js";
 
 export const notificationSettingsTypeDefs = gql`
   type NotificationSettings {
@@ -21,6 +23,7 @@ export const notificationSettingsTypeDefs = gql`
     systemPermission: String
     lastFocusReminderSentAt: String
     lastEmptyTodoReminderDate: String
+    nextReminderAt: String
     createdAt: String!
     updatedAt: String!
   }
@@ -87,9 +90,17 @@ export const notificationSettingsResolvers = {
     ) => {
       try {
         const service = createNotificationSettingsService(context);
-        return await service.updateNotificationSettings({
+        const updated = await service.updateNotificationSettings({
           userId: getUserId(context),
           ...args.input,
+        });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId: updated.userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return context.prisma.notificationSettings.findUniqueOrThrow({
+          where: { userId: updated.userId },
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, notificationSettingsErrorMapping);
@@ -101,6 +112,8 @@ export const notificationSettingsResolvers = {
     updatedAt: (parent: { updatedAt: Date }) => parent.updatedAt.toISOString(),
     lastFocusReminderSentAt: (parent: { lastFocusReminderSentAt: Date | null }) =>
       parent.lastFocusReminderSentAt ? parent.lastFocusReminderSentAt.toISOString() : null,
+    nextReminderAt: (parent: { nextReminderAt: Date | null }) =>
+      parent.nextReminderAt ? parent.nextReminderAt.toISOString() : null,
   },
 };
 

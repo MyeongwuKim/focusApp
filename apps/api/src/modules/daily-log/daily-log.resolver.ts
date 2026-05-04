@@ -4,6 +4,8 @@ import { DailyLogRepository } from "./daily-log.repository.js";
 import { DailyLogService } from "./daily-log.service.js";
 import { rethrowMappedGraphQLError } from "../../common/utils/graphql-error.js";
 import { requireUserId } from "../../common/utils/require-user-id.js";
+import { refreshReminderScheduleForUser } from "../notification-batch/notification-reminder-schedule.js";
+import { env } from "../../config/env.js";
 
 export const dailyLogTypeDefs = gql`
   type TodoItem {
@@ -159,11 +161,18 @@ export const dailyLogResolvers = {
       context: GraphQLContext
     ) => {
       const service = buildService(context);
-      return service.upsertDailyLog({
-        userId: getUserId(context),
+      const userId = getUserId(context);
+      const result = await service.upsertDailyLog({
+        userId,
         dateKey: args.input.dateKey,
         memo: args.input.memo,
       });
+      await refreshReminderScheduleForUser({
+        prisma: context.prisma,
+        userId,
+        timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+      });
+      return result;
     },
     addTodo: async (
       _parent: unknown,
@@ -179,13 +188,20 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.addTodo({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.addTodo({
+          userId,
           dateKey: args.input.dateKey,
           content: args.input.content,
           taskId: args.input.taskId,
           order: args.input.order,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -206,11 +222,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.addTodos({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.addTodos({
+          userId,
           dateKey: args.input.dateKey,
           items: args.input.items,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -222,11 +245,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.startTodo({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.startTodo({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -238,11 +268,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.pauseTodo({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.pauseTodo({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -254,11 +291,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.resumeTodo({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.resumeTodo({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -270,11 +314,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.completeTodo({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.completeTodo({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -286,11 +337,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.resetTodo({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.resetTodo({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -302,11 +360,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.deleteTodo({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.deleteTodo({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -335,11 +400,18 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.reorderTodos({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.reorderTodos({
+          userId,
           dateKey: args.input.dateKey,
           todoIds: args.input.todoIds,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -351,12 +423,19 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.updateTodoActualFocusSeconds({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.updateTodoActualFocusSeconds({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
           actualFocusSeconds: args.input.actualFocusSeconds,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
@@ -368,12 +447,19 @@ export const dailyLogResolvers = {
     ) => {
       try {
         const service = buildService(context);
-        return await service.updateTodoSchedule({
-          userId: getUserId(context),
+        const userId = getUserId(context);
+        const result = await service.updateTodoSchedule({
+          userId,
           dateKey: args.input.dateKey,
           todoId: args.input.todoId,
           scheduledStartAt: args.input.scheduledStartAt,
         });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
