@@ -547,7 +547,6 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
         authUrl.searchParams.set("redirect_uri", oauthRedirectUri ?? kakaoConfig.redirectUri);
         authUrl.searchParams.set("state", state);
         authUrl.searchParams.set("prompt", "login");
-        authUrl.searchParams.set("scope", "profile_nickname account_email");
         return replyWithHistorySafeRedirect(reply, authUrl.toString());
       }
 

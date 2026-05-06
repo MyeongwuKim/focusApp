@@ -16,15 +16,13 @@ pnpm -C apps/web-ui dev
 
 ## 2) 환경변수
 
-`apps/web-ui/.env` 또는 `apps/web-ui/.env.local` 파일을 사용합니다.
-
 ```bash
 VITE_API_ORIGIN=http://localhost:4000
 VITE_SENTRY_DSN=
 ```
 
-- `VITE_API_ORIGIN`이 없으면 현재 origin 기준 상대 경로(`/graphql`)를 사용합니다.
-- Sentry를 쓰지 않으면 `VITE_SENTRY_DSN`은 비워도 됩니다.
+- `VITE_API_ORIGIN`: 웹에서 호출할 API 서버 주소
+- `VITE_SENTRY_DSN`: 웹 Sentry DSN
 
 ## 3) 주요 스크립트
 
@@ -54,4 +52,3 @@ pnpm -C apps/web-ui e2e
 pnpm -C apps/web-ui e2e:ui
 pnpm -C apps/web-ui e2e:headed
 ```
-
