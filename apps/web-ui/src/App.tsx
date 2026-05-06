@@ -31,6 +31,7 @@ import { getUserFacingErrorMessage } from "./utils/errorMessage";
 import { queryClient } from "./queryClient";
 import { dailyLogByDateQueryKey, statsDailyDetailQueryKey } from "./queries/daily-log/queries";
 import {
+  fetchWithBackendStatus,
   getBackendConnectivityState,
   isLikelyBackendOfflineError,
   markBackendOffline,
@@ -38,6 +39,7 @@ import {
   subscribeAuthExpired,
   subscribeBackendConnectivity,
 } from "./api/backendConnectivity";
+import { getApiOrigin } from "./api/graphqlEndpoint";
 import { useEdgeSwipeClose } from "./hooks/useEdgeSwipeClose";
 
 const BACKEND_RECHECK_MS = 3000;
@@ -401,6 +403,16 @@ function App() {
       if (!token) {
         return;
       }
+
+      const apiOrigin = getApiOrigin();
+      const logoutUrl = apiOrigin ? `${apiOrigin}/auth/logout` : "/auth/logout";
+      void fetchWithBackendStatus(logoutUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }).catch(() => null);
 
       clearAuth();
       toast.error("세션이 만료되어 로그아웃되었어요. 다시 로그인해 주세요.", "세션 만료");

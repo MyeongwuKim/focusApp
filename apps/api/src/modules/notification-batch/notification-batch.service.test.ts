@@ -37,11 +37,19 @@ function createTodo(overrides: Record<string, unknown> = {}) {
 function createPrismaMock(input: {
   settings?: Array<Record<string, unknown>>;
   todos?: Array<Record<string, unknown>>;
+  userCreatedAt?: Date;
 }) {
   const settings = input.settings ?? [createSettings()];
   const todos = input.todos ?? [];
+  const userCreatedAt = input.userCreatedAt ?? new Date("2025-01-01T00:00:00.000Z");
+  const activeSessions = Array.from(
+    new Set(settings.map((setting) => String(setting.userId ?? "user-1")))
+  ).map((userId) => ({ userId }));
 
   return {
+    session: {
+      findMany: vi.fn(async () => activeSessions),
+    },
     notificationSettings: {
       findMany: vi.fn(async () => settings),
       update: vi.fn(async () => ({})),
@@ -55,6 +63,14 @@ function createPrismaMock(input: {
     pushDeviceToken: {
       findMany: vi.fn(async () => []),
       updateMany: vi.fn(async () => ({ count: 0 })),
+    },
+    user: {
+      findMany: vi.fn(async () =>
+        activeSessions.map((session) => ({
+          id: session.userId,
+          createdAt: userCreatedAt,
+        }))
+      ),
     },
   };
 }
@@ -168,5 +184,23 @@ describe("runNotificationBatch", () => {
     expect(result.sentCount).toBe(1);
     expect(result.deliveries[0]?.kind).toBe("incomplete_todo");
     expect(result.deliveries[0]?.body).toContain("B");
+  });
+
+  it("가입 후 24시간 이내 유저에게는 알림을 보내지 않는다", async () => {
+    const prisma = createPrismaMock({
+      userCreatedAt: new Date("2026-05-04T07:00:00.000Z"),
+      todos: [createTodo({ content: "A", order: 0 })],
+    });
+
+    const result = await runNotificationBatch({
+      prisma: prisma as never,
+      now: new Date("2026-05-04T20:00:00.000Z"),
+      dryRun: true,
+      force: false,
+      timezone: "Asia/Seoul",
+    });
+
+    expect(result.sentCount).toBe(0);
+    expect(result.deliveries).toHaveLength(0);
   });
 });

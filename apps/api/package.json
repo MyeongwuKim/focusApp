@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "USE_ENV_LOCAL=true tsx watch src/server.ts",
-    "hybrid": "node ../../scripts/sync-lan-env.mjs && USE_ENV_LOCAL=true tsx watch src/server.ts",
+    "hybrid": "USE_ENV_LOCAL=true tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",

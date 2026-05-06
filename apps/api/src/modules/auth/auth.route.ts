@@ -684,9 +684,26 @@ export async function registerAuthRoute(app: FastifyInstance) {
     const token = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : null;
 
     if (token) {
+      const currentSession = await prisma.session.findUnique({
+        where: { token },
+        select: { userId: true },
+      });
+
       await prisma.session.deleteMany({
         where: { token },
       });
+
+      if (currentSession?.userId) {
+        await prisma.pushDeviceToken.updateMany({
+          where: {
+            userId: currentSession.userId,
+            isActive: true,
+          },
+          data: {
+            isActive: false,
+          },
+        });
+      }
     }
 
     return reply.send({ ok: true });

@@ -35,6 +35,7 @@ export type NotificationBatchResult = {
 };
 
 const DEFAULT_TIMEZONE = "Asia/Seoul";
+const NEW_USER_REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
 const WEEKDAY_SET = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
 
 const FOCUS_COPY: Record<ReminderTone, string> = {
@@ -69,9 +70,38 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
   const timezone = input.timezone ?? DEFAULT_TIMEZONE;
   const dryRun = input.dryRun ?? false;
   const force = input.force ?? false;
+  const activeSessionUserIds = Array.from(
+    new Set(
+      (
+        await input.prisma.session.findMany({
+          where: {
+            expiresAt: { gt: now },
+          },
+          select: {
+            userId: true,
+          },
+        })
+      ).map((session) => session.userId)
+    )
+  );
+
+  if (activeSessionUserIds.length === 0) {
+    return {
+      checkedUsers: 0,
+      eligibleUsers: 0,
+      sentCount: 0,
+      attemptedTokenCount: 0,
+      dryRun,
+      force,
+      deliveries: [],
+    };
+  }
 
   const settingsList = await input.prisma.notificationSettings.findMany({
     where: {
+      userId: {
+        in: activeSessionUserIds,
+      },
       pushEnabled: true,
       systemPermission: "granted",
       AND: [
@@ -82,11 +112,36 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
   });
 
   const nowInTimezone = getZonedNow(now, timezone);
+  const userCreatedAtById = new Map<string, Date>();
+  if (!force && settingsList.length > 0) {
+    const users = await input.prisma.user.findMany({
+      where: {
+        id: {
+          in: Array.from(new Set(settingsList.map((settings) => settings.userId))),
+        },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+      },
+    });
+    users.forEach((user) => {
+      userCreatedAtById.set(user.id, user.createdAt);
+    });
+  }
+
   const deliveries: NotificationBatchDelivery[] = [];
   let eligibleUsers = 0;
   let attemptedTokenCount = 0;
 
   for (const settings of settingsList) {
+    if (!force) {
+      const createdAt = userCreatedAtById.get(settings.userId);
+      if (createdAt && now.getTime() - createdAt.getTime() < NEW_USER_REMINDER_GRACE_MS) {
+        continue;
+      }
+    }
+
     if (!force) {
       if (!isDayAllowed(settings.dayMode, nowInTimezone.weekdayShort)) {
         continue;

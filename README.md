@@ -215,11 +215,6 @@ focus-hybrid/
 
 - API는 `apps/api/.env` + `apps/api/.env.local`을 사용
 - Mobile은 `apps/mobile/.env.local`을 사용
-- LAN 환경 동기화:
-
-```bash
-pnpm lan:sync
-```
 
 ## 🧾 Recent Optimization Log
 
