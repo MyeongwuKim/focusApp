@@ -40,6 +40,8 @@ export function DateTodosRoutePage({
   const dateKey = searchParams.get("date");
   const resolvedDateKey = dateKey ?? formatDateKey(new Date());
   const restFinishedRequested = searchParams.get("restFinished") === "1";
+  const focusTargetElapsedRequested = searchParams.get("focusTargetElapsed") === "1";
+  const focusTargetTodoId = searchParams.get("todoId");
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
   const isRoutineImportRoute = normalizedPathname === "/date-tasks/routines";
   const isRoutineCreateRoute = normalizedPathname === "/date-tasks/routines/new";
@@ -149,6 +151,8 @@ export function DateTodosRoutePage({
     <DateTodosRouteProvider
       dateKey={resolvedDateKey}
       restFinishedRequested={restFinishedRequested}
+      focusTargetElapsedRequested={focusTargetElapsedRequested}
+      focusTargetTodoId={focusTargetTodoId}
       onOpenMemo={openMemoRoute}
       onOpenTaskPicker={openTaskPickerRoute}
       onOpenRoutineImport={openRoutineImportRoute}

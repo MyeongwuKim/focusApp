@@ -4,7 +4,12 @@ import { env } from "../../config/env.js";
 import { computeNextReminderAtAfterRun } from "./notification-reminder-schedule.js";
 
 type ReminderTone = "soft" | "balanced" | "firm";
-type ReminderKind = "focus_start" | "empty_todo_start" | "incomplete_todo" | "scheduled_todo_start";
+type ReminderKind =
+  | "focus_start"
+  | "empty_todo_start"
+  | "incomplete_todo"
+  | "scheduled_todo_start"
+  | "focus_target_elapsed";
 type TodoReminderStatus = "not_started" | "in_progress" | "paused" | "done";
 
 type RunNotificationBatchInput = {
@@ -62,8 +67,16 @@ const SCHEDULED_START_COPY_BY_TONE: Record<ReminderTone, string> = {
   firm: "설정해둔 시작 시간이 됐습니다. 지금 바로 시작해 주세요.",
 };
 
+const TARGET_FOCUS_ELAPSED_COPY_BY_TONE: Record<ReminderTone, string> = {
+  soft: "설정한 집중 시간이 끝났어요. 더 이어갈지, 완료할지 정리해볼까요?",
+  balanced: "설정한 집중 시간이 끝났어요. 이어가기 또는 완료를 선택해 주세요.",
+  firm: "설정한 집중 시간이 지났습니다. 이어가거나 완료 처리해 주세요.",
+};
+
 const sentScheduledReminderMap = new Map<string, number>();
 const SCHEDULED_REMINDER_DEDUPE_TTL_MS = 10 * 60 * 1000;
+const sentTargetFocusElapsedReminderMap = new Map<string, number>();
+const TARGET_FOCUS_ELAPSED_DEDUPE_TTL_MS = 45 * 60 * 1000;
 
 export async function runNotificationBatch(input: RunNotificationBatchInput): Promise<NotificationBatchResult> {
   const now = input.now ?? new Date();
@@ -206,6 +219,77 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       });
     };
     const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
+    const dueTargetFocusTodos = pickDueTargetFocusTodos({
+      todos,
+      now,
+      scheduleWindowMs,
+    });
+
+    if (dueTargetFocusTodos.length > 0 && settings.typeFocusStart) {
+      const dedupeTargets = dueTargetFocusTodos.filter((target) => {
+        const reachedBucket = Math.floor(target.reachedAtMs / 60000);
+        const dedupeKey = `${settings.userId}:${target.todoId}:${target.targetFocusMinutes}:${reachedBucket}`;
+        const sentAt = sentTargetFocusElapsedReminderMap.get(dedupeKey);
+        return !(sentAt && now.getTime() - sentAt <= TARGET_FOCUS_ELAPSED_DEDUPE_TTL_MS);
+      });
+
+      if (dedupeTargets.length === 0) {
+        await scheduleNextReminder();
+        continue;
+      }
+
+      const topTarget = dedupeTargets[0];
+      const targetLabel = topTarget.label;
+      const targetFocusMinutes = topTarget.targetFocusMinutes;
+      const targetCountSuffix =
+        dedupeTargets.length > 1 ? ` 외 ${dedupeTargets.length - 1}개 할일` : "";
+      const targetBodyBase = `${targetLabel}${targetCountSuffix}, ${targetFocusMinutes}분 목표`;
+      const targetBody = `${targetBodyBase}. ${TARGET_FOCUS_ELAPSED_COPY_BY_TONE[tone]}`;
+      const targetPath = `/calendar?sheet=1&date=${nowInTimezone.dateKey}&focusTargetElapsed=1&todoId=${encodeURIComponent(topTarget.todoId)}`;
+
+      deliveries.push({
+        userId: settings.userId,
+        kind: "focus_target_elapsed",
+        title: "목표 집중시간 도달",
+        body: targetBody,
+        tone,
+      });
+
+      if (!dryRun) {
+        const tokens = await input.prisma.pushDeviceToken.findMany({
+          where: { userId: settings.userId, isActive: true },
+          select: { pushToken: true },
+        });
+        attemptedTokenCount += tokens.length;
+        if (tokens.length > 0) {
+          await sendExpoPushMessages({
+            entries: tokens.map((token) => ({
+              pushToken: token.pushToken,
+              title: "목표 집중시간 도달",
+              body: targetBody,
+              data: {
+                kind: "focus_target_elapsed",
+                taskLabel: targetLabel,
+                targetFocusMinutes,
+                todoId: topTarget.todoId,
+                dateKey: nowInTimezone.dateKey,
+                targetPath,
+              },
+            })),
+            prisma: input.prisma,
+          });
+          dedupeTargets.forEach((target) => {
+            const reachedBucket = Math.floor(target.reachedAtMs / 60000);
+            const dedupeKey = `${settings.userId}:${target.todoId}:${target.targetFocusMinutes}:${reachedBucket}`;
+            sentTargetFocusElapsedReminderMap.set(dedupeKey, now.getTime());
+          });
+        }
+      }
+
+      await scheduleNextReminder();
+      continue;
+    }
+
     const scheduledTargets = pickDueScheduledTodos({
       todos,
       now,
@@ -638,6 +722,8 @@ type TodoReminderEntry = {
   pausedAt?: Date | null;
   completedAt?: Date | null;
   scheduledStartAt?: Date | null;
+  targetFocusMinutes?: number | null;
+  deviationSeconds?: number | null;
   content?: string | null;
   titleSnapshot?: string | null;
   order?: number;
@@ -703,6 +789,53 @@ function pickDueScheduledTodos(input: {
       label,
       todoId: todo.id ?? label,
       scheduledAtMs: scheduledAt,
+    });
+  }
+
+  return matches;
+}
+
+function pickDueTargetFocusTodos(input: {
+  todos: TodoReminderEntry[];
+  now: Date;
+  scheduleWindowMs: number;
+}) {
+  const sorted = [...input.todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const matches: Array<{ label: string; todoId: string; reachedAtMs: number; targetFocusMinutes: number }> = [];
+
+  for (const todo of sorted) {
+    if (todo.done || todo.completedAt || !todo.startedAt || todo.pausedAt) {
+      continue;
+    }
+
+    const targetFocusMinutes =
+      typeof todo.targetFocusMinutes === "number" && Number.isFinite(todo.targetFocusMinutes)
+        ? Math.floor(todo.targetFocusMinutes)
+        : null;
+    if (!targetFocusMinutes || targetFocusMinutes < 30) {
+      continue;
+    }
+
+    const startedAtMs = new Date(todo.startedAt).getTime();
+    if (!Number.isFinite(startedAtMs)) {
+      continue;
+    }
+
+    const deviationSeconds =
+      typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
+        ? Math.max(Math.floor(todo.deviationSeconds), 0)
+        : 0;
+    const reachedAtMs = startedAtMs + (targetFocusMinutes * 60 + deviationSeconds) * 1000;
+    const diffMs = input.now.getTime() - reachedAtMs;
+    if (diffMs < 0 || diffMs > input.scheduleWindowMs) {
+      continue;
+    }
+
+    matches.push({
+      label: getTodoLabel(todo),
+      todoId: todo.id ?? getTodoLabel(todo),
+      reachedAtMs,
+      targetFocusMinutes,
     });
   }
 

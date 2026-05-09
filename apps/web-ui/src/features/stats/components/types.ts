@@ -3,7 +3,7 @@ export type CountBarDatum = {
   tooltipLabel: string;
   done: number;
   incomplete: number;
-  deviationMin: number;
+  resumeCount: number;
   doneLabels: string[];
   incompleteLabels: string[];
 };
@@ -12,6 +12,5 @@ export type TimeBarDatum = {
   label: string;
   tooltipLabel: string;
   focusMin: number;
-  deviationMin: number;
   restMin: number;
 };

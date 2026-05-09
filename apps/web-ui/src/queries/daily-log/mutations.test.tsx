@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as dailyLogApi from "../../api/dailyLogApi";
 import { taskCollectionsQueryKey } from "../task-collection/queries";
 import {
-  useAddTodoDeviationToDailyLogMutation,
   useAddTodosToDailyLogMutation,
   useCompleteTodoFromDailyLogMutation,
   usePauseTodoFromDailyLogMutation,
@@ -27,7 +26,6 @@ vi.mock("../../api/dailyLogApi", async () => {
     resumeTodoFromDailyLog: vi.fn(),
     completeTodoFromDailyLog: vi.fn(),
     resetTodoFromDailyLog: vi.fn(),
-    addTodoDeviationToDailyLog: vi.fn(),
     reorderTodosFromDailyLog: vi.fn(),
     updateTodoActualFocusFromDailyLog: vi.fn(),
     updateTodoScheduleFromDailyLog: vi.fn(),
@@ -78,28 +76,34 @@ function buildDailyLogDetail(input?: {
   restStartedAt?: string | null;
 }): DailyLogDetail {
   const dateKey = input?.dateKey ?? "2026-04-25";
+  const baseTodo: DailyLogDetail["todos"][number] = {
+    id: "todo-1",
+    taskId: "task-1",
+    titleSnapshot: "할일 1",
+    content: "할일 1",
+    done: false,
+    order: 0,
+    startedAt: "2026-04-25T08:00:00.000Z",
+    scheduledStartAt: null,
+    targetFocusMinutes: null,
+    pausedAt: null,
+    completedAt: null,
+    deviationSeconds: 0,
+    resumeCount: 0,
+    actualFocusSeconds: null,
+  };
+  const mergedTodo: DailyLogDetail["todos"][number] = {
+    ...baseTodo,
+    ...input?.todo,
+    targetFocusMinutes: input?.todo?.targetFocusMinutes ?? baseTodo.targetFocusMinutes,
+  };
+
   return {
     dateKey,
     memo: null,
     restAccumulatedSeconds: input?.restAccumulatedSeconds ?? 0,
     restStartedAt: input?.restStartedAt ?? null,
-    todos: [
-      {
-        id: "todo-1",
-        taskId: "task-1",
-        titleSnapshot: "할일 1",
-        content: "할일 1",
-        done: false,
-        order: 0,
-        startedAt: "2026-04-25T08:00:00.000Z",
-        scheduledStartAt: null,
-        pausedAt: null,
-        completedAt: null,
-        deviationSeconds: 0,
-        actualFocusSeconds: null,
-        ...input?.todo,
-      },
-    ],
+    todos: [mergedTodo],
   };
 }
 
@@ -613,88 +617,4 @@ describe("daily-log mutations optimistic cache flow", () => {
     });
   });
 
-  it("이탈시간 추가 시 서버 응답 전에도 낙관적 캐시를 반영한다", async () => {
-    const dateKey = "2026-04-25";
-    const initialLog = buildDailyLogDetail({
-      dateKey,
-      todo: {
-        deviationSeconds: 10,
-      },
-    });
-    const successLog = buildDailyLogDetail({
-      dateKey,
-      todo: {
-        deviationSeconds: 130,
-      },
-    });
-    const deferred = createDeferred<DailyLogDetail>();
-
-    vi.mocked(dailyLogApi.addTodoDeviationToDailyLog).mockReturnValueOnce(deferred.promise);
-
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), initialLog);
-    queryClient.setQueryData(statsDailyDetailQueryKey(dateKey), initialLog);
-
-    const { result } = renderHook(() => useAddTodoDeviationToDailyLogMutation(), {
-      wrapper: createWrapper(queryClient),
-    });
-
-    const mutationPromise = result.current.mutateAsync({
-      dateKey,
-      todoId: "todo-1",
-      seconds: 120,
-    });
-
-    await waitFor(() => {
-      const optimisticLog = queryClient.getQueryData<DailyLogDetail>(dailyLogByDateQueryKey(dateKey));
-      const optimisticStats = queryClient.getQueryData<DailyLogDetail>(statsDailyDetailQueryKey(dateKey));
-      expect(optimisticLog?.todos[0]?.deviationSeconds).toBe(130);
-      expect(optimisticStats?.todos[0]?.deviationSeconds).toBe(130);
-    });
-
-    deferred.resolve(successLog);
-    await expect(mutationPromise).resolves.toEqual(successLog);
-  });
-
-  it("이탈시간 추가 실패 시 낙관적 캐시를 이전 상태로 원복한다", async () => {
-    const dateKey = "2026-04-25";
-    const initialLog = buildDailyLogDetail({
-      dateKey,
-      todo: {
-        deviationSeconds: 10,
-      },
-    });
-    const deferred = createDeferred<DailyLogDetail>();
-
-    vi.mocked(dailyLogApi.addTodoDeviationToDailyLog).mockReturnValueOnce(deferred.promise);
-
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), initialLog);
-    queryClient.setQueryData(statsDailyDetailQueryKey(dateKey), initialLog);
-
-    const { result } = renderHook(() => useAddTodoDeviationToDailyLogMutation(), {
-      wrapper: createWrapper(queryClient),
-    });
-
-    const mutationPromise = result.current.mutateAsync({
-      dateKey,
-      todoId: "todo-1",
-      seconds: 120,
-    });
-
-    await waitFor(() => {
-      const optimisticLog = queryClient.getQueryData<DailyLogDetail>(dailyLogByDateQueryKey(dateKey));
-      expect(optimisticLog?.todos[0]?.deviationSeconds).toBe(130);
-    });
-
-    deferred.reject(new Error("network failed"));
-    await expect(mutationPromise).rejects.toThrow("network failed");
-
-    await waitFor(() => {
-      const rolledBackLog = queryClient.getQueryData<DailyLogDetail>(dailyLogByDateQueryKey(dateKey));
-      const rolledBackStats = queryClient.getQueryData<DailyLogDetail>(statsDailyDetailQueryKey(dateKey));
-      expect(rolledBackLog?.todos[0]?.deviationSeconds).toBe(10);
-      expect(rolledBackStats?.todos[0]?.deviationSeconds).toBe(10);
-    });
-  });
 });

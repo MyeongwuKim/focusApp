@@ -36,6 +36,7 @@ type DailyLogPreview = {
     order: number;
     startedAt: string | null;
     scheduledStartAt: string | null;
+    targetFocusMinutes: number | null;
     pausedAt: string | null;
     completedAt: string | null;
     actualFocusSeconds: number | null;
@@ -92,6 +93,7 @@ function mapPreviewLogToTaskItems(dateKey: string, log: DailyLogPreview): TaskIt
     .map((todo) => {
       const startedAt = toEpochMillis(todo.startedAt);
       const scheduledStartAt = toEpochMillis(todo.scheduledStartAt);
+      const targetFocusMinutes = typeof todo.targetFocusMinutes === "number" ? Math.floor(todo.targetFocusMinutes) : null;
       const completedAt = toEpochMillis(todo.completedAt);
       const completedDurationMs = todo.done ? (todo.actualFocusSeconds ?? 0) * 1000 : null;
       const status: TaskItem["status"] = todo.done
@@ -111,6 +113,7 @@ function mapPreviewLogToTaskItems(dateKey: string, log: DailyLogPreview): TaskIt
         accumulatedMs: completedDurationMs ?? 0,
         startedAt: status === "in_progress" ? startedAt : null,
         scheduledStartAt,
+        targetFocusMinutes,
         completedAt: status === "done" ? completedAt : null,
         completedDurationMs,
       };

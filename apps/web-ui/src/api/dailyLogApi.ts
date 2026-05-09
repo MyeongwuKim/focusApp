@@ -61,9 +61,11 @@ const DAILY_LOG_BY_DATE_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -86,9 +88,11 @@ const ADD_TODOS_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -111,9 +115,11 @@ const DELETE_TODO_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -136,9 +142,11 @@ const START_TODO_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -161,9 +169,11 @@ const PAUSE_TODO_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -186,9 +196,11 @@ const RESUME_TODO_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -211,9 +223,11 @@ const COMPLETE_TODO_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -236,34 +250,11 @@ const RESET_TODO_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
-        actualFocusSeconds
-      }
-    }
-  }
-`;
-
-const ADD_DEVIATION_QUERY = /* GraphQL */ `
-  mutation AddDeviation($input: AddDeviationInput!) {
-    addDeviation(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        pausedAt
-        completedAt
-        deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -286,9 +277,11 @@ const REORDER_TODOS_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -311,9 +304,11 @@ const UPDATE_TODO_ACTUAL_FOCUS_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -336,9 +331,38 @@ const UPDATE_TODO_SCHEDULE_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
+        actualFocusSeconds
+      }
+    }
+  }
+`;
+
+const UPDATE_TODO_TARGET_FOCUS_QUERY = /* GraphQL */ `
+  mutation UpdateTodoTargetFocus($input: UpdateTodoTargetFocusInput!) {
+    updateTodoTargetFocus(input: $input) {
+      dateKey
+      memo
+      restAccumulatedSeconds
+      restStartedAt
+      todos {
+        id
+        taskId
+        titleSnapshot
+        content
+        done
+        order
+        startedAt
+        scheduledStartAt
+        targetFocusMinutes
+        pausedAt
+        completedAt
+        deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -361,9 +385,11 @@ const START_REST_SESSION_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -386,9 +412,11 @@ const STOP_REST_SESSION_QUERY = /* GraphQL */ `
         order
         startedAt
         scheduledStartAt
+        targetFocusMinutes
         pausedAt
         completedAt
         deviationSeconds
+        resumeCount
         actualFocusSeconds
       }
     }
@@ -404,9 +432,11 @@ type DailyLogTodo = {
   order: number;
   startedAt: string | null;
   scheduledStartAt: string | null;
+  targetFocusMinutes: number | null;
   pausedAt: string | null;
   completedAt: string | null;
   deviationSeconds: number;
+  resumeCount: number;
   actualFocusSeconds: number | null;
 };
 
@@ -485,10 +515,6 @@ type ResetTodoMutation = {
   resetTodo: DailyLogPayload;
 };
 
-type AddDeviationMutation = {
-  addDeviation: DailyLogPayload;
-};
-
 type ReorderTodosMutation = {
   reorderTodos: DailyLogPayload;
 };
@@ -499,6 +525,10 @@ type UpdateTodoActualFocusMutation = {
 
 type UpdateTodoScheduleMutation = {
   updateTodoSchedule: DailyLogPayload;
+};
+
+type UpdateTodoTargetFocusMutation = {
+  updateTodoTargetFocus: DailyLogPayload;
 };
 
 type StartRestSessionMutation = {
@@ -820,37 +850,6 @@ export async function resetTodoFromDailyLog(input: { dateKey: string; todoId: st
   return next;
 }
 
-export async function addTodoDeviationToDailyLog(input: {
-  dateKey: string;
-  todoId: string;
-  seconds: number;
-}) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: ADD_DEVIATION_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Add deviation failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<AddDeviationMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL addDeviation failed");
-  }
-
-  const next = result.data?.addDeviation;
-  if (!next) {
-    throw new Error("GraphQL addDeviation failed");
-  }
-  syncInProgressTodoSessionToNative(next);
-  return next;
-}
-
 export async function reorderTodosFromDailyLog(input: {
   dateKey: string;
   todoIds: string[];
@@ -937,6 +936,36 @@ export async function updateTodoScheduleFromDailyLog(input: {
   const next = result.data?.updateTodoSchedule;
   if (!next) {
     throw new Error("GraphQL updateTodoSchedule failed");
+  }
+  return next;
+}
+
+export async function updateTodoTargetFocusFromDailyLog(input: {
+  dateKey: string;
+  todoId: string;
+  targetFocusMinutes: number | null;
+}) {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: JSON.stringify({
+      query: UPDATE_TODO_TARGET_FOCUS_QUERY,
+      variables: { input },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Update todo target focus failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<UpdateTodoTargetFocusMutation>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL updateTodoTargetFocus failed");
+  }
+
+  const next = result.data?.updateTodoTargetFocus;
+  if (!next) {
+    throw new Error("GraphQL updateTodoTargetFocus failed");
   }
   return next;
 }

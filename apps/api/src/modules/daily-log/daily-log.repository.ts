@@ -17,9 +17,11 @@ export interface TodoItemRecord {
   createdAt: Date;
   startedAt: Date | null;
   scheduledStartAt: Date | null;
+  targetFocusMinutes?: number | null;
   pausedAt: Date | null;
   completedAt: Date | null;
   deviationSeconds: number;
+  resumeCount: number;
   actualFocusSeconds: number | null;
 }
 

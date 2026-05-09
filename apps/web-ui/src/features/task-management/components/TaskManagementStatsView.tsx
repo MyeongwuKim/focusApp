@@ -101,12 +101,6 @@ export function TaskManagementStatsView({ forcedSearch, isActive = true }: TaskM
     { label: "1년", total: all1y.time.totalFocus, task: task1y.time.totalFocus },
   ];
 
-  const deviationRows = [
-    { label: "7일", total: all7.time.totalDeviation, task: task7.time.totalDeviation },
-    { label: "30일", total: all30.time.totalDeviation, task: task30.time.totalDeviation },
-    { label: "1년", total: all1y.time.totalDeviation, task: task1y.time.totalDeviation },
-  ];
-
   return (
     <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-base-300 bg-base-100/80 p-4 md:p-5">
       <div className="space-y-5">
@@ -130,19 +124,18 @@ export function TaskManagementStatsView({ forcedSearch, isActive = true }: TaskM
 
             {tab === "summary" ? (
               <TaskStatsSummaryTab
+                taskLabel={taskLabel}
                 recentFocus={{
                   days7: task7.time.totalFocus,
                   days30: task30.time.totalFocus,
                   year1: task1y.time.totalFocus,
                 }}
                 focusRows={focusRows}
-                deviationRows={deviationRows}
               />
             ) : (
               <TaskStatsTrendTab
                 focusMinutes={trendTask.time.totalFocus}
-                deviationMinutes={trendTask.time.totalDeviation}
-                deviationRate={trendTask.deviationRate}
+                resumeCount={trendTask.count.resumeCount}
                 useMonthlyBar={trendTask.time.useMonthlyBar}
                 data={trendTask.time.data}
               />

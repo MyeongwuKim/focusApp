@@ -102,6 +102,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       key: string;
       done: number;
       incomplete: number;
+      resumeCount: number;
       doneLabels: string[];
       incompleteLabels: string[];
     }> = [];
@@ -115,10 +116,14 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         .sort((a, b) => a.order - b.order);
       const doneLabels = sortedTodos.filter((todo) => todo.done).map((todo) => todo.content);
       const incompleteLabels = sortedTodos.filter((todo) => !todo.done).map((todo) => todo.content);
+      const resumeCount = (detailMap.get(key)?.todos ?? [])
+        .filter((todo) => matchesTask(todo, taskId, taskLabel))
+        .reduce((acc, todo) => acc + Math.max(todo.resumeCount ?? 0, 0), 0);
       dailySeries.push({
         key,
         done: doneLabels.length,
         incomplete: incompleteLabels.length,
+        resumeCount,
         doneLabels,
         incompleteLabels,
       });
@@ -128,13 +133,23 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
     const incompleteTodos = dailySeries.reduce((acc, item) => acc + item.incomplete, 0);
     const totalTodos = doneTodos + incompleteTodos;
 
-    const monthlyMap = new Map<string, { done: number; incomplete: number; doneLabels: string[]; incompleteLabels: string[] }>();
+    const monthlyMap = new Map<
+      string,
+      { done: number; incomplete: number; resumeCount: number; doneLabels: string[]; incompleteLabels: string[] }
+    >();
     for (const item of dailySeries) {
       const monthKey = item.key.slice(0, 7);
-      const prev = monthlyMap.get(monthKey) ?? { done: 0, incomplete: 0, doneLabels: [], incompleteLabels: [] };
+      const prev = monthlyMap.get(monthKey) ?? {
+        done: 0,
+        incomplete: 0,
+        resumeCount: 0,
+        doneLabels: [],
+        incompleteLabels: [],
+      };
       monthlyMap.set(monthKey, {
         done: prev.done + item.done,
         incomplete: prev.incomplete + item.incomplete,
+        resumeCount: prev.resumeCount + item.resumeCount,
         doneLabels: [...prev.doneLabels, ...item.doneLabels],
         incompleteLabels: [...prev.incompleteLabels, ...item.incompleteLabels],
       });
@@ -163,6 +178,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       incompleteRate: totalTodos > 0 ? (incompleteTodos / totalTodos) * 100 : 0,
       doneTodos,
       incompleteTodos,
+      resumeCount: dailySeries.reduce((acc, item) => acc + item.resumeCount, 0),
       frequentIncompleteTasks,
       donePercent,
       incompletePercent: clampPercent(100 - donePercent),
@@ -170,10 +186,10 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       monthlySeries,
       useMonthlyBar: rangeDays > 90,
     };
-  }, [filteredLogs, rangeDays, start, taskId, taskLabel]);
+  }, [detailMap, filteredLogs, rangeDays, start, taskId, taskLabel]);
 
   const timeStats = useMemo(() => {
-    const dailySeries: Array<{ key: string; focusMin: number; deviationMin: number; restMin: number }> = [];
+    const dailySeries: Array<{ key: string; focusMin: number; restMin: number }> = [];
 
     for (let i = 0; i < rangeDays; i += 1) {
       const day = addDays(start, i);
@@ -181,13 +197,10 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       const detail = detailMap.get(key);
 
       let focusSeconds = 0;
-      let deviationSeconds = 0;
       let restSeconds = taskId ? 0 : Math.max(detail?.restAccumulatedSeconds ?? 0, 0);
 
       const dayEndMs = parseInputDate(key).getTime() + 24 * 60 * 60 * 1000 - 1;
       for (const todo of detail?.todos?.filter((item) => matchesTask(item, taskId, taskLabel)) ?? []) {
-        deviationSeconds += Math.max(todo.deviationSeconds ?? 0, 0);
-
         if (todo.done) {
           focusSeconds += Math.max(todo.actualFocusSeconds ?? 0, 0);
           continue;
@@ -203,7 +216,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         const tentativeEnd = pausedAt ?? completedAt ?? (key === todayKey ? nowMs : dayEndMs);
         const endMs = Math.min(tentativeEnd, dayEndMs);
         const elapsedSeconds = Math.max(Math.floor((endMs - startedAt) / 1000), 0);
-        focusSeconds += Math.max(elapsedSeconds - Math.max(todo.deviationSeconds ?? 0, 0), 0);
+        focusSeconds += elapsedSeconds;
       }
 
       if (!taskId && detail?.restStartedAt && key === todayKey) {
@@ -216,25 +229,22 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       dailySeries.push({
         key,
         focusMin: Math.floor((focusSeconds * 1000) / 60000),
-        deviationMin: Math.floor((deviationSeconds * 1000) / 60000),
         restMin: Math.floor((restSeconds * 1000) / 60000),
       });
     }
 
-    const monthlyMap = new Map<string, { focusMin: number; deviationMin: number; restMin: number }>();
+    const monthlyMap = new Map<string, { focusMin: number; restMin: number }>();
     for (const item of dailySeries) {
       const monthKey = item.key.slice(0, 7);
-      const prev = monthlyMap.get(monthKey) ?? { focusMin: 0, deviationMin: 0, restMin: 0 };
+      const prev = monthlyMap.get(monthKey) ?? { focusMin: 0, restMin: 0 };
       monthlyMap.set(monthKey, {
         focusMin: prev.focusMin + item.focusMin,
-        deviationMin: prev.deviationMin + item.deviationMin,
         restMin: prev.restMin + item.restMin,
       });
     }
 
     return {
       totalFocus: dailySeries.reduce((acc, item) => acc + item.focusMin, 0),
-      totalDeviation: dailySeries.reduce((acc, item) => acc + item.deviationMin, 0),
       totalRest: dailySeries.reduce((acc, item) => acc + item.restMin, 0),
       dailySeries,
       monthlySeries: [...monthlyMap.entries()].map(([key, value]) => ({ key, ...value })),
@@ -245,15 +255,13 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
   const timeBars: TimeBarDatum[] = timeStats.useMonthlyBar
     ? timeStats.monthlySeries.map((item) => ({ label: item.key.slice(5), tooltipLabel: item.key, ...item }))
     : timeStats.dailySeries.map((item) => ({ label: item.key.slice(5), tooltipLabel: item.key, ...item }));
-
-  const timeByKey = new Map(timeBars.map((item) => [item.tooltipLabel, item]));
   const countBars: CountBarDatum[] = countStats.useMonthlyBar
     ? countStats.monthlySeries.map((item) => ({
         label: item.key.slice(5),
         tooltipLabel: item.key,
         done: item.done,
         incomplete: item.incomplete,
-        deviationMin: timeByKey.get(item.key)?.deviationMin ?? 0,
+        resumeCount: item.resumeCount,
         doneLabels: item.doneLabels,
         incompleteLabels: item.incompleteLabels,
       }))
@@ -262,7 +270,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         tooltipLabel: item.key,
         done: item.done,
         incomplete: item.incomplete,
-        deviationMin: timeByKey.get(item.key)?.deviationMin ?? 0,
+        resumeCount: item.resumeCount,
         doneLabels: item.doneLabels,
         incompleteLabels: item.incompleteLabels,
       }));
@@ -274,8 +282,8 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         key: countItem.key,
         done: countItem.done,
         incomplete: countItem.incomplete,
+        resumeCount: countItem.resumeCount,
         focusMin: timeItem?.focusMin ?? 0,
-        deviationMin: timeItem?.deviationMin ?? 0,
         restMin: timeItem?.restMin ?? 0,
       };
     });
@@ -284,7 +292,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
     const hasFocus = (item: (typeof series)[number]) => item.focusMin > 0;
     const hasIncomplete = (item: (typeof series)[number]) => item.incomplete > 0;
     const isActive = (item: (typeof series)[number]) =>
-      hasTodo(item) || item.focusMin > 0 || item.deviationMin > 0 || item.restMin > 0;
+      hasTodo(item) || item.focusMin > 0 || item.restMin > 0;
 
     const activeDays = series.filter(isActive);
     const firstActiveDate = activeDays.length > 0 ? activeDays[0]?.key ?? null : null;
@@ -307,14 +315,42 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
     };
   }, [countStats.dailySeries, countStats.doneTodos, countStats.incompleteTodos, rangeDays, timeStats.dailySeries]);
 
+  const weeklyReview = useMemo(() => {
+    const combined = countStats.dailySeries.map((countItem, index) => {
+      const timeItem = timeStats.dailySeries[index];
+      return {
+        key: countItem.key,
+        done: countItem.done,
+        incomplete: countItem.incomplete,
+        resumeCount: countItem.resumeCount,
+        focusMin: timeItem?.focusMin ?? 0,
+      };
+    });
+    const latest7 = combined.slice(-7);
+    const goodDays = latest7.filter(
+      (item) => item.done >= 1 && item.focusMin >= 25 && item.incomplete <= item.done && item.resumeCount <= 2
+    ).length;
+    const roughDays = latest7.filter(
+      (item) =>
+        item.incomplete > item.done || (item.incomplete > 0 && item.focusMin === 0) || item.resumeCount >= 4
+    ).length;
+
+    return {
+      startDate: latest7[0]?.key ?? null,
+      endDate: latest7[latest7.length - 1]?.key ?? null,
+      goodDays,
+      roughDays,
+    };
+  }, [countStats.dailySeries, timeStats.dailySeries]);
+
   return {
     count: {
       completionRate: countStats.completionRate,
       incompleteRate: countStats.incompleteRate,
       doneTodos: countStats.doneTodos,
       incompleteTodos: countStats.incompleteTodos,
+      resumeCount: countStats.resumeCount,
       frequentIncompleteTasks: countStats.frequentIncompleteTasks,
-      deviationMinutes: timeStats.totalDeviation,
       useMonthlyBar: countStats.useMonthlyBar,
       donePercent: countStats.donePercent,
       incompletePercent: countStats.incompletePercent,
@@ -322,15 +358,11 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
     },
     time: {
       totalFocus: timeStats.totalFocus,
-      totalDeviation: timeStats.totalDeviation,
       totalRest: timeStats.totalRest,
       useMonthlyBar: timeStats.useMonthlyBar,
       data: timeBars,
     },
-    deviationRate:
-      timeStats.totalFocus + timeStats.totalDeviation > 0
-        ? (timeStats.totalDeviation / (timeStats.totalFocus + timeStats.totalDeviation)) * 100
-        : 0,
+    weeklyReview,
     signal: activitySignal,
     isFetching:
       monthlyLogsQuery.dailyLogQueries.some((query) => query.isFetching) ||

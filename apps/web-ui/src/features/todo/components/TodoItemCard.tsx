@@ -9,6 +9,7 @@ import {
   FiPauseCircle,
   FiPlay,
   FiPlayCircle,
+  FiTarget,
 } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import type { TaskItem } from "../types";
@@ -182,6 +183,12 @@ export function TodoItemCard({
           <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-info/85">
             <FiClock size={11} />
             {formatScheduledTime(item.scheduledStartAt)}
+          </span>
+        ) : null}
+        {item.targetFocusMinutes ? (
+          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-warning/85">
+            <FiTarget size={11} />
+            {item.targetFocusMinutes}분
           </span>
         ) : null}
         <Button

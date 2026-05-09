@@ -37,6 +37,8 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   const isSheetRequestedFromUrl = routeSearchParams.get("sheet") === "1";
   const requestedDateKeyFromUrl = routeSearchParams.get("date");
   const restFinishedRequestedFromUrl = routeSearchParams.get("restFinished") === "1";
+  const focusTargetElapsedRequestedFromUrl = routeSearchParams.get("focusTargetElapsed") === "1";
+  const focusTargetTodoIdFromUrl = routeSearchParams.get("todoId");
   const lastAppliedSearchRef = useRef<string | null>(null);
 
   const monthKeys = useMemo(
@@ -134,6 +136,10 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
     const nextHashPath = isDateSheetExpanded
       ? `/calendar?sheet=1&date=${encodeURIComponent(resolvedDateKey)}${
           restFinishedRequestedFromUrl ? "&restFinished=1" : ""
+        }${
+          focusTargetElapsedRequestedFromUrl ? "&focusTargetElapsed=1" : ""
+        }${
+          focusTargetTodoIdFromUrl ? `&todoId=${encodeURIComponent(focusTargetTodoIdFromUrl)}` : ""
         }`
       : "/calendar";
     const currentHashPath = window.location.hash.startsWith("#")
@@ -146,19 +152,30 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
 
     const nextUrl = `${window.location.pathname}${window.location.search}#${nextHashPath}`;
     window.history.replaceState(window.history.state, "", nextUrl);
-  }, [isDateSheetExpanded, isOverlayActive, restFinishedRequestedFromUrl, selectedDateKey]);
+  }, [
+    isDateSheetExpanded,
+    isOverlayActive,
+    restFinishedRequestedFromUrl,
+    focusTargetElapsedRequestedFromUrl,
+    focusTargetTodoIdFromUrl,
+    selectedDateKey,
+  ]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <PageHeader route={MAIN_ROUTE} />
-      <CalendarPage
-        logsByDate={logsByDate}
-        onRequestOpenDateTasksSheet={() => setIsDateSheetExpanded(true)}
-      />
+      <div className="flex min-h-0 flex-1 flex-col pb-[calc(5.9rem+env(safe-area-inset-bottom))]">
+        <CalendarPage
+          logsByDate={logsByDate}
+          onRequestOpenDateTasksSheet={() => setIsDateSheetExpanded(true)}
+        />
+      </div>
       <DateTasksBottomSheet
         isVisible={!isOverlayActive}
         isExpanded={isDateSheetExpanded}
         restFinishedRequested={restFinishedRequestedFromUrl}
+        focusTargetElapsedRequested={focusTargetElapsedRequestedFromUrl}
+        focusTargetTodoId={focusTargetTodoIdFromUrl}
         onExpandedChange={setIsDateSheetExpanded}
       />
     </div>

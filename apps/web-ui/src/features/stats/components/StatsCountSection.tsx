@@ -6,7 +6,7 @@ type StatsCountSectionProps = {
   completionRate: number;
   incompleteRate: number;
   doneTodos: number;
-  deviationMinutes: number;
+  resumeCount: number;
   useMonthlyBar: boolean;
   donePercent: number;
   incompletePercent: number;
@@ -17,7 +17,7 @@ export function StatsCountSection({
   completionRate,
   incompleteRate,
   doneTodos,
-  deviationMinutes,
+  resumeCount,
   useMonthlyBar,
   donePercent,
   incompletePercent,
@@ -33,12 +33,12 @@ export function StatsCountSection({
           { label: "완료율", value: `${completionRate.toFixed(1)}%` },
           { label: "미완료율", value: `${incompleteRate.toFixed(1)}%` },
           { label: "완료 할일", value: doneTodos },
-          { label: "이탈 시간", value: `${deviationMinutes}분` },
+          { label: "재개 횟수", value: `${resumeCount}회` },
         ]}
       />
 
       <StatsCountChart
-        title={useMonthlyBar ? "월별 완료/미완료 + 이탈시간" : "일별 완료/미완료 + 이탈시간"}
+        title={useMonthlyBar ? "월별 완료/미완료 + 재개 추이" : "일별 완료/미완료 + 재개 추이"}
         donePercent={donePercent}
         incompletePercent={incompletePercent}
         data={data}

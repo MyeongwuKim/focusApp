@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import type { TaskItem } from "../types";
 import type { RoutineTemplate } from "../../../api/routineTemplateApi";
 import { useDailyLogMutation, useDailyLogQuery, useRoutineTemplateMutation, useRoutineTemplateQuery } from "../../../queries";
-import { toast, useAppStore } from "../../../stores";
+import { confirm, toast, useAppStore } from "../../../stores";
 import { formatDateKey } from "../../../utils/holidays";
 import { cancelNativeRestNotification, notifyRestFinished, scheduleNativeRestNotification } from "../../../utils/notifications";
 import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
@@ -31,6 +31,7 @@ type DailyLogWithTodos = {
     order: number;
     startedAt: string | null;
     scheduledStartAt: string | null;
+    targetFocusMinutes: number | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
@@ -94,6 +95,12 @@ type DateTodosRouteContextValue = {
   } | null;
   closeEditingScheduledStart: () => void;
   handleSaveScheduledStart: (time: string) => Promise<void>;
+  editingTargetFocus: {
+    taskId: string;
+    initialMinutes: number;
+  } | null;
+  closeEditingTargetFocus: () => void;
+  handleSaveTargetFocus: (minutes: number | null) => Promise<void>;
 };
 
 const DateTodosRouteContext = createContext<DateTodosRouteContextValue | null>(null);
@@ -116,6 +123,7 @@ function mapDailyLogTodosToTaskItems(
     order: number;
     startedAt: string | null;
     scheduledStartAt: string | null;
+    targetFocusMinutes: number | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
@@ -129,6 +137,7 @@ function mapDailyLogTodosToTaskItems(
     .map((todo) => {
       const startedAt = toEpochMillis(todo.startedAt);
       const scheduledStartAt = toEpochMillis(todo.scheduledStartAt);
+      const targetFocusMinutes = typeof todo.targetFocusMinutes === "number" ? Math.floor(todo.targetFocusMinutes) : null;
       const completedAt = toEpochMillis(todo.completedAt);
       const completedDurationMs = todo.done ? (todo.actualFocusSeconds ?? 0) * 1000 : null;
       const status: TaskItem["status"] = todo.done
@@ -148,6 +157,7 @@ function mapDailyLogTodosToTaskItems(
         accumulatedMs: completedDurationMs ?? 0,
         startedAt: status === "in_progress" ? startedAt : null,
         scheduledStartAt,
+        targetFocusMinutes,
         completedAt: status === "done" ? completedAt : null,
         completedDurationMs,
       };
@@ -169,6 +179,7 @@ function isSameTaskItems(a: TaskItem[], b: TaskItem[]) {
       current.accumulatedMs !== next.accumulatedMs ||
       current.startedAt !== next.startedAt ||
       current.scheduledStartAt !== next.scheduledStartAt ||
+      current.targetFocusMinutes !== next.targetFocusMinutes ||
       current.completedAt !== next.completedAt ||
       current.completedDurationMs !== next.completedDurationMs
     ) {
@@ -191,6 +202,8 @@ function reorderTaskItemsByIds(items: TaskItem[], orderedIdsValue: string[]) {
 export function DateTodosRouteProvider({
   dateKey,
   restFinishedRequested = false,
+  focusTargetElapsedRequested = false,
+  focusTargetTodoId = null,
   onOpenMemo,
   onOpenTaskPicker,
   onOpenRoutineImport,
@@ -199,6 +212,8 @@ export function DateTodosRouteProvider({
 }: {
   dateKey: string | null;
   restFinishedRequested?: boolean;
+  focusTargetElapsedRequested?: boolean;
+  focusTargetTodoId?: string | null;
   onOpenMemo?: () => void;
   onOpenTaskPicker?: () => void;
   onOpenRoutineImport?: () => void;
@@ -216,12 +231,19 @@ export function DateTodosRouteProvider({
     taskId: string;
     initialTime: string;
   } | null>(null);
+  const [editingTargetFocus, setEditingTargetFocus] = useState<{
+    taskId: string;
+    initialMinutes: number;
+  } | null>(null);
   const [liveTick, setLiveTick] = useState(0);
   const [activeRestDurationMin, setActiveRestDurationMin] = useState<number | null>(null);
   const [hydratedDateKey, setHydratedDateKey] = useState<string | null>(null);
 
   const pendingRestFinishedAutoStopRef = useRef(false);
   const restFinishedAutoStopInFlightRef = useRef(false);
+  const pendingFocusTargetPromptRef = useRef(false);
+  const focusTargetPromptInFlightRef = useRef(false);
+  const focusTargetPromptKeyRef = useRef<string | null>(null);
   const reorderPersistRequestIdRef = useRef(0);
 
   const { dailyLogByDateQuery: dailyLogQuery } = useDailyLogQuery({ dateKey });
@@ -242,6 +264,7 @@ export function DateTodosRouteProvider({
     reorderTodosMutation,
     updateTodoActualFocusMutation,
     updateTodoScheduleMutation,
+    updateTodoTargetFocusMutation,
     startRestSessionMutation,
     stopRestSessionMutation,
   } = useDailyLogMutation();
@@ -267,6 +290,9 @@ export function DateTodosRouteProvider({
       setActiveRestDurationMin(null);
       pendingRestFinishedAutoStopRef.current = false;
       restFinishedAutoStopInFlightRef.current = false;
+      pendingFocusTargetPromptRef.current = false;
+      focusTargetPromptInFlightRef.current = false;
+      focusTargetPromptKeyRef.current = null;
       setHydratedDateKey(null);
       return;
     }
@@ -275,6 +301,9 @@ export function DateTodosRouteProvider({
     setActiveRestDurationMin(null);
     pendingRestFinishedAutoStopRef.current = false;
     restFinishedAutoStopInFlightRef.current = false;
+    pendingFocusTargetPromptRef.current = false;
+    focusTargetPromptInFlightRef.current = false;
+    focusTargetPromptKeyRef.current = null;
     setHydratedDateKey(null);
   }, [dateKey]);
 
@@ -284,6 +313,20 @@ export function DateTodosRouteProvider({
     }
     pendingRestFinishedAutoStopRef.current = true;
   }, [dateKey, restFinishedRequested]);
+
+  useEffect(() => {
+    if (!dateKey || !focusTargetElapsedRequested || !focusTargetTodoId) {
+      return;
+    }
+
+    const promptKey = `${dateKey}:${focusTargetTodoId}`;
+    if (focusTargetPromptKeyRef.current === promptKey) {
+      return;
+    }
+
+    focusTargetPromptKeyRef.current = promptKey;
+    pendingFocusTargetPromptRef.current = true;
+  }, [dateKey, focusTargetElapsedRequested, focusTargetTodoId]);
 
   useEffect(() => {
     if (!dateKey || !dailyLogQuery.isSuccess) {
@@ -515,10 +558,70 @@ export function DateTodosRouteProvider({
     })();
   }, [dailyLogQuery.isSuccess, dateKey, hydratedDateKey, isRestActive]);
 
+  useEffect(() => {
+    if (!dateKey || !focusTargetTodoId || !pendingFocusTargetPromptRef.current || focusTargetPromptInFlightRef.current) {
+      return;
+    }
+
+    if (!dailyLogQuery.isSuccess || !hydratedDateKey || hydratedDateKey !== dateKey) {
+      return;
+    }
+
+    const target = dateTasksRouteItems.find((item) => item.id === focusTargetTodoId);
+    if (!target || target.status === "done" || target.status === "overdue") {
+      pendingFocusTargetPromptRef.current = false;
+      return;
+    }
+
+    focusTargetPromptInFlightRef.current = true;
+    void (async () => {
+      try {
+        const selected = await confirm({
+          title: "목표 집중시간이 끝났어요",
+          message: `${target.label}을(를) 더 이어갈까요? 아니면 완료 처리할까요?`,
+          buttons: [
+            { label: "이어가기", value: "continue", tone: "neutral" },
+            { label: "완료 처리", value: "complete", tone: "primary" },
+          ],
+        });
+
+        if (selected === "complete") {
+          const nextLog = await completeTodoMutation.mutateAsync({ dateKey, todoId: target.id });
+          applyDailyLog(nextLog);
+          toast.show({
+            type: "positive",
+            title: "완료 처리됨",
+            message: "목표 시간 도달 작업을 완료로 표시했어요.",
+            duration: 1800,
+          });
+        }
+      } catch (error) {
+        const message = getUserFacingErrorMessage(error, "목표 시간 처리 중 오류가 발생했어요.");
+        toast.show({
+          type: "error",
+          title: "처리 실패",
+          message,
+          duration: 2200,
+        });
+      } finally {
+        pendingFocusTargetPromptRef.current = false;
+        focusTargetPromptInFlightRef.current = false;
+      }
+    })();
+  }, [
+    completeTodoMutation,
+    dailyLogQuery.isSuccess,
+    dateKey,
+    dateTasksRouteItems,
+    focusTargetTodoId,
+    hydratedDateKey,
+  ]);
+
   const {
     handleDateTaskAction,
     handleEditActualFocus,
     handleSaveActualFocus,
+    handleSaveTargetFocus,
     handleSaveScheduledStart,
     handleDateAddTasks,
     handleDateTaskMenuAction,
@@ -533,6 +636,8 @@ export function DateTodosRouteProvider({
     setEditingActualFocus,
     editingScheduledStart,
     setEditingScheduledStart,
+    editingTargetFocus,
+    setEditingTargetFocus,
     addTodos: addTodosMutation.mutateAsync,
     deleteTodo: deleteTodoMutation.mutateAsync,
     startTodo: startTodoMutation.mutateAsync,
@@ -542,6 +647,7 @@ export function DateTodosRouteProvider({
     resetTodo: resetTodoMutation.mutateAsync,
     updateTodoActualFocus: updateTodoActualFocusMutation.mutateAsync,
     updateTodoSchedule: updateTodoScheduleMutation.mutateAsync,
+    updateTodoTargetFocus: updateTodoTargetFocusMutation.mutateAsync,
   });
 
   const {
@@ -598,7 +704,7 @@ export function DateTodosRouteProvider({
       const pausedAt = toEpochMillis(todo.pausedAt);
       const endMs = pausedAt ?? nowMs;
       const elapsedSeconds = Math.max(Math.floor((endMs - startedAt) / 1000), 0);
-      return acc + Math.max(elapsedSeconds - Math.max(todo.deviationSeconds, 0), 0);
+      return acc + elapsedSeconds;
     }, 0);
 
     const restAccumulatedSeconds = Math.max(dailyLogQuery.data?.restAccumulatedSeconds ?? 0, 0);
@@ -662,6 +768,9 @@ export function DateTodosRouteProvider({
     editingScheduledStart,
     closeEditingScheduledStart: () => setEditingScheduledStart(null),
     handleSaveScheduledStart,
+    editingTargetFocus,
+    closeEditingTargetFocus: () => setEditingTargetFocus(null),
+    handleSaveTargetFocus,
   };
 
   return <DateTodosRouteContext.Provider value={value}>{children}</DateTodosRouteContext.Provider>;

@@ -1,5 +1,5 @@
 import { type MutableRefObject } from "react";
-import { FiCheckCircle, FiClock, FiRotateCcw, FiTrash2 } from "react-icons/fi";
+import { FiCheckCircle, FiClock, FiRotateCcw, FiTarget, FiTrash2 } from "react-icons/fi";
 import { actionSheet, confirm, toast } from "../../../../stores";
 import { getUserFacingErrorMessage } from "../../../../utils/errorMessage";
 import { formatDateKey } from "../../../../utils/holidays";
@@ -13,6 +13,7 @@ type DailyLogWithTodos = {
     order: number;
     startedAt: string | null;
     scheduledStartAt: string | null;
+    targetFocusMinutes: number | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
@@ -33,6 +34,8 @@ type UseDateTodosTaskActionsParams = {
   setEditingActualFocus: (value: { taskId: string; initialMinutes: number } | null) => void;
   editingScheduledStart: { taskId: string; initialTime: string } | null;
   setEditingScheduledStart: (value: { taskId: string; initialTime: string } | null) => void;
+  editingTargetFocus: { taskId: string; initialMinutes: number } | null;
+  setEditingTargetFocus: (value: { taskId: string; initialMinutes: number } | null) => void;
   addTodos: (input: {
     dateKey: string;
     items: Array<{ content: string; taskId?: string | null; scheduledStartAt?: string | null }>;
@@ -53,6 +56,11 @@ type UseDateTodosTaskActionsParams = {
     todoId: string;
     scheduledStartAt: string | null;
   }) => Promise<DailyLogWithTodos>;
+  updateTodoTargetFocus: (input: {
+    dateKey: string;
+    todoId: string;
+    targetFocusMinutes: number | null;
+  }) => Promise<DailyLogWithTodos>;
 };
 
 export function useDateTodosTaskActions({
@@ -66,6 +74,8 @@ export function useDateTodosTaskActions({
   setEditingActualFocus,
   editingScheduledStart,
   setEditingScheduledStart,
+  editingTargetFocus,
+  setEditingTargetFocus,
   addTodos,
   deleteTodo,
   startTodo,
@@ -75,6 +85,7 @@ export function useDateTodosTaskActions({
   resetTodo,
   updateTodoActualFocus,
   updateTodoSchedule,
+  updateTodoTargetFocus,
 }: UseDateTodosTaskActionsParams) {
   const handleDateTaskAction = (taskId: string, action: DateTaskAction) => {
     if (!dateKey) {
@@ -287,6 +298,60 @@ export function useDateTodosTaskActions({
     }
   };
 
+  const handleEditTargetFocus = (taskId: string) => {
+    const target = items.find((item) => item.id === taskId);
+    if (!target || target.status === "done" || target.status === "overdue") {
+      return;
+    }
+
+    setEditingTargetFocus({
+      taskId,
+      initialMinutes: Math.max(target.targetFocusMinutes ?? 30, 30),
+    });
+  };
+
+  const handleSaveTargetFocus = async (minutes: number | null) => {
+    if (!dateKey || !editingTargetFocus) {
+      return;
+    }
+
+    if (minutes !== null) {
+      if (!Number.isFinite(minutes) || minutes < 30) {
+        toast.show({
+          type: "error",
+          title: "설정 범위 오류",
+          message: "목표 집중시간은 최소 30분부터 설정할 수 있어요.",
+          duration: 2200,
+        });
+        return;
+      }
+    }
+
+    try {
+      const nextLog = await updateTodoTargetFocus({
+        dateKey,
+        todoId: editingTargetFocus.taskId,
+        targetFocusMinutes: minutes === null ? null : Math.floor(minutes),
+      });
+      applyDailyLog(nextLog);
+      setEditingTargetFocus(null);
+      toast.show({
+        type: "positive",
+        title: minutes === null ? "목표시간 해제됨" : "목표시간 설정됨",
+        message: minutes === null ? "목표 집중시간을 제거했어요." : `${Math.floor(minutes)}분 목표로 설정했어요.`,
+        duration: 1800,
+      });
+    } catch (error) {
+      const message = getUserFacingErrorMessage(error, "목표시간 저장 중 오류가 발생했어요.");
+      toast.show({
+        type: "error",
+        title: "설정 실패",
+        message,
+        duration: 2200,
+      });
+    }
+  };
+
   const handleDateAddTasks = async (
     nextItems: Array<{ label: string; taskId?: string | null; scheduledStartAt?: string | null }>
   ) => {
@@ -324,6 +389,8 @@ export function useDateTodosTaskActions({
     const canCompleteFromMenu = target.status === "overdue";
     const canReset = target.status === "in_progress" || target.status === "paused" || target.status === "done";
     const canClearSchedule = Boolean(target.scheduledStartAt);
+    const canSetTargetFocus = target.status !== "done" && target.status !== "overdue";
+    const canClearTargetFocus = canSetTargetFocus && Boolean(target.targetFocusMinutes);
     const resetLabel = "초기화";
     const resetDescription =
       target.status === "done" ? "시작 전 상태로 되돌립니다." : "진행 기록을 초기화하고 시작 전 상태로 되돌립니다.";
@@ -369,6 +436,28 @@ export function useDateTodosTaskActions({
                 tone: "muted" as const,
                 icon: <FiClock size={14} />,
                 description: "설정한 시작시간을 제거합니다.",
+              },
+            ]
+          : []),
+        ...(canSetTargetFocus
+          ? [
+              {
+                label: "목표 집중시간 설정",
+                value: "target_focus",
+                tone: "primary" as const,
+                icon: <FiTarget size={14} />,
+                description: "최소 30분부터 설정할 수 있어요.",
+              },
+            ]
+          : []),
+        ...(canClearTargetFocus
+          ? [
+              {
+                label: "목표 집중시간 해제",
+                value: "clear_target_focus",
+                tone: "muted" as const,
+                icon: <FiTarget size={14} />,
+                description: "설정한 목표시간을 제거합니다.",
               },
             ]
           : []),
@@ -457,6 +546,40 @@ export function useDateTodosTaskActions({
       return;
     }
 
+    if (result === "target_focus") {
+      handleEditTargetFocus(taskId);
+      return;
+    }
+
+    if (result === "clear_target_focus") {
+      if (!dateKey) {
+        return;
+      }
+      try {
+        const nextLog = await updateTodoTargetFocus({
+          dateKey,
+          todoId: taskId,
+          targetFocusMinutes: null,
+        });
+        applyDailyLog(nextLog);
+        toast.show({
+          type: "positive",
+          title: "목표시간 해제됨",
+          message: "설정한 목표 집중시간을 제거했어요.",
+          duration: 1800,
+        });
+      } catch (error) {
+        const message = getUserFacingErrorMessage(error, "목표시간 해제 중 오류가 발생했어요.");
+        toast.show({
+          type: "error",
+          title: "해제 실패",
+          message,
+          duration: 2200,
+        });
+      }
+      return;
+    }
+
     if (result === "delete") {
       if (!dateKey) {
         return;
@@ -496,7 +619,9 @@ export function useDateTodosTaskActions({
   return {
     handleDateTaskAction,
     handleEditActualFocus,
+    handleEditTargetFocus,
     handleSaveActualFocus,
+    handleSaveTargetFocus,
     handleSaveScheduledStart,
     handleDateAddTasks,
     handleDateTaskMenuAction,

@@ -122,11 +122,19 @@ export function TodoProgressFooter({
             : "",
       ].join(" ")}
     >
-      <div className="mb-1.5 flex items-center justify-between text-xs">
-        <span className="font-semibold text-base-content/80">
-          진행률 {summary.completedCount}/{summary.totalCount}
-        </span>
-        <span className="font-semibold text-base-content/70">총 {summary.totalMinutes}분</span>
+      <div className="mb-2 grid grid-cols-3 gap-1.5">
+        <div className="rounded-lg border border-base-300/70 bg-base-100/70 px-2 py-1.5 text-center">
+          <p className="m-0 text-[10px] text-base-content/60">오늘 한 일</p>
+          <p className="m-0 mt-0.5 text-sm font-semibold text-base-content/90">{summary.completedCount}개</p>
+        </div>
+        <div className="rounded-lg border border-base-300/70 bg-base-100/70 px-2 py-1.5 text-center">
+          <p className="m-0 text-[10px] text-base-content/60">집중 분</p>
+          <p className="m-0 mt-0.5 text-sm font-semibold text-base-content/90">{session.focusMinutes}분</p>
+        </div>
+        <div className="rounded-lg border border-base-300/70 bg-base-100/70 px-2 py-1.5 text-center">
+          <p className="m-0 text-[10px] text-base-content/60">휴식 분</p>
+          <p className="m-0 mt-0.5 text-sm font-semibold text-base-content/90">{session.restMinutes}분</p>
+        </div>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-base-300/75">
         <div
@@ -137,7 +145,7 @@ export function TodoProgressFooter({
       <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-base-300/70 bg-base-200/50 px-2.5 py-2">
         <div className="text-xs text-base-content/80">
           <div className="font-semibold">
-            집중 {session.focusMinutes}분 · 휴식 {session.restMinutes}분
+            진행률 {summary.completedCount}/{summary.totalCount} · 총 {summary.totalMinutes}분
           </div>
           <div className="mt-0.5 text-[11px] text-base-content/60">
             {session.active === "focus"

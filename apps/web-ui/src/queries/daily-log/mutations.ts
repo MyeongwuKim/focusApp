@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  addTodoDeviationToDailyLog,
   addTodosToDailyLog,
   completeTodoFromDailyLog,
   deleteTodoFromDailyLog,
@@ -14,6 +13,7 @@ import {
   startTodoFromDailyLog,
   stopRestSession,
   updateTodoActualFocusFromDailyLog,
+  updateTodoTargetFocusFromDailyLog,
   updateTodoScheduleFromDailyLog,
   upsertDailyLogMemo,
 } from "../../api/dailyLogApi";
@@ -228,9 +228,11 @@ function optimisticAddTodos(payload: DailyLogDetail, input: AddTodosToDailyLogIn
       order: nextTodos.length,
       startedAt: null,
       scheduledStartAt: item.scheduledStartAt ?? null,
+      targetFocusMinutes: null,
       pausedAt: null,
       completedAt: null,
       deviationSeconds: 0,
+      resumeCount: 0,
       actualFocusSeconds: null,
     });
 
@@ -301,6 +303,7 @@ function optimisticResumeTodo(payload: DailyLogDetail, input: { dateKey: string;
       pausedAt: null,
       scheduledStartAt: null,
       deviationSeconds: Math.max(todo.deviationSeconds + pausedSeconds, 0),
+      resumeCount: Math.max(todo.resumeCount ?? 0, 0) + 1,
     };
   });
 }
@@ -335,17 +338,9 @@ function optimisticResetTodo(payload: DailyLogDetail, input: { dateKey: string; 
     pausedAt: null,
     completedAt: null,
     deviationSeconds: 0,
+    resumeCount: 0,
+    targetFocusMinutes: null,
     actualFocusSeconds: null,
-  }));
-}
-
-function optimisticAddDeviation(
-  payload: DailyLogDetail,
-  input: { dateKey: string; todoId: string; seconds: number }
-): DailyLogDetail {
-  return updateTodoById(payload, input.todoId, (todo) => ({
-    ...todo,
-    deviationSeconds: Math.max(todo.deviationSeconds + Math.max(Math.floor(input.seconds), 0), 0),
   }));
 }
 
@@ -388,6 +383,16 @@ function optimisticUpdateSchedule(
   return updateTodoById(payload, input.todoId, (todo) => ({
     ...todo,
     scheduledStartAt: input.scheduledStartAt,
+  }));
+}
+
+function optimisticUpdateTargetFocus(
+  payload: DailyLogDetail,
+  input: { dateKey: string; todoId: string; targetFocusMinutes: number | null }
+): DailyLogDetail {
+  return updateTodoById(payload, input.todoId, (todo) => ({
+    ...todo,
+    targetFocusMinutes: input.targetFocusMinutes,
   }));
 }
 
@@ -667,13 +672,6 @@ export function useResetTodoFromDailyLogMutation() {
   });
 }
 
-export function useAddTodoDeviationToDailyLogMutation() {
-  return useOptimisticDailyLogMutation<{ dateKey: string; todoId: string; seconds: number }>({
-    mutationFn: (input) => addTodoDeviationToDailyLog(input),
-    optimisticUpdater: optimisticAddDeviation,
-  });
-}
-
 export function useReorderTodosMutation() {
   return useOptimisticDailyLogMutation<{ dateKey: string; todoIds: string[] }>({
     mutationFn: (input) => reorderTodosFromDailyLog(input),
@@ -695,6 +693,14 @@ export function useUpdateTodoScheduleMutation() {
     mutationFn: (input) => updateTodoScheduleFromDailyLog(input),
     syncMonthCache: true,
     optimisticUpdater: optimisticUpdateSchedule,
+  });
+}
+
+export function useUpdateTodoTargetFocusMutation() {
+  return useOptimisticDailyLogMutation<{ dateKey: string; todoId: string; targetFocusMinutes: number | null }>({
+    mutationFn: (input) => updateTodoTargetFocusFromDailyLog(input),
+    syncMonthCache: true,
+    optimisticUpdater: optimisticUpdateTargetFocus,
   });
 }
 
@@ -739,6 +745,7 @@ export function useDailyLogMutation() {
   const reorderTodosMutation = useReorderTodosMutation();
   const updateTodoActualFocusMutation = useUpdateTodoActualFocusMutation();
   const updateTodoScheduleMutation = useUpdateTodoScheduleMutation();
+  const updateTodoTargetFocusMutation = useUpdateTodoTargetFocusMutation();
   const startRestSessionMutation = useStartRestSessionMutation();
   const stopRestSessionMutation = useStopRestSessionMutation();
 
@@ -753,6 +760,7 @@ export function useDailyLogMutation() {
     reorderTodosMutation,
     updateTodoActualFocusMutation,
     updateTodoScheduleMutation,
+    updateTodoTargetFocusMutation,
     startRestSessionMutation,
     stopRestSessionMutation,
   };

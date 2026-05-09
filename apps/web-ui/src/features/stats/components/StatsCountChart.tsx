@@ -20,7 +20,7 @@ type StatsCountChartProps = {
 
 const CHART_DONE_COLOR = "var(--color-success, #10b981)";
 const CHART_INCOMPLETE_COLOR = "var(--color-base-300, #94a3b8)";
-const CHART_DEVIATION_COLOR = "var(--color-error, #ef4444)";
+const CHART_RESUME_COLOR = "var(--color-primary, #3b82f6)";
 const CHART_GRID_COLOR = "color-mix(in oklab, var(--color-base-content, #64748b) 20%, transparent)";
 const CHART_TICK_COLOR = "var(--color-base-content, #334155)";
 
@@ -37,7 +37,7 @@ function CountTooltip({ active, payload, label }: any) {
       <p className="mb-1 font-semibold text-base-content">{entry.tooltipLabel ?? label}</p>
       <p className="text-success">완료 {entry.done ?? 0}개</p>
       <p className="text-warning">미완료 {entry.incomplete ?? 0}개</p>
-      <p className="text-error">이탈 {(entry.deviationMin ?? 0)}분</p>
+      <p className="text-primary">재개 {entry.resumeCount ?? 0}회</p>
       <div className="mt-2 space-y-1 text-base-content/80">
         <p className="font-medium">완료 todo: {doneLabels.length > 0 ? doneLabels.join(", ") : "없음"}</p>
         <p className="font-medium">미완료 todo: {incompleteLabels.length > 0 ? incompleteLabels.join(", ") : "없음"}</p>
@@ -60,12 +60,12 @@ export function StatsCountChart({ title, donePercent, incompletePercent, data }:
             <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
             <XAxis dataKey="label" tick={{ fontSize: 10, fill: CHART_TICK_COLOR }} />
             <YAxis yAxisId="count" allowDecimals={false} tick={{ fontSize: 10, fill: CHART_TICK_COLOR }} width={24} />
-            <YAxis yAxisId="time" orientation="right" allowDecimals={false} tick={{ fontSize: 10, fill: CHART_TICK_COLOR }} width={32} />
+            <YAxis yAxisId="resume" orientation="right" allowDecimals={false} tick={{ fontSize: 10, fill: CHART_TICK_COLOR }} width={32} />
             <Tooltip content={<CountTooltip />} wrapperStyle={{ zIndex: 80 }} />
             <Legend />
             <Bar yAxisId="count" dataKey="done" name="완료" stackId="a" fill={CHART_DONE_COLOR} radius={[3, 3, 0, 0]} />
             <Bar yAxisId="count" dataKey="incomplete" name="미완료" stackId="a" fill={CHART_INCOMPLETE_COLOR} radius={[3, 3, 0, 0]} />
-            <Line yAxisId="time" type="monotone" dataKey="deviationMin" name="이탈시간(분)" stroke={CHART_DEVIATION_COLOR} strokeWidth={2} dot={{ r: 2, fill: CHART_DEVIATION_COLOR }} activeDot={{ r: 4 }} />
+            <Line yAxisId="resume" type="monotone" dataKey="resumeCount" name="재개 횟수" stroke={CHART_RESUME_COLOR} strokeWidth={2} dot={{ r: 2, fill: CHART_RESUME_COLOR }} activeDot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

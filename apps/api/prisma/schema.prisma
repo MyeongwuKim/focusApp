@@ -145,9 +145,11 @@ type DailyTaskEntry {
   createdAt          DateTime
   startedAt          DateTime?
   scheduledStartAt   DateTime?
+  targetFocusMinutes Int?
   pausedAt           DateTime?
   completedAt        DateTime?
   deviationSeconds   Int
+  resumeCount        Int
   actualFocusSeconds Int?
 }
 

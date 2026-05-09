@@ -69,6 +69,7 @@ function DraggableTaskItem({
   task,
   collectionName,
   active,
+  disableDrag,
   disableActions,
   onSelect,
   onOpenMenu,
@@ -76,12 +77,14 @@ function DraggableTaskItem({
   task: ManagedTaskItem;
   collectionName: string;
   active: boolean;
+  disableDrag: boolean;
   disableActions: boolean;
   onSelect: () => void;
   onOpenMenu: () => void;
 }) {
   const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
     id: toTaskDragId(task.id),
+    disabled: disableDrag,
     animateLayoutChanges,
     stylePreset: "fadeOutOnDrag",
   });
@@ -435,7 +438,7 @@ export function TaskManagementBody() {
     if (selected === "delete") {
       const confirmed = await confirm({
         title: "할일을 삭제할까요?",
-        message: "삭제하면 이 할일의 누적 집중시간/이탈시간 기록도 함께 사라져요.",
+        message: "삭제하면 이 할일의 누적 집중시간 기록도 함께 사라져요.",
         buttons: [
           { label: "취소", value: "cancel", tone: "neutral" },
           { label: "삭제", value: "delete", tone: "danger" },
@@ -552,6 +555,7 @@ export function TaskManagementBody() {
                       task={task}
                       collectionName={collectionNameById.get(task.collectionId) ?? "미분류"}
                       active={selectedTaskId === task.id}
+                      disableDrag={isAllCollectionSelected}
                       disableActions={Boolean(draggingTaskId)}
                       onSelect={() => onSelectTask(task.id)}
                       onOpenMenu={() => {

@@ -16,8 +16,8 @@ export function PermissionIntroModal({
         <View style={styles.permissionTextWrap}>
           <Text style={styles.permissionRowTitle}>푸시 알림 권한 설정</Text>
           <Text style={styles.permissionRowDescription}>
-            리마인드 알림을 받을 수 있도록{"\n"}
-            푸시 알림을 켜둘까요?
+            오늘 기록 흐름을 놓치지 않도록{"\n"}
+            리마인드 알림을 켜둘까요?
           </Text>
         </View>
 

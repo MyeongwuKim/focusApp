@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FiChevronDown, FiChevronUp } from "react-icons/fi";
+import { FiChevronDown, FiChevronUp, FiHelpCircle } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
+import { PageHelpModal } from "../../../components/PageHelpModal";
+import { getPageHelpGuide } from "../../../config/pageHelpGuide";
 import { DateTodosMemoStandaloneLayer } from "../../../features/todo/date-todos/components/DateTodosMemoStandaloneLayer";
 import { DateTodosRoutineStandaloneLayer } from "../../../features/todo/date-todos/components/DateTodosRoutineStandaloneLayer";
 import { DateTodosTaskPickerStandaloneLayer } from "../../../features/todo/date-todos/components/DateTodosTaskPickerStandaloneLayer";
@@ -12,6 +14,8 @@ type DateTasksBottomSheetProps = {
   isVisible: boolean;
   isExpanded: boolean;
   restFinishedRequested?: boolean;
+  focusTargetElapsedRequested?: boolean;
+  focusTargetTodoId?: string | null;
   onExpandedChange: (isExpanded: boolean) => void;
 };
 
@@ -46,6 +50,8 @@ export function DateTasksBottomSheet({
   isVisible,
   isExpanded,
   restFinishedRequested = false,
+  focusTargetElapsedRequested = false,
+  focusTargetTodoId = null,
   onExpandedChange,
 }: DateTasksBottomSheetProps) {
   type LocalOverlayLayer = "routine-import" | "routine-create" | "task-picker" | "memo" | null;
@@ -57,10 +63,12 @@ export function DateTasksBottomSheet({
   const [dragY, setDragY] = useState(0);
   const [isHeaderDragging, setIsHeaderDragging] = useState(false);
   const [localOverlayLayer, setLocalOverlayLayer] = useState<LocalOverlayLayer>(null);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [barHeight, setBarHeight] = useState(94);
   const sheetContainerRef = useRef<HTMLDivElement | null>(null);
   const headerTouchStartYRef = useRef<number | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
+  const helpGuide = useMemo(() => getPageHelpGuide("/date-tasks"), []);
 
   const resolvedDateKey = selectedDateKey ?? formatDateKey(new Date());
   const forcedSearch = useMemo(() => {
@@ -70,8 +78,14 @@ export function DateTasksBottomSheet({
     if (restFinishedRequested) {
       params.set("restFinished", "1");
     }
+    if (focusTargetElapsedRequested) {
+      params.set("focusTargetElapsed", "1");
+    }
+    if (focusTargetTodoId) {
+      params.set("todoId", focusTargetTodoId);
+    }
     return `?${params.toString()}`;
-  }, [resolvedDateKey, restFinishedRequested]);
+  }, [resolvedDateKey, restFinishedRequested, focusTargetElapsedRequested, focusTargetTodoId]);
   const selectedDateLabel = formatSelectedDate(resolvedDateKey);
   const todayDateKey = formatDateKey(new Date());
   const canGoToday = resolvedDateKey !== todayDateKey;
@@ -135,6 +149,7 @@ export function DateTasksBottomSheet({
       setDragY(0);
       setIsHeaderDragging(false);
       setLocalOverlayLayer(null);
+      setIsHelpModalOpen(false);
       headerTouchStartYRef.current = null;
     }
   }, [isVisible]);
@@ -264,15 +279,28 @@ export function DateTasksBottomSheet({
                   </span>
                 </span>
               </button>
-              {canGoToday ? (
-                <Button
-                  className="h-8 min-h-8 border-base-300 bg-base-100 px-3 text-xs font-semibold text-base-content shadow-sm"
-                  onClick={handleGoToday}
-                  tabIndex={0}
-                >
-                  오늘
-                </Button>
-              ) : null}
+              <div className="ml-auto flex items-center justify-end gap-1">
+                {canGoToday ? (
+                  <Button
+                    className="h-8 min-h-8 border-base-300 bg-base-100 px-3 text-xs font-semibold text-base-content shadow-sm"
+                    onClick={handleGoToday}
+                    tabIndex={0}
+                  >
+                    오늘
+                  </Button>
+                ) : null}
+                {helpGuide ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/45 transition-colors hover:bg-base-100/45"
+                    onClick={() => setIsHelpModalOpen(true)}
+                    aria-label="오늘할일 안내 보기"
+                    tabIndex={0}
+                  >
+                    <FiHelpCircle size={17} />
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -317,6 +345,11 @@ export function DateTasksBottomSheet({
           </div>
         ) : null}
       </section>
+      <PageHelpModal
+        isOpen={isHelpModalOpen}
+        guide={helpGuide}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
     </div>
   );
 }

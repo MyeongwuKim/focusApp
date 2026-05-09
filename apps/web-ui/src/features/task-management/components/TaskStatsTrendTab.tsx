@@ -5,16 +5,14 @@ import type { TimeBarDatum } from "../../stats/components/types";
 
 type TaskStatsTrendTabProps = {
   focusMinutes: number;
-  deviationMinutes: number;
-  deviationRate: number;
+  resumeCount: number;
   useMonthlyBar: boolean;
   data: TimeBarDatum[];
 };
 
 export function TaskStatsTrendTab({
   focusMinutes,
-  deviationMinutes,
-  deviationRate,
+  resumeCount,
   useMonthlyBar,
   data,
 }: TaskStatsTrendTabProps) {
@@ -24,11 +22,10 @@ export function TaskStatsTrendTab({
       <MetricCardGrid
         items={[
           { label: "집중 시간", value: `${focusMinutes}분` },
-          { label: "이탈 시간", value: `${deviationMinutes}분` },
-          { label: "이탈율", value: `${deviationRate.toFixed(1)}%` },
+          { label: "재개 횟수", value: `${resumeCount}회` },
         ]}
       />
-      <StatsTimeChart title={useMonthlyBar ? "월별 집중/이탈 시간" : "일별 집중/이탈 시간"} data={data} showRest={false} />
+      <StatsTimeChart title={useMonthlyBar ? "월별 집중/휴식 시간" : "일별 집중/휴식 시간"} data={data} />
     </>
   );
 }

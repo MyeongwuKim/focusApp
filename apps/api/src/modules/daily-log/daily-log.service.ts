@@ -26,11 +26,6 @@ interface CompleteTodoInput extends BaseInput {
   todoId: string;
 }
 
-interface AddDeviationInput extends BaseInput {
-  todoId: string;
-  seconds: number;
-}
-
 interface ReorderTodosInput extends BaseInput {
   todoIds: string[];
 }
@@ -45,6 +40,11 @@ interface UpdateTodoActualFocusInput extends BaseInput {
 interface UpdateTodoScheduleInput extends BaseInput {
   todoId: string;
   scheduledStartAt: string | null;
+}
+
+interface UpdateTodoTargetFocusInput extends BaseInput {
+  todoId: string;
+  targetFocusMinutes: number | null;
 }
 
 export class DailyLogService {
@@ -94,9 +94,11 @@ export class DailyLogService {
       createdAt,
       startedAt: null,
       scheduledStartAt: null,
+      targetFocusMinutes: null,
       pausedAt: null,
       completedAt: null,
       deviationSeconds: 0,
+      resumeCount: 0,
       actualFocusSeconds: null
     };
 
@@ -171,9 +173,11 @@ export class DailyLogService {
         createdAt,
         startedAt: null,
         scheduledStartAt: parseScheduledStartAt(item.scheduledStartAt),
+        targetFocusMinutes: null,
         pausedAt: null,
         completedAt: null,
         deviationSeconds: 0,
+        resumeCount: 0,
         actualFocusSeconds: null
       });
 
@@ -294,7 +298,8 @@ export class DailyLogService {
       ...targetTodo,
       pausedAt: null,
       scheduledStartAt: null,
-      deviationSeconds: targetTodo.deviationSeconds + pausedSeconds
+      deviationSeconds: targetTodo.deviationSeconds + pausedSeconds,
+      resumeCount: Math.max(targetTodo.resumeCount ?? 0, 0) + 1,
     };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
@@ -359,6 +364,7 @@ export class DailyLogService {
       !targetTodo.pausedAt &&
       !targetTodo.completedAt &&
       targetTodo.deviationSeconds === 0 &&
+      (targetTodo.resumeCount ?? 0) === 0 &&
       targetTodo.actualFocusSeconds === null
     ) {
       return log;
@@ -372,6 +378,7 @@ export class DailyLogService {
       pausedAt: null,
       completedAt: null,
       deviationSeconds: 0,
+      resumeCount: 0,
       actualFocusSeconds: null
     };
 
@@ -395,27 +402,6 @@ export class DailyLogService {
         ...todo,
         order: index,
       }));
-
-    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
-  }
-
-  async addDeviation(input: AddDeviationInput) {
-    const log = await this.repository.findByDate(input.userId, input.dateKey);
-    if (!log) {
-      throw new Error("DAILY_LOG_NOT_FOUND");
-    }
-
-    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
-    if (targetIndex < 0) {
-      throw new Error("TODO_NOT_FOUND");
-    }
-
-    const nextTodos = [...log.todos];
-    const targetTodo = nextTodos[targetIndex];
-    nextTodos[targetIndex] = {
-      ...targetTodo,
-      deviationSeconds: targetTodo.deviationSeconds + Math.max(input.seconds, 0)
-    };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
   }
@@ -519,6 +505,38 @@ export class DailyLogService {
     nextTodos[targetIndex] = {
       ...targetTodo,
       scheduledStartAt: nextScheduledStartAt,
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async updateTodoTargetFocus(input: UpdateTodoTargetFocusInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    let nextTargetFocusMinutes: number | null = null;
+    if (input.targetFocusMinutes !== null) {
+      if (!Number.isFinite(input.targetFocusMinutes)) {
+        throw new Error("INVALID_TARGET_FOCUS_MINUTES");
+      }
+      nextTargetFocusMinutes = Math.floor(input.targetFocusMinutes);
+      if (nextTargetFocusMinutes < 30) {
+        throw new Error("INVALID_TARGET_FOCUS_MINUTES");
+      }
+    }
+
+    const nextTodos = [...log.todos];
+    const targetTodo = nextTodos[targetIndex];
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      targetFocusMinutes: nextTargetFocusMinutes,
     };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);

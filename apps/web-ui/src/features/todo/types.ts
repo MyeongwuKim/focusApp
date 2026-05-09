@@ -7,6 +7,7 @@ export type TaskItem = {
   accumulatedMs: number;
   startedAt: number | null;
   scheduledStartAt: number | null;
+  targetFocusMinutes: number | null;
   completedAt: number | null;
   completedDurationMs: number | null;
 };

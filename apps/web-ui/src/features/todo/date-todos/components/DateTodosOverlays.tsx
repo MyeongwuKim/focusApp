@@ -3,6 +3,7 @@ import { FiX } from "react-icons/fi";
 import { Button } from "../../../../components/ui/Button";
 import { TodoCompletedAtModal } from "../../components/TodoCompletedAtModal";
 import { TodoScheduleTimeModal } from "../../components/TodoScheduleTimeModal";
+import { TodoTargetFocusModal } from "../../components/TodoTargetFocusModal";
 import { TodoTaskPickerModal } from "../../components/TodoTaskPickerModal";
 import { MemoEditorPanel } from "../../../memo/containers/MemoEditorPanel";
 import { useDateTodosRouteContext } from "../DateTodosRouteProvider";
@@ -29,6 +30,9 @@ export function DateTodosOverlays({
     editingScheduledStart,
     closeEditingScheduledStart,
     handleSaveScheduledStart,
+    editingTargetFocus,
+    closeEditingTargetFocus,
+    handleSaveTargetFocus,
   } = useDateTodosRouteContext();
   const [shouldRenderMemo, setShouldRenderMemo] = useState(isMemoRoute);
   const [isMemoVisible, setIsMemoVisible] = useState(false);
@@ -112,6 +116,13 @@ export function DateTodosOverlays({
         initialTime={editingScheduledStart?.initialTime ?? "09:00"}
         onClose={closeEditingScheduledStart}
         onSave={handleSaveScheduledStart}
+      />
+
+      <TodoTargetFocusModal
+        isOpen={Boolean(editingTargetFocus)}
+        initialMinutes={editingTargetFocus?.initialMinutes ?? 30}
+        onClose={closeEditingTargetFocus}
+        onSave={handleSaveTargetFocus}
       />
     </>
   );

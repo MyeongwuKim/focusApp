@@ -4,7 +4,6 @@ import type { TimeBarDatum } from "./types";
 
 type StatsTimeSectionProps = {
   totalFocus: number;
-  totalDeviation: number;
   totalRest: number;
   useMonthlyBar: boolean;
   data: TimeBarDatum[];
@@ -12,7 +11,6 @@ type StatsTimeSectionProps = {
 
 export function StatsTimeSection({
   totalFocus,
-  totalDeviation,
   totalRest,
   useMonthlyBar,
   data,
@@ -24,13 +22,12 @@ export function StatsTimeSection({
       <MetricCardGrid
         items={[
           { label: "집중 시간", value: `${totalFocus}분` },
-          { label: "이탈 시간", value: `${totalDeviation}분` },
           { label: "휴식 시간", value: `${totalRest}분` },
         ]}
       />
 
       <StatsTimeChart
-        title={useMonthlyBar ? "월별 집중/이탈/휴식 시간" : "일별 집중/이탈/휴식 시간"}
+        title={useMonthlyBar ? "월별 집중/휴식 시간" : "일별 집중/휴식 시간"}
         data={data}
       />
     </div>

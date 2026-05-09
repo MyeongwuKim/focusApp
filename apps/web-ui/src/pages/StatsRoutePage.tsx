@@ -1,12 +1,14 @@
 import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { StatsCommentaryPayload } from "../api/statsCommentaryApi";
 import { StatsAiCommentaryCard } from "../features/stats/components/StatsAiCommentaryCard";
 import { StatsCountSection } from "../features/stats/components/StatsCountSection";
+import { MetricCardGrid } from "../features/stats/components/MetricCardGrid";
 import { StatsPeriodFilter } from "../features/stats/components/StatsPeriodFilter";
 import { StatsTimeSection } from "../features/stats/components/StatsTimeSection";
-import { getRangeDays, normalizeStatsSearchParams } from "../features/stats/statsDate";
+import { StatsWeeklyReviewCard } from "../features/stats/components/StatsWeeklyReviewCard";
+import { normalizeStatsSearchParams } from "../features/stats/statsDate";
 import { useStatsMetrics } from "../features/stats/useStatsMetrics";
+import { useDailyLogQuery } from "../queries";
 
 type StatsRoutePageProps = {
   forcedSearch?: string;
@@ -22,28 +24,46 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
     () => normalizeStatsSearchParams(effectiveSearchParams),
     [effectiveSearchParams]
   );
-  const { count, time, signal, isFetching } = useStatsMetrics({
+  const { count, time, weeklyReview, signal, isFetching } = useStatsMetrics({
     start: normalized.start,
     end: normalized.end,
     todayKey: normalized.todayKey,
   });
-  const canUseAiCommentary =
-    count.doneTodos + count.incompleteTodos + time.totalFocus + time.totalDeviation + time.totalRest > 0;
-  const periodDays = getRangeDays(normalized.start, normalized.end);
-
-  const commentaryPayload = useMemo<StatsCommentaryPayload>(
+  const { dailyLogByDateQuery } = useDailyLogQuery({ dateKey: normalized.todayKey });
+  const todayKpi = useMemo(() => {
+    const todos = dailyLogByDateQuery.data?.todos ?? [];
+    const doneCount = todos.filter((todo) => todo.done).length;
+    const focusMinutes = Math.floor(
+      todos.reduce((acc, todo) => acc + Math.max(todo.actualFocusSeconds ?? 0, 0), 0) / 60
+    );
+    const restAccumulatedSeconds = Math.max(dailyLogByDateQuery.data?.restAccumulatedSeconds ?? 0, 0);
+    const restStartedAt = dailyLogByDateQuery.data?.restStartedAt
+      ? new Date(dailyLogByDateQuery.data.restStartedAt).getTime()
+      : null;
+    const activeRestSeconds =
+      restStartedAt && Number.isFinite(restStartedAt)
+        ? Math.max(Math.floor((Date.now() - restStartedAt) / 1000), 0)
+        : 0;
+    return {
+      doneCount,
+      focusMinutes,
+      restMinutes: Math.floor((restAccumulatedSeconds + activeRestSeconds) / 60),
+    };
+  }, [dailyLogByDateQuery.data]);
+  const aiCommentaryPayload = useMemo(
     () => ({
       period: {
         preset: normalized.preset,
         start: normalized.startInput,
         end: normalized.endInput,
-        days: periodDays,
+        days:
+          Math.floor((normalized.end.getTime() - normalized.start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
       },
       totals: {
         doneCount: count.doneTodos,
         incompleteCount: count.incompleteTodos,
         focusMinutes: time.totalFocus,
-        deviationMinutes: time.totalDeviation,
+        resumeCount: count.resumeCount,
         restMinutes: time.totalRest,
       },
       rates: {
@@ -63,29 +83,7 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
         avgIncompletePerActiveDay: signal.avgIncompletePerActiveDay,
       },
     }),
-    [
-      count.completionRate,
-      count.doneTodos,
-      count.frequentIncompleteTasks,
-      count.incompleteRate,
-      count.incompleteTodos,
-      normalized.endInput,
-      normalized.preset,
-      normalized.startInput,
-      periodDays,
-      signal.activeDayCount,
-      signal.avgDonePerActiveDay,
-      signal.avgIncompletePerActiveDay,
-      signal.dataCoverageRate,
-      signal.daysWithFocus,
-      signal.daysWithIncomplete,
-      signal.daysWithTodo,
-      signal.firstActiveDate,
-      signal.lastActiveDate,
-      time.totalDeviation,
-      time.totalFocus,
-      time.totalRest,
-    ]
+    [count, normalized.end, normalized.endInput, normalized.preset, normalized.start, normalized.startInput, signal, time]
   );
 
   useEffect(() => {
@@ -102,11 +100,32 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
     <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-base-300 bg-base-100/80 p-4 md:p-5">
       <div className="space-y-5">
         <StatsPeriodFilter />
+        <MetricCardGrid
+          className="grid grid-cols-1 gap-2 md:grid-cols-3 md:gap-3"
+          items={[
+            { label: "오늘 한 일", value: `${todayKpi.doneCount}개` },
+            { label: "집중 분", value: `${todayKpi.focusMinutes}분` },
+            { label: "휴식 분", value: `${todayKpi.restMinutes}분` },
+          ]}
+        />
+        {weeklyReview.startDate && weeklyReview.endDate ? (
+          <StatsWeeklyReviewCard
+            startDate={weeklyReview.startDate}
+            endDate={weeklyReview.endDate}
+            goodDays={weeklyReview.goodDays}
+            roughDays={weeklyReview.roughDays}
+          />
+        ) : null}
+        <StatsAiCommentaryCard
+          payload={aiCommentaryPayload}
+          isDataFetching={isFetching}
+          canUseCommentary={signal.activeDayCount > 0}
+        />
         <StatsCountSection
           completionRate={count.completionRate}
           incompleteRate={count.incompleteRate}
           doneTodos={count.doneTodos}
-          deviationMinutes={count.deviationMinutes}
+          resumeCount={count.resumeCount}
           useMonthlyBar={count.useMonthlyBar}
           donePercent={count.donePercent}
           incompletePercent={count.incompletePercent}
@@ -114,15 +133,9 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
         />
         <StatsTimeSection
           totalFocus={time.totalFocus}
-          totalDeviation={time.totalDeviation}
           totalRest={time.totalRest}
           useMonthlyBar={time.useMonthlyBar}
           data={time.data}
-        />
-        <StatsAiCommentaryCard
-          payload={commentaryPayload}
-          isDataFetching={isFetching}
-          canUseCommentary={canUseAiCommentary}
         />
         {isFetching ? <p className="text-xs text-base-content/60">통계 데이터 불러오는 중...</p> : null}
       </div>
@@ -130,7 +143,6 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
       <div className="mt-4 text-xs text-base-content/55">
         미완료: 선택 기간 내 미완료(todo done=false) 합계
       </div>
-      <div className="mt-1 text-xs text-base-content/55">이탈: 집중 세션 중 기록된 이탈 시간(분)</div>
     </section>
   );
 }

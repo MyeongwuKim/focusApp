@@ -47,7 +47,7 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
-  NOTIFICATION_BATCH_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
+  NOTIFICATION_BATCH_INTERVAL_SECONDS: z.coerce.number().int().positive().default(300),
   NOTIFICATION_BATCH_TIMEZONE: z.string().min(1).default("Asia/Seoul"),
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
   SENTRY_DSN: z.url().optional(),

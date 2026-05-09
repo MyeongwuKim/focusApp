@@ -14,7 +14,7 @@ const requestSchema = z.object({
     doneCount: z.number().nonnegative(),
     incompleteCount: z.number().nonnegative(),
     focusMinutes: z.number().nonnegative(),
-    deviationMinutes: z.number().nonnegative(),
+    resumeCount: z.number().nonnegative(),
     restMinutes: z.number().nonnegative(),
   }),
   rates: z.object({
@@ -61,17 +61,15 @@ function buildPrompt(payload: StatsCommentaryRequest) {
       : "longterm";
   const sparseData = payload.meta.activeDays <= 3 || payload.meta.dataCoverageRate < 12;
   const lowData = payload.meta.activeDays <= 7 || payload.meta.dataCoverageRate < 25;
-  const deviationRate =
-    payload.totals.focusMinutes + payload.totals.deviationMinutes > 0
-      ? (payload.totals.deviationMinutes / (payload.totals.focusMinutes + payload.totals.deviationMinutes)) * 100
-      : 0;
+  const totalTodos = payload.totals.doneCount + payload.totals.incompleteCount;
+  const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
   const primaryLens =
-    payload.rates.completionRate >= 75 && deviationRate <= 20
+    payload.rates.completionRate >= 75 && resumePerTodo <= 0.5
       ? "execution"
       : payload.rates.incompleteRate >= 45
       ? "unfinished"
-      : deviationRate >= 35
-      ? "distraction"
+      : resumePerTodo >= 1.5
+      ? "rhythm"
       : payload.meta.dataCoverageRate >= 60
       ? "consistency"
       : "sampling";
@@ -123,8 +121,8 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     `완료율: ${payload.rates.completionRate.toFixed(1)}%`,
     `미완료율: ${payload.rates.incompleteRate.toFixed(1)}%`,
     `집중: ${payload.totals.focusMinutes}분`,
-    `이탈: ${payload.totals.deviationMinutes}분`,
-    `이탈비율: ${deviationRate.toFixed(1)}%`,
+    `재개: ${payload.totals.resumeCount}회`,
+    `할일당 재개: ${resumePerTodo.toFixed(2)}회`,
     `휴식: ${payload.totals.restMinutes}분`,
     `활동일 평균 완료: ${payload.meta.avgDonePerActiveDay.toFixed(2)}개`,
     `활동일 평균 미완료: ${payload.meta.avgIncompletePerActiveDay.toFixed(2)}개`,

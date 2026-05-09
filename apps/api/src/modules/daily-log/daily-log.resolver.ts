@@ -18,9 +18,11 @@ export const dailyLogTypeDefs = gql`
     createdAt: String!
     startedAt: String
     scheduledStartAt: String
+    targetFocusMinutes: Int
     pausedAt: String
     completedAt: String
     deviationSeconds: Int!
+    resumeCount: Int!
     actualFocusSeconds: Int
   }
 
@@ -68,12 +70,6 @@ export const dailyLogTypeDefs = gql`
     todoId: ID!
   }
 
-  input AddDeviationInput {
-    dateKey: String!
-    todoId: ID!
-    seconds: Int!
-  }
-
   input ReorderTodosInput {
     dateKey: String!
     todoIds: [ID!]!
@@ -95,6 +91,12 @@ export const dailyLogTypeDefs = gql`
     scheduledStartAt: String
   }
 
+  input UpdateTodoTargetFocusInput {
+    dateKey: String!
+    todoId: ID!
+    targetFocusMinutes: Int
+  }
+
   extend type Query {
     dailyLog(dateKey: String!): DailyLog
     dailyLogsByMonth(monthKey: String!): [DailyLog!]!
@@ -110,10 +112,10 @@ export const dailyLogTypeDefs = gql`
     completeTodo(input: TodoActionInput!): DailyLog!
     resetTodo(input: TodoActionInput!): DailyLog!
     deleteTodo(input: TodoActionInput!): DailyLog!
-    addDeviation(input: AddDeviationInput!): DailyLog!
     reorderTodos(input: ReorderTodosInput!): DailyLog!
     updateTodoActualFocus(input: UpdateTodoActualFocusInput!): DailyLog!
     updateTodoSchedule(input: UpdateTodoScheduleInput!): DailyLog!
+    updateTodoTargetFocus(input: UpdateTodoTargetFocusInput!): DailyLog!
     startRestSession(input: RestSessionInput!): DailyLog!
     stopRestSession(input: RestSessionInput!): DailyLog!
   }
@@ -137,6 +139,7 @@ const dailyLogErrorMapping = {
   INVALID_TODO_ORDER_IDS: { message: "정렬할 할일 목록이 올바르지 않아요." },
   INVALID_ACTUAL_FOCUS_SECONDS: { message: "집중 시간이 올바르지 않아요." },
   INVALID_SCHEDULED_START_AT: { message: "시작 예정 시간이 올바르지 않아요." },
+  INVALID_TARGET_FOCUS_MINUTES: { message: "목표 집중 시간은 30분 이상으로 설정해 주세요." },
   SCHEDULE_MUST_BE_FUTURE_FOR_TODAY: { message: "오늘 일정은 현재 시각 이후로만 설정할 수 있어요." },
   TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." },
 };
@@ -376,23 +379,6 @@ export const dailyLogResolvers = {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
-    addDeviation: async (
-      _parent: unknown,
-      args: { input: { dateKey: string; todoId: string; seconds: number } },
-      context: GraphQLContext
-    ) => {
-      try {
-        const service = buildService(context);
-        return await service.addDeviation({
-          userId: getUserId(context),
-          dateKey: args.input.dateKey,
-          todoId: args.input.todoId,
-          seconds: args.input.seconds,
-        });
-      } catch (error) {
-        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
-      }
-    },
     reorderTodos: async (
       _parent: unknown,
       args: { input: { dateKey: string; todoIds: string[] } },
@@ -460,6 +446,23 @@ export const dailyLogResolvers = {
           timezone: env.NOTIFICATION_BATCH_TIMEZONE,
         });
         return result;
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
+    updateTodoTargetFocus: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string; targetFocusMinutes: number | null } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        return await service.updateTodoTargetFocus({
+          userId: getUserId(context),
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
+          targetFocusMinutes: args.input.targetFocusMinutes ?? null,
+        });
       } catch (error) {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
