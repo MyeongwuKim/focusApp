@@ -22,7 +22,7 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
     () => normalizeStatsSearchParams(effectiveSearchParams),
     [effectiveSearchParams]
   );
-  const { count, time, isFetching } = useStatsMetrics({
+  const { count, time, signal, isFetching } = useStatsMetrics({
     start: normalized.start,
     end: normalized.end,
     todayKey: normalized.todayKey,
@@ -51,6 +51,17 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
         incompleteRate: count.incompleteRate,
       },
       frequentIncompleteTasks: count.frequentIncompleteTasks,
+      meta: {
+        activeDays: signal.activeDayCount,
+        daysWithTodos: signal.daysWithTodo,
+        daysWithFocus: signal.daysWithFocus,
+        daysWithIncomplete: signal.daysWithIncomplete,
+        firstActiveDate: signal.firstActiveDate,
+        lastActiveDate: signal.lastActiveDate,
+        dataCoverageRate: signal.dataCoverageRate,
+        avgDonePerActiveDay: signal.avgDonePerActiveDay,
+        avgIncompletePerActiveDay: signal.avgIncompletePerActiveDay,
+      },
     }),
     [
       count.completionRate,
@@ -62,6 +73,15 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
       normalized.preset,
       normalized.startInput,
       periodDays,
+      signal.activeDayCount,
+      signal.avgDonePerActiveDay,
+      signal.avgIncompletePerActiveDay,
+      signal.dataCoverageRate,
+      signal.daysWithFocus,
+      signal.daysWithIncomplete,
+      signal.daysWithTodo,
+      signal.firstActiveDate,
+      signal.lastActiveDate,
       time.totalDeviation,
       time.totalFocus,
       time.totalRest,

@@ -1,14 +1,15 @@
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { FiBell, FiCloud, FiSun } from "react-icons/fi";
+import { FiBell, FiCloud, FiSun, FiUser } from "react-icons/fi";
 import { SettingsNotificationsView } from "../features/settings/components/SettingsNotificationsView";
 import { SettingsMenuItem } from "../features/settings/components/SettingsMenuItem";
 import { SettingsThemeView } from "../features/settings/components/SettingsThemeView";
 import { SettingsWeatherView } from "../features/settings/components/SettingsWeatherView";
+import { SettingsAccountView } from "../features/settings/components/SettingsAccountView";
 import type { IconType } from "react-icons";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 
-type SettingsSection = "home" | "theme" | "weather" | "notifications";
+type SettingsSection = "home" | "theme" | "weather" | "notifications" | "account";
 
 type SettingsMenu = {
   key: Exclude<SettingsSection, "home">;
@@ -36,6 +37,12 @@ const SETTINGS_MENUS: SettingsMenu[] = [
     title: "알림",
     description: "푸시 알림/리마인더 옵션",
   },
+  {
+    key: "account",
+    icon: FiUser,
+    title: "계정",
+    description: "로그인 정보와 계정 관리",
+  },
 ];
 
 function resolveSettingsSection(pathname: string): SettingsSection {
@@ -44,7 +51,7 @@ function resolveSettingsSection(pathname: string): SettingsSection {
   }
 
   const subPath = pathname.replace(/^\/settings\/?/, "").split("/")[0];
-  if (subPath === "theme" || subPath === "weather" || subPath === "notifications") {
+  if (subPath === "theme" || subPath === "weather" || subPath === "notifications" || subPath === "account") {
     return subPath;
   }
   return "home";
@@ -88,6 +95,7 @@ export function SettingsPage({ forcedPathname }: SettingsPageProps) {
       {section === "theme" ? <SettingsThemeView /> : null}
       {section === "weather" ? <SettingsWeatherView /> : null}
       {section === "notifications" ? <SettingsNotificationsView /> : null}
+      {section === "account" ? <SettingsAccountView /> : null}
     </div>
   );
 }

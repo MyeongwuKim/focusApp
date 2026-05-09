@@ -1,86 +1,37 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-export type PermissionIntroStep = "notification" | "location";
-
 type PermissionIntroModalProps = {
-  step: PermissionIntroStep;
   isRequestingNotificationPermission: boolean;
-  isRequestingLocationPermission: boolean;
-  onMoveToLocationStep: () => void;
   onRequestNotificationPermission: () => void;
-  onRequestLocationPermission: () => void;
-  onClose: () => void;
-  onOpenSettings: () => void;
 };
 
 export function PermissionIntroModal({
-  step,
   isRequestingNotificationPermission,
-  isRequestingLocationPermission,
-  onMoveToLocationStep,
   onRequestNotificationPermission,
-  onRequestLocationPermission,
-  onClose,
-  onOpenSettings,
 }: PermissionIntroModalProps) {
   return (
     <View style={styles.permissionIntroOverlay}>
       <View style={styles.permissionIntroCard}>
-        {step === "notification" ? (
-          <View style={styles.permissionTextWrap}>
-            <Text style={styles.permissionRowTitle}>푸시 알림 권한 설정</Text>
-            <Text style={styles.permissionRowDescription}>
-              리마인드를 더 잘 도와드릴 수 있도록{"\n"}
-              푸시 알림을 켜둘까요?
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.permissionTextWrap}>
-            <Text style={styles.permissionRowTitle}>위치 권한 설정</Text>
-            <Text style={styles.permissionRowDescription}>
-              캘린더에 날씨 효과를 보여드리기 위해{"\n"}
-              위치 권한이 필요해요.
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.permissionFooterActions}>
-          {step === "notification" ? (
-            <>
-              <Pressable style={styles.permissionGhostButton} onPress={onMoveToLocationStep}>
-                <Text style={styles.permissionGhostButtonText}>아니요, 다음에요</Text>
-              </Pressable>
-              <Pressable
-                style={styles.permissionPrimaryButton}
-                onPress={onRequestNotificationPermission}
-                disabled={isRequestingNotificationPermission}
-              >
-                <Text style={styles.permissionPrimaryButtonText}>
-                  {isRequestingNotificationPermission ? "요청 중" : "좋아요, 할게요"}
-                </Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Pressable style={styles.permissionGhostButton} onPress={onClose}>
-                <Text style={styles.permissionGhostButtonText}>아니요, 다음에요</Text>
-              </Pressable>
-              <Pressable
-                style={styles.permissionPrimaryButton}
-                onPress={onRequestLocationPermission}
-                disabled={isRequestingLocationPermission}
-              >
-                <Text style={styles.permissionPrimaryButtonText}>
-                  {isRequestingLocationPermission ? "요청 중" : "좋아요, 할게요"}
-                </Text>
-              </Pressable>
-            </>
-          )}
+        {/* 위치(날씨) 권한 단계는 잠시 비활성화. 푸시 권한만 노출 */}
+        <View style={styles.permissionTextWrap}>
+          <Text style={styles.permissionRowTitle}>푸시 알림 권한 설정</Text>
+          <Text style={styles.permissionRowDescription}>
+            리마인드 알림을 받을 수 있도록{"\n"}
+            푸시 알림을 켜둘까요?
+          </Text>
         </View>
 
-        <Pressable style={styles.permissionSettingsLink} onPress={onOpenSettings}>
-          <Text style={styles.permissionSettingsLinkText}>권한은 설정에서 언제든 다시 변경할 수 있어요</Text>
-        </Pressable>
+        <View style={styles.permissionFooterActions}>
+          <Pressable
+            style={styles.permissionPrimaryButtonSingle}
+            onPress={onRequestNotificationPermission}
+            disabled={isRequestingNotificationPermission}
+          >
+            <Text style={styles.permissionPrimaryButtonText}>
+              {isRequestingNotificationPermission ? "요청 중" : "좋아요, 할게요"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -126,26 +77,10 @@ const styles = StyleSheet.create({
   },
   permissionFooterActions: {
     marginTop: 22,
-    flexDirection: "row",
-    gap: 8,
+    width: "100%",
   },
-  permissionGhostButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#334155",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    backgroundColor: "#111827",
-  },
-  permissionGhostButtonText: {
-    color: "#CBD5E1",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  permissionPrimaryButton: {
-    flex: 1,
+  permissionPrimaryButtonSingle: {
+    width: "100%",
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -156,14 +91,5 @@ const styles = StyleSheet.create({
     color: "#052E2B",
     fontWeight: "800",
     fontSize: 14,
-  },
-  permissionSettingsLink: {
-    marginTop: 14,
-    alignSelf: "center",
-  },
-  permissionSettingsLinkText: {
-    color: "#93C5FD",
-    fontSize: 13,
-    fontWeight: "500",
   },
 });

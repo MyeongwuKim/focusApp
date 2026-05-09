@@ -7,6 +7,7 @@ import { env } from "./config/env.js";
 import { buildContext, type GraphQLContext } from "./graphql/context.js";
 import { resolvers, typeDefs } from "./graphql/schema.js";
 import { registerAuthRoute } from "./modules/auth/auth.route.js";
+import { registerMotivationMessageRoute } from "./modules/motivation/motivation-message.route.js";
 import { registerNotificationBatchRoute } from "./modules/notification-batch/notification-batch.route.js";
 import { registerStatsCommentaryRoute } from "./modules/stats/stats-commentary.route.js";
 import { getBearerToken, resolveUserIdFromSessionToken } from "./common/auth/session.js";
@@ -226,6 +227,7 @@ export async function createApp() {
   });
 
   await registerStatsCommentaryRoute(app);
+  await registerMotivationMessageRoute(app);
   await registerNotificationBatchRoute(app);
   await registerAuthRoute(app);
 

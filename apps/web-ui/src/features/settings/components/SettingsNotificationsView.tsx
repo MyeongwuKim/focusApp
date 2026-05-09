@@ -4,6 +4,7 @@ import {
   getNativeExpoPushToken,
   getNotificationPermissionStatus,
   openAppPermissionSettings,
+  requestNotificationPermission,
 } from "../../../utils/notifications";
 import { SettingsDetailShell } from "./SettingsDetailShell";
 import { SegmentedToggle } from "../../../components/SegmentedToggle";
@@ -16,7 +17,7 @@ import {
 import { toast } from "../../../stores";
 import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 
-type ReminderIntervalOption = "1" | "30" | "60" | "90" | "120";
+type ReminderIntervalOption = "30" | "60" | "90" | "120";
 type ActiveDayMode = "weekday" | "everyday";
 type PreviewTone = "soft" | "balanced" | "firm";
 type NotificationTypeKey = "restEnd" | "incomplete" | "focusStart";
@@ -72,7 +73,7 @@ export function SettingsNotificationsView() {
       return;
     }
 
-    const normalizedInterval = [1, 30, 60, 90, 120].includes(settings.intervalMinutes)
+    const normalizedInterval = [30, 60, 90, 120].includes(settings.intervalMinutes)
       ? (String(settings.intervalMinutes) as ReminderIntervalOption)
       : "60";
     const normalizedDayMode = settings.dayMode === "everyday" ? "everyday" : "weekday";
@@ -241,7 +242,7 @@ export function SettingsNotificationsView() {
     registerPushDeviceTokenMutation.mutateAsync,
   ]);
 
-  const handleToggle = () => {
+  const handleToggle = async () => {
     if (isOn) {
       setIsOn(false);
       return;
@@ -252,6 +253,12 @@ export function SettingsNotificationsView() {
       return;
     }
 
+    const requested = await requestNotificationPermission();
+    setPermissionStatus(requested.status || "unknown");
+    if (requested.granted) {
+      setIsOn(true);
+      return;
+    }
     openAppPermissionSettings();
   };
 
@@ -280,7 +287,6 @@ export function SettingsNotificationsView() {
             <SegmentedToggle
               value={reminderInterval}
               options={[
-                { value: "1", label: "1분" },
                 { value: "30", label: "30분" },
                 { value: "60", label: "60분" },
                 { value: "90", label: "90분" },

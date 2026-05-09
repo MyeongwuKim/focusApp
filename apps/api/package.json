@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "USE_ENV_LOCAL=true tsx watch src/server.ts",
-    "hybrid": "USE_ENV_LOCAL=true tsx watch src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "hybrid": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",

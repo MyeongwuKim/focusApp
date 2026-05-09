@@ -126,6 +126,15 @@ const guideByPath: Record<string, PageHelpGuide> = {
       "문제 발생 시 재동기화로 복구 가능",
     ],
   },
+  "/settings/account": {
+    title: "계정 안내",
+    description: "계정 관리와 데이터 삭제를 진행할 수 있어요.",
+    highlights: [
+      "계정 삭제 시 데이터가 함께 삭제됨",
+      "삭제 요청 전 안내 문구 확인 가능",
+      "삭제 후에는 로그인 화면으로 이동",
+    ],
+  },
 };
 
 export function getPageHelpGuide(pathname: string): PageHelpGuide | null {

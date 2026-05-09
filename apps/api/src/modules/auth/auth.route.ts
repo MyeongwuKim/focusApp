@@ -1,7 +1,8 @@
 import { createHmac, randomBytes } from "node:crypto";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { prisma } from "../../common/prisma.js";
 import { env } from "../../config/env.js";
+import { getBearerToken, resolveUserIdFromSessionToken } from "../../common/auth/session.js";
 
 type OAuthProvider = "kakao" | "naver";
 
@@ -629,6 +630,28 @@ function parseOAuthNativeAuthBody(body: unknown): OAuthNativeAuthRequestBody {
   return { accessToken };
 }
 
+async function resolveAuthorizedUserId(
+  request: Pick<FastifyRequest, "headers">,
+  reply: FastifyReply
+) {
+  const token = getBearerToken(request);
+  if (!token) {
+    await reply.code(401).send({ message: "로그인이 필요해요." });
+    return null;
+  }
+
+  const userId = await resolveUserIdFromSessionToken(token, { refreshExpiresAt: false });
+  if (!userId) {
+    await reply.code(401).send({ message: "세션이 만료되었어요. 다시 로그인해 주세요." });
+    return null;
+  }
+
+  return {
+    userId,
+    token,
+  };
+}
+
 export async function registerAuthRoute(app: FastifyInstance) {
   app.post("/auth/kakao/native", async (request, reply) => {
     try {
@@ -704,6 +727,29 @@ export async function registerAuthRoute(app: FastifyInstance) {
         });
       }
     }
+
+    return reply.send({ ok: true });
+  });
+
+  app.post("/auth/account/delete", async (request, reply) => {
+    const auth = await resolveAuthorizedUserId(request, reply);
+    if (!auth) {
+      return;
+    }
+
+    const { userId } = auth;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.pushDeviceToken.deleteMany({ where: { userId } });
+      await tx.notificationSettings.deleteMany({ where: { userId } });
+      await tx.routineTemplate.deleteMany({ where: { userId } });
+      await tx.dailyLog.deleteMany({ where: { userId } });
+      await tx.task.deleteMany({ where: { userId } });
+      await tx.taskCollection.deleteMany({ where: { userId } });
+      await tx.session.deleteMany({ where: { userId } });
+      await tx.account.deleteMany({ where: { userId } });
+      await tx.user.deleteMany({ where: { id: userId } });
+    });
 
     return reply.send({ ok: true });
   });

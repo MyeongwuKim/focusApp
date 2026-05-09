@@ -24,6 +24,17 @@ export type StatsCommentaryPayload = {
     label: string;
     count: number;
   }>;
+  meta: {
+    activeDays: number;
+    daysWithTodos: number;
+    daysWithFocus: number;
+    daysWithIncomplete: number;
+    firstActiveDate: string | null;
+    lastActiveDate: string | null;
+    dataCoverageRate: number;
+    avgDonePerActiveDay: number;
+    avgIncompletePerActiveDay: number;
+  };
 };
 
 export async function fetchStatsCommentary(payload: StatsCommentaryPayload) {

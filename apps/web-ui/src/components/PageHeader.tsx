@@ -114,6 +114,9 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
       if (subPath === "notifications") {
         return "알림";
       }
+      if (subPath === "account") {
+        return "계정";
+      }
     }
 
     return ROUTE_LABEL[route];

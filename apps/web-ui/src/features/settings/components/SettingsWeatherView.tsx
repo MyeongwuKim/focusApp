@@ -4,7 +4,11 @@ import { SegmentedToggle } from "../../../components/SegmentedToggle";
 import { SettingsDetailShell } from "./SettingsDetailShell";
 import { PermissionToggleButton } from "../../../components/ui/PermissionToggleButton";
 import { RangeSlider } from "../../../components/ui/RangeSlider";
-import { getLocationPermissionStatus, openAppPermissionSettings } from "../../../utils/notifications";
+import {
+  getLocationPermissionStatus,
+  openAppPermissionSettings,
+  requestLocationPermission,
+} from "../../../utils/notifications";
 
 export function SettingsWeatherView() {
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
@@ -44,7 +48,39 @@ export function SettingsWeatherView() {
   }, []);
 
   const handleLocationToggle = () => {
-    openAppPermissionSettings();
+    void (async () => {
+      setIsLoading(true);
+      let optimisticGranted = false;
+      try {
+        const status = await getLocationPermissionStatus();
+        if (status.granted) {
+          openAppPermissionSettings();
+          return;
+        }
+
+        if (status.canAskAgain) {
+          const requested = await requestLocationPermission();
+          optimisticGranted = requested.granted;
+          setIsLocationOn(requested.granted);
+          if (!requested.granted && !requested.canAskAgain) {
+            openAppPermissionSettings();
+          }
+          return;
+        }
+
+        openAppPermissionSettings();
+      } finally {
+        let refreshed = await getLocationPermissionStatus();
+        if (optimisticGranted && !refreshed.granted) {
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, 260);
+          });
+          refreshed = await getLocationPermissionStatus();
+        }
+        setIsLocationOn(refreshed.granted || optimisticGranted);
+        setIsLoading(false);
+      }
+    })();
   };
 
   const isWeatherOptionsDisabled = !isLocationOn;

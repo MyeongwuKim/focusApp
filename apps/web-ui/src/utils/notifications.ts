@@ -45,16 +45,68 @@ export type NativeLocationCoordinatesSnapshot = NativeLocationPermissionStatus &
   } | null;
 };
 
-export async function requestNotificationPermission() {
-  if (typeof window === "undefined" || typeof Notification === "undefined") {
-    return "unsupported" as const;
+export async function requestNotificationPermission(): Promise<NativeNotificationPermissionStatus> {
+  if (typeof window === "undefined") {
+    return {
+      granted: false,
+      canAskAgain: false,
+      status: "unsupported",
+    };
   }
 
-  if (Notification.permission === "granted" || Notification.permission === "denied") {
-    return Notification.permission;
+  const requestId = `notif-request-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const posted = postNativeBridgeMessage("REST_NOTIFICATION_PERMISSION_REQUEST", { requestId });
+  if (posted) {
+    return await new Promise<NativeNotificationPermissionStatus>((resolve) => {
+      let settled = false;
+
+      const timeoutId = window.setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+        resolve(getBrowserPermissionStatus());
+      }, 2500);
+
+      const handleBridgeEvent = (event: CustomEvent<{ type?: string; requestId?: string; payload?: unknown }>) => {
+        const detail = event.detail;
+        if (
+          detail?.type !== "REST_NOTIFICATION_PERMISSION_RESULT" ||
+          detail.requestId !== requestId ||
+          !detail.payload ||
+          typeof detail.payload !== "object"
+        ) {
+          return;
+        }
+        const payload = detail.payload as Partial<NativeNotificationPermissionStatus>;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+        resolve({
+          granted: Boolean(payload.granted),
+          canAskAgain: Boolean(payload.canAskAgain),
+          status: typeof payload.status === "string" ? payload.status : "unknown",
+        });
+      };
+
+      window.addEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+    });
   }
 
-  return Notification.requestPermission();
+  if (typeof Notification === "undefined") {
+    return {
+      granted: false,
+      canAskAgain: false,
+      status: "unsupported",
+    };
+  }
+
+  if (Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+
+  return getBrowserPermissionStatus();
 }
 
 type RestNotificationBridgePayload = {
@@ -82,6 +134,10 @@ export type NativeWeatherSettingsSyncPayload = {
   enabled: boolean;
   mood: "dreamy" | "cinematic";
   particleClarity: number;
+};
+
+export type NativeAuthStateSyncPayload = {
+  loggedIn: boolean;
 };
 
 function getNativeWebViewBridge(): NativeWebViewBridge | null {
@@ -128,6 +184,10 @@ export function syncNativeTodoSession(payload: NativeTodoSessionSyncPayload) {
 
 export function syncNativeWeatherSettings(payload: NativeWeatherSettingsSyncPayload) {
   return postNativeBridgeMessage("REST_WEATHER_SETTINGS_SYNC", { payload });
+}
+
+export function syncNativeAuthState(payload: NativeAuthStateSyncPayload) {
+  return postNativeBridgeMessage("REST_AUTH_STATE_SYNC", { payload });
 }
 
 function getBrowserPermissionStatus(): NativeNotificationPermissionStatus {
@@ -299,6 +359,89 @@ export async function getLocationPermissionStatus(): Promise<NativeLocationPermi
 
     window.addEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
   });
+}
+
+export async function requestLocationPermission(): Promise<NativeLocationPermissionStatus> {
+  if (typeof window === "undefined") {
+    return {
+      granted: false,
+      canAskAgain: false,
+      status: "unsupported",
+    };
+  }
+
+  const requestId = `location-request-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const posted = postNativeBridgeMessage("REST_LOCATION_PERMISSION_REQUEST", { requestId });
+  if (posted) {
+    return await new Promise<NativeLocationPermissionStatus>((resolve) => {
+      let settled = false;
+
+      const timeoutId = window.setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+        void refineLocationStatusFromWeb(getBrowserLocationPermissionStatus()).then(resolve);
+      }, 3000);
+
+      const handleBridgeEvent = (
+        event: CustomEvent<{ type?: string; requestId?: string; payload?: unknown }>
+      ) => {
+        const detail = event.detail;
+        if (
+          detail?.type !== "REST_LOCATION_PERMISSION_RESULT" ||
+          detail.requestId !== requestId ||
+          !detail.payload ||
+          typeof detail.payload !== "object"
+        ) {
+          return;
+        }
+
+        const payload = detail.payload as Partial<NativeLocationPermissionStatus>;
+        const baseStatus: NativeLocationPermissionStatus = {
+          granted: Boolean(payload.granted),
+          canAskAgain: Boolean(payload.canAskAgain),
+          status:
+            payload.status === "granted" ||
+            payload.status === "denied" ||
+            payload.status === "undetermined" ||
+            payload.status === "unsupported"
+              ? payload.status
+              : "unknown",
+        };
+
+        settled = true;
+        window.clearTimeout(timeoutId);
+        window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+        if (baseStatus.status === "undetermined" || baseStatus.status === "unknown") {
+          void refineLocationStatusFromWeb(baseStatus).then(resolve);
+          return;
+        }
+        resolve(baseStatus);
+      };
+
+      window.addEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+    });
+  }
+
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    return {
+      granted: false,
+      canAskAgain: false,
+      status: "unsupported",
+    };
+  }
+
+  await new Promise<void>((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      () => resolve(),
+      () => resolve(),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }
+    );
+  });
+
+  return await refineLocationStatusFromWeb(getBrowserLocationPermissionStatus());
 }
 
 export async function getNativeLocationCoordinates(): Promise<NativeLocationCoordinatesSnapshot | null> {

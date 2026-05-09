@@ -27,7 +27,6 @@ import NaverLogin from "@react-native-seoul/naver-login";
 import { useRestNotificationBridge } from "../src/features/notifications/hooks/useRestNotificationBridge";
 import {
   PermissionIntroModal,
-  type PermissionIntroStep,
 } from "../src/features/permissions/components/PermissionIntroModal";
 import {
   readNativeTodoSession,
@@ -44,13 +43,9 @@ const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
 const MAX_SCALE = 1.08;
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
-const WEATHER_FALLBACK_COORDINATES: NativeCoordinates = {
-  latitude: 37.5665,
-  longitude: 126.978,
-};
-const PERMISSION_INTRO_FILE_URI = `${
+const NOTIFICATION_PERMISSION_INTRO_FILE_URI = `${
   FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
-}native-permission-intro-v2.json`;
+}native-notification-permission-intro-v1.json`;
 const LAUNCH_ANIMATION_RING_DURATION_MS = 900;
 const LAUNCH_ANIMATION_CHECK_DURATION_MS = 280;
 const LAUNCH_ANIMATION_PAUSE_MS = 280;
@@ -101,8 +96,7 @@ type NativeWeatherSnapshot = {
   weatherCode: number;
   isDay: number;
   coordinates: NativeCoordinates;
-  source: "device" | "fallback";
-  reason?: "denied" | "unavailable";
+  source: "device";
   updatedAt: string;
 };
 
@@ -445,19 +439,19 @@ function resolveAuthCallbackHashFromUrl(rawUrl: string): string | null {
   }
 }
 
-async function hasSeenNativePermissionIntro() {
+async function hasSeenNativePermissionIntro(fileUri: string) {
   try {
-    const info = await FileSystem.getInfoAsync(PERMISSION_INTRO_FILE_URI);
+    const info = await FileSystem.getInfoAsync(fileUri);
     return info.exists;
   } catch {
     return false;
   }
 }
 
-async function markNativePermissionIntroAsSeen() {
+async function markNativePermissionIntroAsSeen(fileUri: string) {
   try {
     await FileSystem.writeAsStringAsync(
-      PERMISSION_INTRO_FILE_URI,
+      fileUri,
       JSON.stringify({ seenAt: new Date().toISOString() }),
       { encoding: FileSystem.EncodingType.UTF8 }
     );
@@ -554,9 +548,11 @@ async function getLocationPermissionSnapshot(): Promise<LocationPermissionSnapsh
       const granted = Boolean(result.granted || result.status === "granted");
       const status: NativePermissionState =
         result.status === "granted" ? "granted" : result.status === "denied" ? "denied" : "undetermined";
+      const canAskAgainFromResult = (result as { canAskAgain?: boolean }).canAskAgain;
       return {
         granted,
-        canAskAgain: Boolean((result as { canAskAgain?: boolean }).canAskAgain),
+        canAskAgain:
+          typeof canAskAgainFromResult === "boolean" ? canAskAgainFromResult : status !== "denied",
         status,
       };
     } catch (error) {
@@ -634,16 +630,12 @@ async function getLocationCoordinatesSnapshot(): Promise<LocationCoordinatesSnap
   };
 }
 
-async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot> {
+async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot | null> {
   const locationSnapshot = await getLocationCoordinatesSnapshot();
-  const coordinates = locationSnapshot.coordinates ?? WEATHER_FALLBACK_COORDINATES;
-  const source: "device" | "fallback" = locationSnapshot.coordinates ? "device" : "fallback";
-  const reason =
-    source === "fallback"
-      ? locationSnapshot.status === "denied"
-        ? "denied"
-        : "unavailable"
-      : undefined;
+  if (!locationSnapshot.granted || !locationSnapshot.coordinates) {
+    return null;
+  }
+  const coordinates = locationSnapshot.coordinates;
 
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", String(coordinates.latitude));
@@ -675,8 +667,7 @@ async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot> {
     weatherCode: current.weather_code,
     isDay: current.is_day,
     coordinates,
-    source,
-    reason,
+    source: "device",
     updatedAt: new Date().toISOString(),
   };
 }
@@ -794,11 +785,6 @@ export default function WebViewScreen() {
   const [isPermissionIntroReady, setIsPermissionIntroReady] = useState(false);
   const [isPermissionIntroVisible, setIsPermissionIntroVisible] = useState(false);
   const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
-  const [isRequestingLocationPermission, setIsRequestingLocationPermission] = useState(false);
-  const [isNotificationGranted, setIsNotificationGranted] = useState(false);
-  const [locationPermissionState, setLocationPermissionState] =
-    useState<NativePermissionState>("undetermined");
-  const [permissionStep, setPermissionStep] = useState<PermissionIntroStep>("notification");
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const nativeTodoSessionRef = useRef<NativeTodoSession | null>(null);
   const pendingTodoSessionRecoveryRef = useRef<TodoSessionRecoveryPayload | null>(null);
@@ -882,7 +868,6 @@ export default function WebViewScreen() {
   const {
     handleRestNotificationBridgeMessage,
     requestRestNotificationPermission,
-    getRestNotificationPermissionStatus,
     getRestNotificationPermissionSnapshot,
     getRestExpoPushTokenSnapshot,
   } = useRestNotificationBridge({
@@ -1030,12 +1015,17 @@ export default function WebViewScreen() {
   const refreshNativeWeatherSnapshot = useCallback(async () => {
     try {
       const snapshot = await fetchNativeWeatherSnapshot();
+      if (!snapshot) {
+        pendingWeatherSnapshotRef.current = null;
+        dispatchNativeBridgeEvent({ type: "RN_WEATHER_SNAPSHOT", payload: {} });
+        return;
+      }
       pendingWeatherSnapshotRef.current = snapshot;
       dispatchPendingWeatherSnapshot();
     } catch (error) {
       console.log("Failed to fetch native weather snapshot:", error);
     }
-  }, [dispatchPendingWeatherSnapshot]);
+  }, [dispatchNativeBridgeEvent, dispatchPendingWeatherSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1095,36 +1085,19 @@ export default function WebViewScreen() {
   }, [refreshNativeWeatherSnapshot]);
 
   useEffect(() => {
+    // 권한 인트로는 앱 첫 진입 시점에서 노출
     let cancelled = false;
-
-    const initializePermissionIntro = async () => {
+    const showPermissionIntroIfNeeded = async () => {
       try {
-        const [hasSeenIntro, notificationGranted, currentLocationPermissionState] = await Promise.all([
-          hasSeenNativePermissionIntro(),
-          getRestNotificationPermissionStatus(),
-          getLocationPermissionState(),
-        ]);
+        const hasSeenIntro = await hasSeenNativePermissionIntro(NOTIFICATION_PERMISSION_INTRO_FILE_URI);
         if (cancelled) {
           return;
         }
-
-        setIsNotificationGranted(notificationGranted);
-        setLocationPermissionState(currentLocationPermissionState);
-
-        const allGranted = notificationGranted && currentLocationPermissionState === "granted";
-        if (hasSeenIntro || allGranted) {
-          if (!hasSeenIntro) {
-            await markNativePermissionIntroAsSeen();
-          }
-          if (!cancelled) {
-            setIsPermissionIntroVisible(false);
-          }
-        } else {
-          setPermissionStep(notificationGranted ? "location" : "notification");
+        if (!hasSeenIntro) {
           setIsPermissionIntroVisible(true);
         }
       } catch (error) {
-        console.log("Failed to initialize native permission intro:", error);
+        console.log("Failed to initialize notification permission intro after login:", error);
         if (!cancelled) {
           setIsPermissionIntroVisible(true);
         }
@@ -1135,55 +1108,26 @@ export default function WebViewScreen() {
       }
     };
 
-    initializePermissionIntro();
-
+    void showPermissionIntroIfNeeded();
     return () => {
       cancelled = true;
     };
-  }, [getRestNotificationPermissionStatus]);
+  }, []);
 
-  const closePermissionIntro = async () => {
-    await markNativePermissionIntroAsSeen();
+  const completePermissionIntro = async () => {
+    await markNativePermissionIntroAsSeen(NOTIFICATION_PERMISSION_INTRO_FILE_URI);
     setIsPermissionIntroVisible(false);
   };
 
   const handleRequestNotificationPermission = async () => {
     setIsRequestingNotificationPermission(true);
     try {
-      const granted = await requestRestNotificationPermission();
-      setIsNotificationGranted(granted);
-      if (!granted) {
-        await Linking.openSettings().catch((error) => {
-          console.log("Failed to open settings from notification permission handler:", error);
-        });
-      }
-      setPermissionStep("location");
+      await requestRestNotificationPermission();
     } catch (error) {
       console.log("Failed to request notification permission from intro screen:", error);
     } finally {
+      await completePermissionIntro();
       setIsRequestingNotificationPermission(false);
-    }
-  };
-
-  const handleRequestLocationPermission = async () => {
-    setIsRequestingLocationPermission(true);
-    try {
-      const granted = await requestLocationPermission();
-      const nextState = granted ? "granted" : await getLocationPermissionState();
-      setLocationPermissionState(nextState);
-      if (granted) {
-        await refreshNativeWeatherSnapshot();
-      }
-      if (!granted) {
-        await Linking.openSettings().catch((error) => {
-          console.log("Failed to open settings from location permission handler:", error);
-        });
-      }
-      await closePermissionIntro();
-    } catch (error) {
-      console.log("Failed to request location permission from intro screen:", error);
-    } finally {
-      setIsRequestingLocationPermission(false);
     }
   };
 
@@ -1375,6 +1319,10 @@ export default function WebViewScreen() {
         });
         return;
       }
+      if (parsedData?.type === "REST_AUTH_STATE_SYNC") {
+        // push permission intro 는 네이티브 첫 진입 시점에서 처리
+        return;
+      }
       if (parsedData?.type === "REST_NOTIFICATION_PERMISSION_STATUS_REQUEST") {
         const requestId =
           typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
@@ -1383,6 +1331,26 @@ export default function WebViewScreen() {
         const snapshot = await getRestNotificationPermissionSnapshot();
         const bridgeMessage = {
           type: "REST_NOTIFICATION_PERMISSION_STATUS_RESULT",
+          requestId,
+          payload: snapshot,
+        };
+        webViewRef.current?.injectJavaScript(
+          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+            bridgeMessage
+          )} })); true;`
+        );
+        return;
+      }
+
+      if (parsedData?.type === "REST_NOTIFICATION_PERMISSION_REQUEST") {
+        const requestId =
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        await requestRestNotificationPermission();
+        const snapshot = await getRestNotificationPermissionSnapshot();
+        const bridgeMessage = {
+          type: "REST_NOTIFICATION_PERMISSION_RESULT",
           requestId,
           payload: snapshot,
         };
@@ -1609,6 +1577,29 @@ export default function WebViewScreen() {
         );
         return;
       }
+      if (parsedData?.type === "REST_LOCATION_PERMISSION_REQUEST") {
+        const requestId =
+          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
+            ? parsedData.requestId
+            : null;
+        const requestedGranted = await requestLocationPermission();
+        const snapshot = await getLocationPermissionSnapshot();
+        const normalizedSnapshot =
+          requestedGranted && !snapshot.granted
+            ? { ...snapshot, granted: true, canAskAgain: true, status: "granted" as NativePermissionState }
+            : snapshot;
+        const bridgeMessage = {
+          type: "REST_LOCATION_PERMISSION_RESULT",
+          requestId,
+          payload: normalizedSnapshot,
+        };
+        webViewRef.current?.injectJavaScript(
+          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+            bridgeMessage
+          )} })); true;`
+        );
+        return;
+      }
 
       if (parsedData?.type === "REST_LOCATION_COORDINATES_REQUEST") {
         const requestId =
@@ -1653,7 +1644,6 @@ export default function WebViewScreen() {
         return;
       }
       console.log("Message from web-ui:", parsedData);
-      Alert.alert("Message from Web", JSON.stringify(parsedData));
     } catch (error) {
       console.log("Failed to parse web message:", data, error);
       console.log("[WebView raw message]", data);
@@ -1779,20 +1769,8 @@ export default function WebViewScreen() {
       ) : null}
       {showPermissionIntro ? (
         <PermissionIntroModal
-          step={permissionStep}
           isRequestingNotificationPermission={isRequestingNotificationPermission}
-          isRequestingLocationPermission={isRequestingLocationPermission}
-          onMoveToLocationStep={() => setPermissionStep("location")}
           onRequestNotificationPermission={handleRequestNotificationPermission}
-          onRequestLocationPermission={handleRequestLocationPermission}
-          onClose={() => {
-            void closePermissionIntro();
-          }}
-          onOpenSettings={() => {
-            Linking.openSettings().catch((error) => {
-              console.log("Failed to open settings from permission intro:", error);
-            });
-          }}
         />
       ) : null}
     </SafeAreaView>

@@ -5,7 +5,7 @@ import { z } from "zod";
 
 const envFileDir = path.dirname(fileURLToPath(import.meta.url));
 const apiRootDir = path.resolve(envFileDir, "../../");
-const shouldLoadEnvLocal = process.env.USE_ENV_LOCAL !== "false";
+const shouldLoadEnvLocal = process.env.USE_ENV_LOCAL === "true";
 
 dotenv.config({ path: path.join(apiRootDir, ".env") });
 if (shouldLoadEnvLocal) {

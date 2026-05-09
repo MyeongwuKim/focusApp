@@ -1,2 +1,1 @@
-export type SettingsSection = "home" | "theme" | "weather" | "notifications";
-
+export type SettingsSection = "home" | "theme" | "weather" | "notifications" | "account";

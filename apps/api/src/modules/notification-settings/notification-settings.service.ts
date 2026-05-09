@@ -19,7 +19,7 @@ interface UpdateNotificationSettingsInput {
   lastEmptyTodoReminderDate?: string | null;
 }
 
-const ALLOWED_INTERVAL_MINUTES = new Set([1, 30, 60, 90, 120]);
+const ALLOWED_INTERVAL_MINUTES = new Set([30, 60, 90, 120]);
 const ALLOWED_DAY_MODE = new Set(["weekday", "everyday"]);
 const ALLOWED_TONE = new Set(["soft", "balanced", "firm"]);
 const HHMM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;

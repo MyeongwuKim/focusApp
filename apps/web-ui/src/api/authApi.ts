@@ -74,33 +74,58 @@ async function requestNativeProviderUnlink(provider: AuthProvider) {
   });
 }
 
-export async function logout() {
-  const { token, clearAuth } = useAuthStore.getState();
-  const apiOrigin = getApiOrigin();
-  const logoutUrl = apiOrigin ? `${apiOrigin}/auth/logout` : "/auth/logout";
-
-  clearAuth();
-
+async function runProviderUnlinkInBackground() {
   void Promise.allSettled([
     requestNativeProviderUnlink("kakao"),
     requestNativeProviderUnlink("naver"),
   ]).then((results) => {
     const [kakaoResult, naverResult] = results;
     if (kakaoResult?.status === "rejected") {
-      console.warn("Native Kakao unlink failed. Continue with app logout.", kakaoResult.reason);
+      console.warn("Native Kakao unlink failed. Continue with app auth flow.", kakaoResult.reason);
     }
     if (naverResult?.status === "rejected") {
-      console.warn("Native Naver unlink failed. Continue with app logout.", naverResult.reason);
+      console.warn("Native Naver unlink failed. Continue with app auth flow.", naverResult.reason);
     }
   });
+}
 
-  if (token) {
-    void fetchWithBackendStatus(logoutUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    }).catch(() => null);
+async function postAuthAction(path: string, token: string | null, options?: { requireAuth?: boolean }) {
+  const apiOrigin = getApiOrigin();
+  const url = apiOrigin ? `${apiOrigin}${path}` : path;
+  const requireAuth = options?.requireAuth ?? true;
+
+  if (!token) {
+    if (requireAuth) {
+      throw new Error("AUTH_TOKEN_MISSING");
+    }
+    return;
   }
+
+  const response = await fetchWithBackendStatus(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AUTH_ACTION_FAILED_${response.status}`);
+  }
+}
+
+export async function logout() {
+  const { token, clearAuth } = useAuthStore.getState();
+
+  clearAuth();
+  void runProviderUnlinkInBackground();
+  void postAuthAction("/auth/logout", token, { requireAuth: false }).catch(() => null);
+}
+
+export async function deleteAccount() {
+  const { token, clearAuth } = useAuthStore.getState();
+  await postAuthAction("/auth/account/delete", token);
+  clearAuth();
+  void runProviderUnlinkInBackground();
 }

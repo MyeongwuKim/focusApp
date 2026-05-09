@@ -27,6 +27,17 @@ const requestSchema = z.object({
       count: z.number().int().positive(),
     })
   ),
+  meta: z.object({
+    activeDays: z.number().int().nonnegative(),
+    daysWithTodos: z.number().int().nonnegative(),
+    daysWithFocus: z.number().int().nonnegative(),
+    daysWithIncomplete: z.number().int().nonnegative(),
+    firstActiveDate: z.string().nullable(),
+    lastActiveDate: z.string().nullable(),
+    dataCoverageRate: z.number().min(0).max(100),
+    avgDonePerActiveDay: z.number().nonnegative(),
+    avgIncompletePerActiveDay: z.number().nonnegative(),
+  }),
 });
 
 type StatsCommentaryRequest = z.infer<typeof requestSchema>;
@@ -48,6 +59,30 @@ function buildPrompt(payload: StatsCommentaryRequest) {
       : periodDays <= 400
       ? "yearly"
       : "longterm";
+  const sparseData = payload.meta.activeDays <= 3 || payload.meta.dataCoverageRate < 12;
+  const lowData = payload.meta.activeDays <= 7 || payload.meta.dataCoverageRate < 25;
+  const deviationRate =
+    payload.totals.focusMinutes + payload.totals.deviationMinutes > 0
+      ? (payload.totals.deviationMinutes / (payload.totals.focusMinutes + payload.totals.deviationMinutes)) * 100
+      : 0;
+  const primaryLens =
+    payload.rates.completionRate >= 75 && deviationRate <= 20
+      ? "execution"
+      : payload.rates.incompleteRate >= 45
+      ? "unfinished"
+      : deviationRate >= 35
+      ? "distraction"
+      : payload.meta.dataCoverageRate >= 60
+      ? "consistency"
+      : "sampling";
+  const periodToneHint =
+    periodMode === "daily"
+      ? "오늘 기준 관찰만 말하고 장기 판단은 금지"
+      : periodMode === "weekly"
+      ? "이번 주 반복 패턴 1개와 다음 주 유지 포인트 1개 제안"
+      : periodMode === "monthly"
+      ? "이번 달 흐름의 변화와 유지/정비 포인트 제안"
+      : "넓은 기간이더라도 실제 기록된 활동일 기준으로만 판단";
 
   return [
     "너는 생산성 코치다. 사용자에게 한국어로 따뜻하고 공손한 서비스 톤으로 짧은 코멘트를 작성한다.",
@@ -63,23 +98,38 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     "- 제안 문장은 '...해보는 건 어떨까요?' 형태를 우선 사용한다.",
     "- 압박하거나 평가하는 말투는 금지한다.",
     "- 반말 금지, 과장 금지.",
+    "- 근거 없는 장기 단정 금지(예: '1년 내내', '항상', '꾸준히 유지 중').",
+    "- 동일 의미 표현 반복 금지(비슷한 칭찬/권고 중복 금지).",
     "- 미완료패턴 줄에는 '작업명(횟수)'를 1~2개 반드시 포함한다. 데이터가 없으면 '반복 미완료 작업 없음'으로 작성한다.",
     "기간 해석 규칙:",
     "- daily: 당일 실행감 중심, 바로 실천 가능한 한걸음 제안",
     "- weekly: 반복 습관/패턴 중심, 다음 주에 유지할 1가지 제안",
     "- monthly: 추세 중심, 우선순위 정리/정비 제안",
     "- yearly/longterm: 큰 흐름 중심, 지속 가능한 페이스/회고 제안",
+    "데이터 신뢰도 규칙:",
+    "- activeDays가 3일 이하이거나 coverage가 매우 낮으면 '표본이 적어 단정은 어려움'을 짧게 반영한다.",
+    "- activeDays가 7일 이하면 장기 성과 평가 대신 최근 관찰 위주로 작성한다.",
+    "- period가 길어도 activeDays가 충분하지 않으면 장기 습관 확정 표현 금지.",
     `이번 요청의 기간모드: ${periodMode}`,
+    `이번 요청의 초점 렌즈: ${primaryLens}`,
+    `기간 톤 힌트: ${periodToneHint}`,
     "",
     `기간: ${payload.period.start} ~ ${payload.period.end} (${payload.period.days}일, preset=${payload.period.preset})`,
+    `활동 기록일: ${payload.meta.activeDays}일 (coverage ${payload.meta.dataCoverageRate.toFixed(1)}%)`,
+    `활동 기록 범위: ${payload.meta.firstActiveDate ?? "없음"} ~ ${payload.meta.lastActiveDate ?? "없음"}`,
+    `할일 기록일: ${payload.meta.daysWithTodos}일 / 집중 기록일: ${payload.meta.daysWithFocus}일 / 미완료 발생일: ${payload.meta.daysWithIncomplete}일`,
     `완료: ${payload.totals.doneCount}개`,
     `미완료: ${payload.totals.incompleteCount}개`,
     `완료율: ${payload.rates.completionRate.toFixed(1)}%`,
     `미완료율: ${payload.rates.incompleteRate.toFixed(1)}%`,
     `집중: ${payload.totals.focusMinutes}분`,
     `이탈: ${payload.totals.deviationMinutes}분`,
+    `이탈비율: ${deviationRate.toFixed(1)}%`,
     `휴식: ${payload.totals.restMinutes}분`,
+    `활동일 평균 완료: ${payload.meta.avgDonePerActiveDay.toFixed(2)}개`,
+    `활동일 평균 미완료: ${payload.meta.avgIncompletePerActiveDay.toFixed(2)}개`,
     `자주 미완료된 작업: ${frequentIncompleteTaskLine}`,
+    `저표본 여부: ${sparseData ? "매우 높음" : lowData ? "있음" : "낮음"}`,
     "미완료패턴/개선포인트/다음한걸음에서는 가능하면 자주 미완료된 작업을 구체적으로 언급한다.",
   ].join("\n");
 }

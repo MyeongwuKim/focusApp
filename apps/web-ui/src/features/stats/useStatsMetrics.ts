@@ -267,6 +267,46 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         incompleteLabels: item.incompleteLabels,
       }));
 
+  const activitySignal = useMemo(() => {
+    const series = countStats.dailySeries.map((countItem, index) => {
+      const timeItem = timeStats.dailySeries[index];
+      return {
+        key: countItem.key,
+        done: countItem.done,
+        incomplete: countItem.incomplete,
+        focusMin: timeItem?.focusMin ?? 0,
+        deviationMin: timeItem?.deviationMin ?? 0,
+        restMin: timeItem?.restMin ?? 0,
+      };
+    });
+
+    const hasTodo = (item: (typeof series)[number]) => item.done + item.incomplete > 0;
+    const hasFocus = (item: (typeof series)[number]) => item.focusMin > 0;
+    const hasIncomplete = (item: (typeof series)[number]) => item.incomplete > 0;
+    const isActive = (item: (typeof series)[number]) =>
+      hasTodo(item) || item.focusMin > 0 || item.deviationMin > 0 || item.restMin > 0;
+
+    const activeDays = series.filter(isActive);
+    const firstActiveDate = activeDays.length > 0 ? activeDays[0]?.key ?? null : null;
+    const lastActiveDate = activeDays.length > 0 ? activeDays[activeDays.length - 1]?.key ?? null : null;
+    const daysWithTodo = series.filter(hasTodo).length;
+    const daysWithFocus = series.filter(hasFocus).length;
+    const daysWithIncomplete = series.filter(hasIncomplete).length;
+    const activeDayCount = activeDays.length;
+
+    return {
+      activeDayCount,
+      daysWithTodo,
+      daysWithFocus,
+      daysWithIncomplete,
+      firstActiveDate,
+      lastActiveDate,
+      dataCoverageRate: rangeDays > 0 ? (activeDayCount / rangeDays) * 100 : 0,
+      avgDonePerActiveDay: activeDayCount > 0 ? countStats.doneTodos / activeDayCount : 0,
+      avgIncompletePerActiveDay: activeDayCount > 0 ? countStats.incompleteTodos / activeDayCount : 0,
+    };
+  }, [countStats.dailySeries, countStats.doneTodos, countStats.incompleteTodos, rangeDays, timeStats.dailySeries]);
+
   return {
     count: {
       completionRate: countStats.completionRate,
@@ -291,6 +331,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       timeStats.totalFocus + timeStats.totalDeviation > 0
         ? (timeStats.totalDeviation / (timeStats.totalFocus + timeStats.totalDeviation)) * 100
         : 0,
+    signal: activitySignal,
     isFetching:
       monthlyLogsQuery.dailyLogQueries.some((query) => query.isFetching) ||
       detailQueries.some((query) => query.isFetching),

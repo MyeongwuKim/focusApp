@@ -1,6 +1,26 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { loadEnvFile } from "node:process";
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const KAKAO_MAVEN_REPO = "https://devrepo.kakao.com/nexus/content/groups/public/";
+const APP_ROOT = process.cwd();
+
+function loadMobileEnvFiles() {
+  const candidates = [join(APP_ROOT, ".env"), join(APP_ROOT, ".env.local")];
+  for (const filePath of candidates) {
+    if (!existsSync(filePath)) {
+      continue;
+    }
+    try {
+      loadEnvFile(filePath);
+    } catch {
+      // Ignore malformed/optional local env files and continue with existing process.env.
+    }
+  }
+}
+
+loadMobileEnvFiles();
 
 function hasPlugin(
   plugins: NonNullable<ExpoConfig["plugins"]>,

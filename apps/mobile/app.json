@@ -7,16 +7,21 @@
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": true,
       "bundleIdentifier": "com.myeongwu.focushybrid",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "집중 기록 화면에서 위치 기반 기능(예: 날씨)을 제공하기 위해 위치 권한이 필요합니다."
+        "NSLocationWhenInUseUsageDescription": "집중 기록 화면에서 위치 기반 기능(예: 날씨)을 제공하기 위해 위치 권한이 필요합니다.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "permissions": ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION"],
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "ACCESS_FINE_LOCATION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -32,6 +37,18 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-dev-client",
+        {
+          "launchMode": "most-recent",
+          "ios": {
+            "launchMode": "most-recent"
+          },
+          "android": {
+            "launchMode": "most-recent"
+          }
+        }
+      ],
       "expo-router",
       "expo-notifications",
       [
@@ -54,7 +71,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b9e6d603-5f96-43c6-b0cb-0f22456323ad"
+        "projectId": "db2742d9-396e-44bf-812a-be29dbc594d3"
       }
     },
     "owner": "myeongwukim"

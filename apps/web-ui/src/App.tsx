@@ -15,15 +15,17 @@ import { BackendConnectionBanner } from "./components/BackendConnectionBanner";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { GoPageOptions, NavigateOptions } from "./providers/AppNavigationProvider";
 import { MAIN_ROUTE } from "./routes/route-config";
-import { toast, useAuthStore, useWeatherStore } from "./stores";
+import { confirm, toast, useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import {
   getNativeExpoPushToken,
   getNotificationPermissionStatus,
+  syncNativeAuthState,
   syncNativeWeatherSettings,
 } from "./utils/notifications";
 import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
-import { updateNotificationSettings } from "./api/notificationSettingsApi";
+import { fetchNotificationSettings, updateNotificationSettings } from "./api/notificationSettingsApi";
+import { fetchMotivationMessage } from "./api/motivationMessageApi";
 import { addTodoDeviationToDailyLog, fetchDailyLogByDate } from "./api/dailyLogApi";
 import { formatDateKey } from "./utils/holidays";
 import { fetchMe } from "./api/userApi";
@@ -41,10 +43,15 @@ import {
 } from "./api/backendConnectivity";
 import { getApiOrigin } from "./api/graphqlEndpoint";
 import { useEdgeSwipeClose } from "./hooks/useEdgeSwipeClose";
+import { isNativeWebViewRuntime } from "./utils/runtimeEnvironment";
 
 const BACKEND_RECHECK_MS = 3000;
 const LOGIN_ROUTE_PATH = "/login";
 const AUTH_CALLBACK_ROUTE_PATH = "/auth/callback";
+const SETTINGS_GUIDE_PROMPTED_KEY_PREFIX = "focus-settings-guide-prompted-v1";
+const LOGIN_MOTIVATION_SHOWN_AT_KEY = "focus-login-motivation-shown-at-v1";
+const LOGIN_MOTIVATION_STALE_TIME_MS = 1000 * 60 * 60 * 3;
+const LOGIN_MOTIVATION_QUERY_KEY = ["motivation-message"] as const;
 const OVERLAY_EDGE_SWIPE_START_MAX_X = 56;
 const OVERLAY_EDGE_SWIPE_MIN_DISTANCE = 72;
 const OVERLAY_EDGE_SWIPE_MAX_VERTICAL_DRIFT = 56;
@@ -113,6 +120,64 @@ function getHistoryStackIndex() {
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function hasSeenSettingsGuidePrompt(userId: string) {
+  if (typeof window === "undefined" || !userId) {
+    return true;
+  }
+  try {
+    return window.localStorage.getItem(`${SETTINGS_GUIDE_PROMPTED_KEY_PREFIX}:${userId}`) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markSettingsGuidePromptSeen(userId: string) {
+  if (typeof window === "undefined" || !userId) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(`${SETTINGS_GUIDE_PROMPTED_KEY_PREFIX}:${userId}`, "1");
+  } catch {
+    // ignore local storage failures
+  }
+}
+
+function hasRecentLoginMotivationToast() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  let rawValue: string | null = null;
+  try {
+    rawValue = window.sessionStorage.getItem(LOGIN_MOTIVATION_SHOWN_AT_KEY);
+  } catch {
+    return false;
+  }
+
+  if (!rawValue) {
+    return false;
+  }
+
+  const shownAtMs = Number(rawValue);
+  if (!Number.isFinite(shownAtMs)) {
+    return false;
+  }
+
+  return Date.now() - shownAtMs < LOGIN_MOTIVATION_STALE_TIME_MS;
+}
+
+function markLoginMotivationToastShown() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(LOGIN_MOTIVATION_SHOWN_AT_KEY, String(Date.now()));
+  } catch {
+    // ignore storage failures
+  }
 }
 
 function isOverlaySwipeBackBlockedTarget(target: EventTarget | null) {
@@ -263,6 +328,7 @@ function App() {
   const lastOverlayEnterRef = useRef<{ path: string; at: number } | null>(null);
   const lastOverlayNavigationRef = useRef<{ path: string; at: number } | null>(null);
   const previousAuthTokenRef = useRef<string | null | undefined>(undefined);
+  const previousMotivationAuthTokenRef = useRef<string | null | undefined>(undefined);
   const syncedNotificationAuthTokenRef = useRef<string | null>(null);
   const backgroundEnteredAtMsRef = useRef<number | null>(null);
   const backgroundSyncInFlightRef = useRef(false);
@@ -291,6 +357,58 @@ function App() {
     }
 
     void queryClient.invalidateQueries({ refetchType: "all" });
+  }, [authToken]);
+
+  useEffect(() => {
+    const previousToken = previousMotivationAuthTokenRef.current;
+    if (previousToken === undefined) {
+      previousMotivationAuthTokenRef.current = authToken;
+      return;
+    }
+
+    if (previousToken === authToken) {
+      return;
+    }
+
+    previousMotivationAuthTokenRef.current = authToken;
+
+    if (previousToken || !authToken) {
+      return;
+    }
+
+    if (hasRecentLoginMotivationToast()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void queryClient
+      .fetchQuery({
+        queryKey: LOGIN_MOTIVATION_QUERY_KEY,
+        staleTime: LOGIN_MOTIVATION_STALE_TIME_MS,
+        gcTime: LOGIN_MOTIVATION_STALE_TIME_MS,
+        queryFn: fetchMotivationMessage,
+      })
+      .then((result) => {
+        if (cancelled || hasRecentLoginMotivationToast()) {
+          return;
+        }
+
+        toast.show({
+          type: "positive",
+          title: "오늘의 한마디",
+          message: result.message,
+          duration: 3200,
+        });
+        markLoginMotivationToastShown();
+      })
+      .catch(() => {
+        // 로그인 경험을 방해하지 않도록 조용히 실패 처리
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [authToken]);
 
   useEffect(() => {
@@ -499,6 +617,10 @@ function App() {
   }, [weatherEnabled]);
 
   useEffect(() => {
+    syncNativeAuthState({ loggedIn: isLoggedIn });
+  }, [isLoggedIn]);
+
+  useEffect(() => {
     syncNativeWeatherSettings({
       enabled: weatherEnabled,
       mood: weatherMood,
@@ -529,6 +651,7 @@ function App() {
         typeof payload.weatherCode !== "number" ||
         typeof payload.isDay !== "number"
       ) {
+        useWeatherStore.getState().setWeather(null);
         return;
       }
 
@@ -724,9 +847,44 @@ function App() {
           return;
         }
 
-        await updateNotificationSettings({
-          systemPermission: permission.status,
-        });
+        try {
+          const currentSettings = await fetchNotificationSettings();
+          if (cancelled) {
+            return;
+          }
+
+          const shouldPromptSettingsGuide =
+            isNativeWebViewRuntime() && !hasSeenSettingsGuidePrompt(currentSettings.userId);
+          if (shouldPromptSettingsGuide) {
+            const result = await confirm({
+              title: "알림/위치 설정을 확인해볼까요?",
+              message:
+                "리마인드 알림과 위치(날씨) 기능은 설정 페이지에서 한 번에 조정할 수 있어요. 지금 바로 이동할까요?",
+              closeOnBackdrop: false,
+              buttons: [
+                { label: "다음에", value: "later" },
+                { label: "설정으로 이동", value: "open", tone: "primary" },
+              ],
+            });
+            if (cancelled) {
+              return;
+            }
+            markSettingsGuidePromptSeen(currentSettings.userId);
+            if (result === "open") {
+              navigate("/settings");
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to fetch notification settings before settings guide prompt", error);
+        }
+
+        try {
+          await updateNotificationSettings({
+            systemPermission: permission.status,
+          });
+        } catch (error) {
+          console.warn("Failed to update notification settings during permission sync", error);
+        }
 
         if (!permission.granted) {
           syncedNotificationAuthTokenRef.current = authToken;
@@ -757,7 +915,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [authToken, isLoggedIn]);
+  }, [authToken, isLoggedIn, navigate]);
 
   const goPage = (path: string, options?: GoPageOptions) => {
     const nextPath = buildPagePath(path, options?.query);
