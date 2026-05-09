@@ -133,8 +133,31 @@ type Particle = {
   width?: number;
 };
 
+const EMPTY_PARTICLES: Particle[] = [];
+const PARTICLE_CACHE_MAX_ENTRIES = 96;
+const particleCache = new Map<string, Particle[]>();
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function getCachedParticles(key: string, builder: () => Particle[]) {
+  const cached = particleCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const created = builder();
+  particleCache.set(key, created);
+
+  if (particleCache.size > PARTICLE_CACHE_MAX_ENTRIES) {
+    const oldestKey = particleCache.keys().next().value;
+    if (oldestKey) {
+      particleCache.delete(oldestKey);
+    }
+  }
+
+  return created;
 }
 
 function weatherCodeToEffect(code: number): WeatherEffect {
@@ -545,127 +568,145 @@ function WeatherOverlay({
   const clarityThicknessScale = 0.7 + clarityRatio * 0.95;
   const claritySpeedScale = 0.85 + clarityRatio * 0.35;
   const moodTintOpacity = 0.8 + (1 - clarityRatio) * 0.6;
+  const normalizedWidth = Math.round(width);
+  const normalizedClarity = clamp(Math.round(particleClarity), 0, 100);
+  const profileBaseKey = `${effect ?? 'clear'}:${mood}:${normalizedClarity}:${normalizedWidth}`;
+
   const rainParticles = useMemo<Particle[]>(() => {
     if (effect !== 'rain' && effect !== 'thunder') {
-      return [];
+      return EMPTY_PARTICLES;
     }
-    const baseCount = isCinematic ? 30 : 58;
-    const count = Math.max(8, Math.round(baseCount * clarityCountScale));
-    return Array.from({ length: count }, () => ({
-      left: Math.random() * width,
-      delay: Math.random() * 2200,
-      duration:
-        ((isCinematic ? 620 : 980) + Math.random() * (isCinematic ? 520 : 920)) / claritySpeedScale,
-      size: (isCinematic ? 28 : 18) + Math.random() * (isCinematic ? 24 : 20),
-      opacity: clamp(
-        ((isCinematic ? 0.11 : 0.2) + Math.random() * (isCinematic ? 0.08 : 0.13)) * clarityAlphaScale,
-        0.03,
-        0.95
-      ),
-      drift: (Math.random() - 0.5) * (isCinematic ? 11 : 26),
-      width: ((isCinematic ? 1.2 : 0.8) + Math.random() * (isCinematic ? 1.0 : 0.6)) * clarityThicknessScale,
-    }));
-  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, clarityThicknessScale, effect, isCinematic, width]);
+    return getCachedParticles(`${profileBaseKey}:rain-streak`, () => {
+      const baseCount = isCinematic ? 30 : 58;
+      const count = Math.max(8, Math.round(baseCount * clarityCountScale));
+      return Array.from({ length: count }, () => ({
+        left: Math.random() * width,
+        delay: Math.random() * 2200,
+        duration:
+          ((isCinematic ? 620 : 980) + Math.random() * (isCinematic ? 520 : 920)) / claritySpeedScale,
+        size: (isCinematic ? 28 : 18) + Math.random() * (isCinematic ? 24 : 20),
+        opacity: clamp(
+          ((isCinematic ? 0.11 : 0.2) + Math.random() * (isCinematic ? 0.08 : 0.13)) * clarityAlphaScale,
+          0.03,
+          0.95
+        ),
+        drift: (Math.random() - 0.5) * (isCinematic ? 11 : 26),
+        width:
+          ((isCinematic ? 1.2 : 0.8) + Math.random() * (isCinematic ? 1.0 : 0.6)) *
+          clarityThicknessScale,
+      }));
+    });
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, clarityThicknessScale, effect, isCinematic, profileBaseKey, width]);
   const snowFarParticles = useMemo<Particle[]>(() => {
     if (effect !== 'snow') {
-      return [];
+      return EMPTY_PARTICLES;
     }
-    const baseCount = isCinematic ? 12 : 32;
-    const count = Math.max(6, Math.round(baseCount * clarityCountScale));
-    return Array.from({ length: count }, () => ({
-      left: Math.random() * width,
-      delay: Math.random() * 2600,
-      duration:
-        ((isCinematic ? 4600 : 7600) + Math.random() * (isCinematic ? 2600 : 4200)) / claritySpeedScale,
-      size: (isCinematic ? 1.4 : 2.4) + Math.random() * (isCinematic ? 2.2 : 3.8),
-      opacity: clamp(
-        ((isCinematic ? 0.05 : 0.13) + Math.random() * (isCinematic ? 0.06 : 0.16)) * clarityAlphaScale,
-        0.02,
-        0.7
-      ),
-      drift: (isCinematic ? 4 : 9) + Math.random() * (isCinematic ? 5 : 11),
-    }));
-  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, width]);
+    return getCachedParticles(`${profileBaseKey}:snow-far`, () => {
+      const baseCount = isCinematic ? 12 : 32;
+      const count = Math.max(6, Math.round(baseCount * clarityCountScale));
+      return Array.from({ length: count }, () => ({
+        left: Math.random() * width,
+        delay: Math.random() * 2600,
+        duration:
+          ((isCinematic ? 4600 : 7600) + Math.random() * (isCinematic ? 2600 : 4200)) / claritySpeedScale,
+        size: (isCinematic ? 1.4 : 2.4) + Math.random() * (isCinematic ? 2.2 : 3.8),
+        opacity: clamp(
+          ((isCinematic ? 0.05 : 0.13) + Math.random() * (isCinematic ? 0.06 : 0.16)) * clarityAlphaScale,
+          0.02,
+          0.7
+        ),
+        drift: (isCinematic ? 4 : 9) + Math.random() * (isCinematic ? 5 : 11),
+      }));
+    });
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, profileBaseKey, width]);
   const snowNearParticles = useMemo<Particle[]>(() => {
     if (effect !== 'snow') {
-      return [];
+      return EMPTY_PARTICLES;
     }
-    const baseCount = isCinematic ? 16 : 40;
-    const count = Math.max(8, Math.round(baseCount * clarityCountScale));
-    return Array.from({ length: count }, () => ({
-      left: Math.random() * width,
-      delay: Math.random() * 2200,
-      duration:
-        ((isCinematic ? 3400 : 5200) + Math.random() * (isCinematic ? 2200 : 3200)) / claritySpeedScale,
-      size: (isCinematic ? 2.8 : 4.5) + Math.random() * (isCinematic ? 4.2 : 7.6),
-      opacity: clamp(
-        ((isCinematic ? 0.1 : 0.24) + Math.random() * (isCinematic ? 0.1 : 0.24)) * clarityAlphaScale,
-        0.04,
-        0.95
-      ),
-      drift: (isCinematic ? 6 : 12) + Math.random() * (isCinematic ? 6 : 14),
-    }));
-  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, width]);
+    return getCachedParticles(`${profileBaseKey}:snow-near`, () => {
+      const baseCount = isCinematic ? 16 : 40;
+      const count = Math.max(8, Math.round(baseCount * clarityCountScale));
+      return Array.from({ length: count }, () => ({
+        left: Math.random() * width,
+        delay: Math.random() * 2200,
+        duration:
+          ((isCinematic ? 3400 : 5200) + Math.random() * (isCinematic ? 2200 : 3200)) / claritySpeedScale,
+        size: (isCinematic ? 2.8 : 4.5) + Math.random() * (isCinematic ? 4.2 : 7.6),
+        opacity: clamp(
+          ((isCinematic ? 0.1 : 0.24) + Math.random() * (isCinematic ? 0.1 : 0.24)) * clarityAlphaScale,
+          0.04,
+          0.95
+        ),
+        drift: (isCinematic ? 6 : 12) + Math.random() * (isCinematic ? 6 : 14),
+      }));
+    });
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, profileBaseKey, width]);
   const snowLandingPuffs = useMemo<Particle[]>(() => {
     if (effect !== 'snow') {
-      return [];
+      return EMPTY_PARTICLES;
     }
-    const baseCount = isCinematic ? 12 : 28;
-    const count = Math.max(5, Math.round(baseCount * clarityCountScale));
-    return Array.from({ length: count }, () => ({
-      left: Math.random() * width,
-      delay: Math.random() * 1800,
-      duration:
-        ((isCinematic ? 760 : 980) + Math.random() * (isCinematic ? 680 : 1200)) / claritySpeedScale,
-      size: (isCinematic ? 8 : 12) + Math.random() * (isCinematic ? 10 : 16),
-      opacity: clamp(
-        ((isCinematic ? 0.14 : 0.26) + Math.random() * (isCinematic ? 0.12 : 0.22)) * clarityAlphaScale,
-        0.05,
-        0.92
-      ),
-      drift: 0,
-    }));
-  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, width]);
+    return getCachedParticles(`${profileBaseKey}:snow-puff`, () => {
+      const baseCount = isCinematic ? 12 : 28;
+      const count = Math.max(5, Math.round(baseCount * clarityCountScale));
+      return Array.from({ length: count }, () => ({
+        left: Math.random() * width,
+        delay: Math.random() * 1800,
+        duration:
+          ((isCinematic ? 760 : 980) + Math.random() * (isCinematic ? 680 : 1200)) / claritySpeedScale,
+        size: (isCinematic ? 8 : 12) + Math.random() * (isCinematic ? 10 : 16),
+        opacity: clamp(
+          ((isCinematic ? 0.14 : 0.26) + Math.random() * (isCinematic ? 0.12 : 0.22)) * clarityAlphaScale,
+          0.05,
+          0.92
+        ),
+        drift: 0,
+      }));
+    });
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, profileBaseKey, width]);
   const rainSplashes = useMemo<Particle[]>(() => {
     if (effect !== 'rain' && effect !== 'thunder') {
-      return [];
+      return EMPTY_PARTICLES;
     }
-    const baseCount = isCinematic ? 8 : 20;
-    const count = Math.max(4, Math.round(baseCount * clarityCountScale));
-    return Array.from({ length: count }, () => ({
-      left: Math.random() * width,
-      delay: Math.random() * 1600,
-      duration:
-        ((isCinematic ? 760 : 1080) + Math.random() * (isCinematic ? 640 : 920)) / claritySpeedScale,
-      size: (isCinematic ? 6 : 9) + Math.random() * (isCinematic ? 6 : 10),
-      opacity: clamp(
-        ((isCinematic ? 0.07 : 0.14) + Math.random() * (isCinematic ? 0.08 : 0.14)) * clarityAlphaScale,
-        0.04,
-        0.9
-      ),
-      drift: 0,
-    }));
-  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, width]);
+    return getCachedParticles(`${profileBaseKey}:rain-splash`, () => {
+      const baseCount = isCinematic ? 8 : 20;
+      const count = Math.max(4, Math.round(baseCount * clarityCountScale));
+      return Array.from({ length: count }, () => ({
+        left: Math.random() * width,
+        delay: Math.random() * 1600,
+        duration:
+          ((isCinematic ? 760 : 1080) + Math.random() * (isCinematic ? 640 : 920)) / claritySpeedScale,
+        size: (isCinematic ? 6 : 9) + Math.random() * (isCinematic ? 6 : 10),
+        opacity: clamp(
+          ((isCinematic ? 0.07 : 0.14) + Math.random() * (isCinematic ? 0.08 : 0.14)) * clarityAlphaScale,
+          0.04,
+          0.9
+        ),
+        drift: 0,
+      }));
+    });
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, profileBaseKey, width]);
   const rainSprays = useMemo<Particle[]>(() => {
     if (effect !== 'rain' && effect !== 'thunder') {
-      return [];
+      return EMPTY_PARTICLES;
     }
-    const baseCount = isCinematic ? 6 : 12;
-    const count = Math.max(4, Math.round(baseCount * clarityCountScale));
-    return Array.from({ length: count }, () => ({
-      left: Math.random() * width,
-      delay: Math.random() * 1800,
-      duration:
-        ((isCinematic ? 620 : 840) + Math.random() * (isCinematic ? 520 : 780)) / claritySpeedScale,
-      size: (isCinematic ? 4 : 6) + Math.random() * (isCinematic ? 4 : 7),
-      opacity: clamp(
-        ((isCinematic ? 0.07 : 0.13) + Math.random() * (isCinematic ? 0.08 : 0.12)) * clarityAlphaScale,
-        0.04,
-        0.9
-      ),
-      drift: (isCinematic ? 3 : 5) + Math.random() * (isCinematic ? 5 : 10),
-    }));
-  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, width]);
+    return getCachedParticles(`${profileBaseKey}:rain-spray`, () => {
+      const baseCount = isCinematic ? 6 : 12;
+      const count = Math.max(4, Math.round(baseCount * clarityCountScale));
+      return Array.from({ length: count }, () => ({
+        left: Math.random() * width,
+        delay: Math.random() * 1800,
+        duration:
+          ((isCinematic ? 620 : 840) + Math.random() * (isCinematic ? 520 : 780)) / claritySpeedScale,
+        size: (isCinematic ? 4 : 6) + Math.random() * (isCinematic ? 4 : 7),
+        opacity: clamp(
+          ((isCinematic ? 0.07 : 0.13) + Math.random() * (isCinematic ? 0.08 : 0.12)) * clarityAlphaScale,
+          0.04,
+          0.9
+        ),
+        drift: (isCinematic ? 3 : 5) + Math.random() * (isCinematic ? 5 : 10),
+      }));
+    });
+  }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, profileBaseKey, width]);
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const afterGlowOpacity = useRef(new Animated.Value(0)).current;
   const snowGroundOpacity = useRef(new Animated.Value(0)).current;

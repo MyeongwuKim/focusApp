@@ -26,7 +26,12 @@ import {
 import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
 import { fetchNotificationSettings, updateNotificationSettings } from "./api/notificationSettingsApi";
 import { fetchMotivationMessage } from "./api/motivationMessageApi";
-import { addTodoDeviationToDailyLog, fetchDailyLogByDate } from "./api/dailyLogApi";
+import {
+  addTodoDeviationToDailyLog,
+  fetchDailyLogByDate,
+  pauseTodoFromDailyLog,
+  resumeTodoFromDailyLog,
+} from "./api/dailyLogApi";
 import { formatDateKey } from "./utils/holidays";
 import { fetchMe } from "./api/userApi";
 import { getUserFacingErrorMessage } from "./utils/errorMessage";
@@ -49,7 +54,6 @@ const BACKEND_RECHECK_MS = 3000;
 const LOGIN_ROUTE_PATH = "/login";
 const AUTH_CALLBACK_ROUTE_PATH = "/auth/callback";
 const SETTINGS_GUIDE_PROMPTED_KEY_PREFIX = "focus-settings-guide-prompted-v1";
-const LOGIN_MOTIVATION_SHOWN_AT_KEY = "focus-login-motivation-shown-at-v1";
 const LOGIN_MOTIVATION_STALE_TIME_MS = 1000 * 60 * 60 * 3;
 const LOGIN_MOTIVATION_QUERY_KEY = ["motivation-message"] as const;
 const OVERLAY_EDGE_SWIPE_START_MAX_X = 56;
@@ -62,6 +66,7 @@ const OVERLAY_ENTER_GUARD_MS = 720;
 const OVERLAY_CAROUSEL_BACK_OFFSET_PERCENT = 16;
 const OVERLAY_CAROUSEL_BACK_MIN_SCALE = 0.955;
 const OVERLAY_CAROUSEL_FRONT_MIN_SCALE = 0.985;
+const FOCUS_RESUME_GRACE_MS = 60 * 1000;
 const ROUTE_PATH: Record<RouteKey, string> = {
   calendar: "/calendar",
   tasks: "/tasks",
@@ -141,42 +146,6 @@ function markSettingsGuidePromptSeen(userId: string) {
     window.localStorage.setItem(`${SETTINGS_GUIDE_PROMPTED_KEY_PREFIX}:${userId}`, "1");
   } catch {
     // ignore local storage failures
-  }
-}
-
-function hasRecentLoginMotivationToast() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  let rawValue: string | null = null;
-  try {
-    rawValue = window.sessionStorage.getItem(LOGIN_MOTIVATION_SHOWN_AT_KEY);
-  } catch {
-    return false;
-  }
-
-  if (!rawValue) {
-    return false;
-  }
-
-  const shownAtMs = Number(rawValue);
-  if (!Number.isFinite(shownAtMs)) {
-    return false;
-  }
-
-  return Date.now() - shownAtMs < LOGIN_MOTIVATION_STALE_TIME_MS;
-}
-
-function markLoginMotivationToastShown() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.sessionStorage.setItem(LOGIN_MOTIVATION_SHOWN_AT_KEY, String(Date.now()));
-  } catch {
-    // ignore storage failures
   }
 }
 
@@ -328,11 +297,17 @@ function App() {
   const lastOverlayEnterRef = useRef<{ path: string; at: number } | null>(null);
   const lastOverlayNavigationRef = useRef<{ path: string; at: number } | null>(null);
   const previousAuthTokenRef = useRef<string | null | undefined>(undefined);
-  const previousMotivationAuthTokenRef = useRef<string | null | undefined>(undefined);
+  const hasShownLoginMotivationThisLaunchRef = useRef(false);
   const syncedNotificationAuthTokenRef = useRef<string | null>(null);
   const backgroundEnteredAtMsRef = useRef<number | null>(null);
   const backgroundSyncInFlightRef = useRef(false);
+  const autoPauseInFlightRef = useRef(false);
   const skipNextNativeForegroundFlushRef = useRef(false);
+  const autoPausedSessionRef = useRef<{
+    dateKey: string;
+    todoId: string;
+    pausedAtMs: number;
+  } | null>(null);
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
@@ -360,25 +335,16 @@ function App() {
   }, [authToken]);
 
   useEffect(() => {
-    const previousToken = previousMotivationAuthTokenRef.current;
-    if (previousToken === undefined) {
-      previousMotivationAuthTokenRef.current = authToken;
+    if (!authToken) {
+      hasShownLoginMotivationThisLaunchRef.current = false;
       return;
     }
 
-    if (previousToken === authToken) {
+    if (hasShownLoginMotivationThisLaunchRef.current) {
       return;
     }
 
-    previousMotivationAuthTokenRef.current = authToken;
-
-    if (previousToken || !authToken) {
-      return;
-    }
-
-    if (hasRecentLoginMotivationToast()) {
-      return;
-    }
+    hasShownLoginMotivationThisLaunchRef.current = true;
 
     let cancelled = false;
 
@@ -390,7 +356,7 @@ function App() {
         queryFn: fetchMotivationMessage,
       })
       .then((result) => {
-        if (cancelled || hasRecentLoginMotivationToast()) {
+        if (cancelled) {
           return;
         }
 
@@ -400,10 +366,10 @@ function App() {
           message: result.message,
           duration: 3200,
         });
-        markLoginMotivationToastShown();
       })
       .catch(() => {
         // 로그인 경험을 방해하지 않도록 조용히 실패 처리
+        hasShownLoginMotivationThisLaunchRef.current = false;
       });
 
     return () => {
@@ -677,14 +643,51 @@ function App() {
           .ReactNativeWebView
       );
 
-    const markBackgroundEntered = () => {
+    const setDailyLogCache = (dateKey: string, nextLog: Awaited<ReturnType<typeof fetchDailyLogByDate>>) => {
+      queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), nextLog);
+      queryClient.setQueryData(statsDailyDetailQueryKey(dateKey), nextLog);
+    };
+
+    const markBackgroundEntered = async () => {
       if (backgroundEnteredAtMsRef.current === null) {
         backgroundEnteredAtMsRef.current = Date.now();
+      }
+
+      if (autoPausedSessionRef.current || autoPauseInFlightRef.current) {
+        return;
+      }
+
+      autoPauseInFlightRef.current = true;
+      try {
+        const todayKey = formatDateKey(new Date());
+        const todayLog = await fetchDailyLogByDate(todayKey);
+        const inProgressTodo = todayLog?.todos?.find(
+          (todo) => !todo.done && Boolean(todo.startedAt) && !todo.pausedAt && !todo.completedAt
+        );
+        if (!inProgressTodo) {
+          return;
+        }
+
+        const pausedLog = await pauseTodoFromDailyLog({
+          dateKey: todayKey,
+          todoId: inProgressTodo.id,
+        });
+        setDailyLogCache(todayKey, pausedLog);
+        autoPausedSessionRef.current = {
+          dateKey: todayKey,
+          todoId: inProgressTodo.id,
+          pausedAtMs: Date.now(),
+        };
+      } catch (error) {
+        console.log("Failed to auto pause focus on app leave:", error);
+      } finally {
+        autoPauseInFlightRef.current = false;
       }
     };
 
     const flushDeviationIfNeeded = async () => {
-      const backgroundEnteredAtMs = backgroundEnteredAtMsRef.current;
+      const autoPausedSession = autoPausedSessionRef.current;
+      const backgroundEnteredAtMs = backgroundEnteredAtMsRef.current ?? autoPausedSession?.pausedAtMs ?? null;
       if (backgroundEnteredAtMs === null || backgroundSyncInFlightRef.current) {
         return;
       }
@@ -692,23 +695,45 @@ function App() {
       backgroundSyncInFlightRef.current = true;
       try {
         const elapsedSeconds = Math.floor((Date.now() - backgroundEnteredAtMs) / 1000);
-        const todayKey = formatDateKey(new Date());
-        if (elapsedSeconds > 0) {
-          const todayLog = await fetchDailyLogByDate(todayKey);
-          const inProgressTodo = todayLog?.todos?.find(
-            (todo) => !todo.done && Boolean(todo.startedAt) && !todo.pausedAt && !todo.completedAt
-          );
-          if (!inProgressTodo) {
-            return;
-          }
-
+        const targetDateKey = autoPausedSession?.dateKey ?? formatDateKey(new Date());
+        let targetLog = await fetchDailyLogByDate(targetDateKey);
+        if (elapsedSeconds > 0 && autoPausedSession) {
           const updatedLog = await addTodoDeviationToDailyLog({
-            dateKey: todayKey,
-            todoId: inProgressTodo.id,
+            dateKey: targetDateKey,
+            todoId: autoPausedSession.todoId,
             seconds: elapsedSeconds,
           });
-          queryClient.setQueryData(dailyLogByDateQueryKey(todayKey), updatedLog);
-          queryClient.setQueryData(statsDailyDetailQueryKey(todayKey), updatedLog);
+          targetLog = updatedLog;
+          setDailyLogCache(targetDateKey, updatedLog);
+        }
+
+        if (autoPausedSession) {
+          const pausedDurationMs = Date.now() - autoPausedSession.pausedAtMs;
+          const isWithinGrace = pausedDurationMs <= FOCUS_RESUME_GRACE_MS;
+          const pausedTodo = targetLog?.todos?.find((todo) => todo.id === autoPausedSession.todoId);
+          const canAutoResume =
+            isWithinGrace &&
+            Boolean(pausedTodo) &&
+            !pausedTodo?.done &&
+            Boolean(pausedTodo?.startedAt) &&
+            Boolean(pausedTodo?.pausedAt) &&
+            !pausedTodo?.completedAt;
+
+          if (canAutoResume) {
+            const resumedLog = await resumeTodoFromDailyLog({
+              dateKey: targetDateKey,
+              todoId: autoPausedSession.todoId,
+            });
+            setDailyLogCache(targetDateKey, resumedLog);
+          } else if (!isWithinGrace) {
+            toast.show({
+              type: "error",
+              title: "집중 일시정지 유지",
+              message: "이탈 시간이 60초를 넘어 자동 재개되지 않았어요.",
+              duration: 1800,
+            });
+          }
+          autoPausedSessionRef.current = null;
         }
       } catch (error) {
         console.log("Failed to add deviation on app foreground:", error);
@@ -735,7 +760,7 @@ function App() {
 
       const nextState = detail.payload?.state;
       if (nextState === "inactive" || nextState === "background") {
-        markBackgroundEntered();
+        void markBackgroundEntered();
         return;
       }
 
@@ -747,6 +772,29 @@ function App() {
         return;
       }
       await flushDeviationIfNeeded();
+    };
+
+    const handleNativeDeviceLockStateChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        type?: string;
+        payload?: {
+          isLocked?: boolean;
+        };
+      }>;
+      const detail = customEvent.detail;
+      if (detail?.type !== "RN_DEVICE_LOCK_STATE_CHANGED") {
+        return;
+      }
+      if (!isLoggedIn || isLoginRoute || isAuthCallbackRoute) {
+        return;
+      }
+
+      if (detail.payload?.isLocked) {
+        console.log("[DeviceLock] Web received lock event, auto pause flow");
+        void markBackgroundEntered();
+        return;
+      }
+      console.log("[DeviceLock] Web received unlock event");
     };
 
     const handleNativeTodoSessionRecovery = async (event: Event) => {
@@ -791,8 +839,7 @@ function App() {
           todoId,
           seconds: elapsedSeconds,
         });
-        queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), updatedLog);
-        queryClient.setQueryData(statsDailyDetailQueryKey(dateKey), updatedLog);
+        setDailyLogCache(dateKey, updatedLog);
       } catch (error) {
         console.log("Failed to restore deviation from native todo session:", error);
       }
@@ -807,7 +854,7 @@ function App() {
       }
 
       if (document.visibilityState === "hidden") {
-        markBackgroundEntered();
+        void markBackgroundEntered();
         return;
       }
 
@@ -817,10 +864,15 @@ function App() {
     };
 
     window.addEventListener("focus-hybrid-native-bridge", handleNativeAppStateChanged as EventListener);
+    window.addEventListener("focus-hybrid-native-bridge", handleNativeDeviceLockStateChanged as EventListener);
     window.addEventListener("focus-hybrid-native-bridge", handleNativeTodoSessionRecovery as EventListener);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener("focus-hybrid-native-bridge", handleNativeAppStateChanged as EventListener);
+      window.removeEventListener(
+        "focus-hybrid-native-bridge",
+        handleNativeDeviceLockStateChanged as EventListener
+      );
       window.removeEventListener(
         "focus-hybrid-native-bridge",
         handleNativeTodoSessionRecovery as EventListener

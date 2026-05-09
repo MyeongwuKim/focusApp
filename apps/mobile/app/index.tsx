@@ -9,6 +9,7 @@ import {
   BackHandler,
   Easing,
   Linking,
+  NativeEventEmitter,
   NativeModules,
   PermissionsAndroid,
   Platform,
@@ -107,6 +108,21 @@ type NativeKakaoAuthResult = {
 type NativeNaverAuthResult = {
   token: string;
   userId: string;
+};
+type DeviceLockStatePayload = {
+  isLocked?: boolean;
+};
+type DeviceLockStateSnapshot = {
+  isLocked?: boolean;
+};
+type DeviceLockEventNativeModule = {
+  getCurrentLockState?: () => Promise<DeviceLockStateSnapshot>;
+  addListener?: (eventName: string) => void;
+  removeListeners?: (count: number) => void;
+};
+type NativeEventEmitterModuleShape = {
+  addListener: (eventType: string) => void;
+  removeListeners: (count: number) => void;
 };
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
@@ -789,6 +805,8 @@ export default function WebViewScreen() {
   const nativeTodoSessionRef = useRef<NativeTodoSession | null>(null);
   const pendingTodoSessionRecoveryRef = useRef<TodoSessionRecoveryPayload | null>(null);
   const pendingWeatherSnapshotRef = useRef<NativeWeatherSnapshot | null>(null);
+  const isDeviceLockedRef = useRef(false);
+  const skipNextForegroundDeviationRef = useRef(false);
 
   const navigateWebViewByTargetPath = (targetPath: string) => {
     if (!targetPath.startsWith("/")) {
@@ -849,6 +867,64 @@ export default function WebViewScreen() {
       });
     }
   }, [dispatchNativeBridgeEvent, persistNativeTodoSession]);
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") {
+      return;
+    }
+
+    const nativeModule = NativeModules.DeviceLockEventEmitter as DeviceLockEventNativeModule | undefined;
+    if (!nativeModule) {
+      return;
+    }
+    if (
+      typeof nativeModule.addListener !== "function" ||
+      typeof nativeModule.removeListeners !== "function"
+    ) {
+      return;
+    }
+
+    const applyLockState = (isLocked: boolean) => {
+      console.log("[DeviceLock] RN applyLockState", { isLocked });
+      isDeviceLockedRef.current = isLocked;
+      if (isLocked) {
+        skipNextForegroundDeviationRef.current = true;
+      }
+
+      dispatchNativeBridgeEvent({
+        type: "RN_DEVICE_LOCK_STATE_CHANGED",
+        payload: {
+          isLocked,
+          source: "ios-protected-data",
+        },
+      });
+    };
+
+    const eventEmitter = new NativeEventEmitter(nativeModule as NativeEventEmitterModuleShape);
+    const subscription = eventEmitter.addListener(
+      "DEVICE_LOCK_STATE_CHANGED",
+      (payload: DeviceLockStatePayload | null | undefined) => {
+        console.log("[DeviceLock] RN native event received", payload);
+        applyLockState(Boolean(payload?.isLocked));
+      }
+    );
+
+    void (async () => {
+      try {
+        const currentState = await nativeModule.getCurrentLockState?.();
+        if (typeof currentState?.isLocked === "boolean") {
+          console.log("[DeviceLock] RN initial native lock state", currentState);
+          applyLockState(currentState.isLocked);
+        }
+      } catch (error) {
+        console.log("Failed to read current iOS device lock state:", error);
+      }
+    })();
+
+    return () => {
+      subscription.remove();
+    };
+  }, [dispatchNativeBridgeEvent]);
 
   const dispatchPendingWeatherSnapshot = useCallback(() => {
     const pendingSnapshot = pendingWeatherSnapshotRef.current;
@@ -1213,6 +1289,14 @@ export default function WebViewScreen() {
       }
 
       if (nextState === "inactive" || nextState === "background") {
+        if (isDeviceLockedRef.current) {
+          console.log("[DeviceLock] RN skip background timestamp because locked");
+          void persistNativeTodoSession({
+            ...currentSession,
+            backgroundEnteredAtMs: null,
+          });
+          return;
+        }
         if (currentSession.backgroundEnteredAtMs !== null) {
           return;
         }
@@ -1226,6 +1310,16 @@ export default function WebViewScreen() {
       }
 
       if (nextState !== "active" || currentSession.backgroundEnteredAtMs === null) {
+        return;
+      }
+
+      if (skipNextForegroundDeviationRef.current) {
+        console.log("[DeviceLock] RN skip foreground deviation recovery because locked");
+        skipNextForegroundDeviationRef.current = false;
+        void persistNativeTodoSession({
+          ...currentSession,
+          backgroundEnteredAtMs: null,
+        });
         return;
       }
 

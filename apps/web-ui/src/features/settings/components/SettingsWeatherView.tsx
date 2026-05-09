@@ -51,6 +51,7 @@ export function SettingsWeatherView() {
     void (async () => {
       setIsLoading(true);
       let optimisticGranted = false;
+      let didRequestPermission = false;
       try {
         const status = await getLocationPermissionStatus();
         if (status.granted) {
@@ -59,6 +60,7 @@ export function SettingsWeatherView() {
         }
 
         if (status.canAskAgain) {
+          didRequestPermission = true;
           const requested = await requestLocationPermission();
           optimisticGranted = requested.granted;
           setIsLocationOn(requested.granted);
@@ -71,11 +73,16 @@ export function SettingsWeatherView() {
         openAppPermissionSettings();
       } finally {
         let refreshed = await getLocationPermissionStatus();
-        if (optimisticGranted && !refreshed.granted) {
-          await new Promise((resolve) => {
-            window.setTimeout(resolve, 260);
-          });
-          refreshed = await getLocationPermissionStatus();
+        if ((didRequestPermission || optimisticGranted) && !refreshed.granted) {
+          for (let attempt = 0; attempt < 6; attempt += 1) {
+            await new Promise((resolve) => {
+              window.setTimeout(resolve, 250);
+            });
+            refreshed = await getLocationPermissionStatus();
+            if (refreshed.granted) {
+              break;
+            }
+          }
         }
         setIsLocationOn(refreshed.granted || optimisticGranted);
         setIsLoading(false);

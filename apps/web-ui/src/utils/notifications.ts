@@ -383,7 +383,7 @@ export async function requestLocationPermission(): Promise<NativeLocationPermiss
         settled = true;
         window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
         void refineLocationStatusFromWeb(getBrowserLocationPermissionStatus()).then(resolve);
-      }, 3000);
+      }, 15000);
 
       const handleBridgeEvent = (
         event: CustomEvent<{ type?: string; requestId?: string; payload?: unknown }>

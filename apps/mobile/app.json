@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "requireFullScreen": true,
       "bundleIdentifier": "com.myeongwu.focushybrid",
       "infoPlist": {
@@ -18,10 +18,7 @@
       }
     },
     "android": {
-      "permissions": [
-        "POST_NOTIFICATIONS",
-        "ACCESS_FINE_LOCATION"
-      ],
+      "permissions": ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION"],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

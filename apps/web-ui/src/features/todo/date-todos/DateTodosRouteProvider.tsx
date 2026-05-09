@@ -603,7 +603,6 @@ export function DateTodosRouteProvider({
 
     const restAccumulatedSeconds = Math.max(dailyLogQuery.data?.restAccumulatedSeconds ?? 0, 0);
     const activeRestSeconds = restStartedAtMs ? Math.max(Math.floor((nowMs - restStartedAtMs) / 1000), 0) : 0;
-
     return {
       active: isRestActive ? ("rest" as const) : hasInProgressTask ? ("focus" as const) : null,
       focusMinutes: Math.floor((focusSeconds * 1000) / 60000),
