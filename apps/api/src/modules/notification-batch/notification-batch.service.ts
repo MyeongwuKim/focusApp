@@ -1,7 +1,10 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { env } from "../../config/env.js";
-import { computeNextReminderAtAfterRun } from "./notification-reminder-schedule.js";
+import {
+  computeNextReminderAtAfterRun,
+  computeNextReminderAtForSettingsRefresh,
+} from "./notification-reminder-schedule.js";
 
 type ReminderTone = "soft" | "balanced" | "firm";
 type ReminderKind =
@@ -117,10 +120,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       },
       pushEnabled: true,
       systemPermission: "granted",
-      AND: [
-        { OR: [{ typeFocusStart: true }, { typeIncomplete: true }] },
-        ...(force ? [] : [{ OR: [{ nextReminderAt: { lte: now } }, { nextReminderAt: null }] }]),
-      ],
+      AND: [{ OR: [{ typeFocusStart: true }, { typeIncomplete: true }] }],
     },
   });
 
@@ -148,10 +148,49 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
   let attemptedTokenCount = 0;
 
   for (const settings of settingsList) {
+    const reminderScheduleSettings = {
+      userId: settings.userId,
+      pushEnabled: settings.pushEnabled,
+      intervalMinutes: settings.intervalMinutes,
+      activeStartTime: settings.activeStartTime,
+      activeEndTime: settings.activeEndTime,
+      dayMode: settings.dayMode,
+      typeIncomplete: settings.typeIncomplete,
+      typeFocusStart: settings.typeFocusStart,
+      systemPermission: settings.systemPermission,
+      nextReminderAt: settings.nextReminderAt,
+    };
+    const reminderIntervalMs = Math.max(settings.intervalMinutes, 1) * 60 * 1000;
+
     if (!force) {
       const createdAt = userCreatedAtById.get(settings.userId);
       if (createdAt && now.getTime() - createdAt.getTime() < NEW_USER_REMINDER_GRACE_MS) {
         continue;
+      }
+
+      if (settings.nextReminderAt) {
+        const nextReminderAtMs = settings.nextReminderAt.getTime();
+        const nowMs = now.getTime();
+
+        if (Number.isFinite(nextReminderAtMs) && nextReminderAtMs > nowMs + reminderIntervalMs) {
+          const repairedNextReminderAt = computeNextReminderAtForSettingsRefresh({
+            settings: reminderScheduleSettings,
+            now,
+            timezone,
+          });
+
+          if (!dryRun) {
+            await input.prisma.notificationSettings.update({
+              where: { userId: settings.userId },
+              data: { nextReminderAt: repairedNextReminderAt },
+            });
+          }
+          if (!repairedNextReminderAt || repairedNextReminderAt.getTime() > nowMs) {
+            continue;
+          }
+        } else if (nextReminderAtMs > nowMs) {
+          continue;
+        }
       }
     }
 
@@ -201,18 +240,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         where: { userId: settings.userId },
         data: {
           nextReminderAt: computeNextReminderAtAfterRun({
-            settings: {
-              userId: settings.userId,
-              pushEnabled: settings.pushEnabled,
-              intervalMinutes: settings.intervalMinutes,
-              activeStartTime: settings.activeStartTime,
-              activeEndTime: settings.activeEndTime,
-              dayMode: settings.dayMode,
-              typeIncomplete: settings.typeIncomplete,
-              typeFocusStart: settings.typeFocusStart,
-              systemPermission: settings.systemPermission,
-              nextReminderAt: settings.nextReminderAt,
-            },
+            settings: reminderScheduleSettings,
             now,
             timezone,
           }),
@@ -220,7 +248,6 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       });
     };
     const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
-    const reminderIntervalMs = Math.max(settings.intervalMinutes, 1) * 60 * 1000;
     const dueTargetFocusTodos = pickDueTargetFocusTodos({
       todos,
       now,

@@ -82,4 +82,17 @@ describe("computeNextReminderAtForSettingsRefresh", () => {
 
     expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:00:00.000Z");
   });
+
+  it("기존 예약 시각이 너무 멀리 있으면 다음 간격 슬롯으로 당겨 예약한다", () => {
+    const nextReminderAt = computeNextReminderAtForSettingsRefresh({
+      settings: createSettings({
+        intervalMinutes: 60,
+        nextReminderAt: new Date("2026-05-12T12:00:00.000Z"),
+      }),
+      now: new Date("2026-05-11T01:34:00.000Z"),
+      timezone: "Asia/Seoul",
+    });
+
+    expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:34:00.000Z");
+  });
 });

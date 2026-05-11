@@ -284,4 +284,31 @@ describe("runNotificationBatch", () => {
     expect(result.sentCount).toBe(0);
     expect(result.deliveries).toHaveLength(0);
   });
+
+  it("다음 알림 시각이 과하게 미래로 밀리면 배치 실행 중 다음 간격 슬롯으로 자동 보정한다", async () => {
+    const prisma = createPrismaMock({
+      settings: [
+        createSettings({
+          intervalMinutes: 30,
+          nextReminderAt: new Date("2026-05-12T12:00:00.000Z"),
+        }),
+      ],
+      todos: [createTodo({ content: "A", order: 0 })],
+    });
+
+    const now = new Date("2026-05-04T08:00:00.000Z");
+    const result = await runNotificationBatch({
+      prisma: prisma as never,
+      now,
+      dryRun: false,
+      force: false,
+      timezone: "Asia/Seoul",
+    });
+
+    expect(result.sentCount).toBe(0);
+    expect(prisma.notificationSettings.update).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      data: { nextReminderAt: new Date("2026-05-04T08:30:00.000Z") },
+    });
+  });
 });
