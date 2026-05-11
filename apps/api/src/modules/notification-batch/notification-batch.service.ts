@@ -211,6 +211,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
               typeIncomplete: settings.typeIncomplete,
               typeFocusStart: settings.typeFocusStart,
               systemPermission: settings.systemPermission,
+              nextReminderAt: settings.nextReminderAt,
             },
             now,
             timezone,

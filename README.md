@@ -157,6 +157,7 @@
 - 원격 버전이 더 높으면 기존 active 번들 디렉터리 삭제
 - 새 `web-ui.zip` 다운로드 후 staging 경로에 압축 해제
 - 검증 완료 후 staging을 active로 교체해 화면 번들 업데이트
+
 ## ✅ Test & Quality
 
 기준일: **2026-04-27**

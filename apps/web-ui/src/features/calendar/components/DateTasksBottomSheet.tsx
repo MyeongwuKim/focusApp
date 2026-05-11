@@ -58,6 +58,7 @@ export function DateTasksBottomSheet({
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
   const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
+  const viewMonth = useAppStore((state) => state.viewMonth);
   const [viewportHeight, setViewportHeight] = useState(getViewportHeight);
   const [sheetContainerHeight, setSheetContainerHeight] = useState(0);
   const [dragY, setDragY] = useState(0);
@@ -87,8 +88,11 @@ export function DateTasksBottomSheet({
     return `?${params.toString()}`;
   }, [resolvedDateKey, restFinishedRequested, focusTargetElapsedRequested, focusTargetTodoId]);
   const selectedDateLabel = formatSelectedDate(resolvedDateKey);
-  const todayDateKey = formatDateKey(new Date());
-  const canGoToday = resolvedDateKey !== todayDateKey;
+  const today = new Date();
+  const todayDateKey = formatDateKey(today);
+  const isViewingCurrentMonth =
+    viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() === today.getMonth();
+  const canGoToday = resolvedDateKey !== todayDateKey || !isViewingCurrentMonth;
   const isLocalRoutineOverlayOpen = localOverlayLayer !== null;
   const effectiveContainerHeight = sheetContainerHeight > 0 ? sheetContainerHeight : viewportHeight;
   const collapsedOffset = Math.max(0, effectiveContainerHeight - barHeight);
@@ -223,10 +227,17 @@ export function DateTasksBottomSheet({
   };
 
   return (
-    <div ref={sheetContainerRef} className="pointer-events-none absolute inset-0 z-30">
+    <div
+      ref={sheetContainerRef}
+      className={[
+        "absolute inset-0 z-30",
+        isHelpModalOpen ? "pointer-events-auto" : "pointer-events-none",
+      ].join(" ")}
+    >
       <section
         className={[
-          "pointer-events-auto absolute inset-x-0 top-0 bottom-0 flex flex-col border border-base-300 bg-base-100/98 shadow-[0_-14px_40px_rgba(15,23,42,0.24)]",
+          "absolute inset-x-0 top-0 bottom-0 flex flex-col border border-base-300 bg-base-100/98 shadow-[0_-14px_40px_rgba(15,23,42,0.24)]",
+          isHelpModalOpen ? "pointer-events-none" : "pointer-events-auto",
           isExpanded && !isHeaderDragging ? "rounded-none" : "rounded-t-2xl",
         ].join(" ")}
         style={{
@@ -249,7 +260,7 @@ export function DateTasksBottomSheet({
           aria-hidden={false}
         >
           <div className="border-t border-base-300/70 bg-base-200/75 px-2.5 py-2">
-            <div className="grid min-h-10 grid-cols-[3.75rem_minmax(0,1fr)_3.75rem] items-center gap-1">
+            <div className="grid min-h-10 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-1">
               <button
                 type="button"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/45 transition-colors hover:bg-base-100/45"
@@ -279,16 +290,18 @@ export function DateTasksBottomSheet({
                   </span>
                 </span>
               </button>
-              <div className="ml-auto flex items-center justify-end gap-1">
-                {canGoToday ? (
-                  <Button
-                    className="h-8 min-h-8 border-base-300 bg-base-100 px-3 text-xs font-semibold text-base-content shadow-sm"
-                    onClick={handleGoToday}
-                    tabIndex={0}
-                  >
-                    오늘
-                  </Button>
-                ) : null}
+              <div className="ml-auto flex items-center justify-end gap-1.5">
+                <Button
+                  className={[
+                    "h-8 min-h-8 border-base-300 bg-base-100 px-3 text-xs font-semibold text-base-content shadow-sm",
+                    canGoToday ? "" : "pointer-events-none invisible",
+                  ].join(" ")}
+                  onClick={handleGoToday}
+                  tabIndex={canGoToday ? 0 : -1}
+                  aria-hidden={!canGoToday}
+                >
+                  오늘
+                </Button>
                 {helpGuide ? (
                   <button
                     type="button"

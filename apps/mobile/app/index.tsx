@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
+import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -14,6 +15,7 @@ import {
   PermissionsAndroid,
   Platform,
   StyleSheet,
+  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -39,6 +41,12 @@ import {
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
 import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
+import {
+  prepareWebUiBundleVersion,
+  resolveWebUiManifestUrl,
+  resolveWebUiReleaseChannel,
+  type WebUiVersionProgress,
+} from "../src/features/webui/webUiVersionWorker";
 
 const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
@@ -51,6 +59,8 @@ const LAUNCH_ANIMATION_RING_DURATION_MS = 900;
 const LAUNCH_ANIMATION_CHECK_DURATION_MS = 280;
 const LAUNCH_ANIMATION_PAUSE_MS = 280;
 const LAUNCH_OVERLAY_MIN_VISIBLE_MS = 800;
+const LAUNCH_PROGRESS_BAR_WIDTH = 196;
+const FORCE_LAUNCH_OVERLAY_FOR_TEST = process.env.EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY === "true";
 
 type NativePermissionState = "granted" | "denied" | "undetermined";
 type LocationPermissionSnapshot = {
@@ -271,6 +281,30 @@ function resolveHybridApiOrigin() {
   }
 
   return "http://localhost:4000";
+}
+
+function buildWebUiUriWithHash(baseUri: string, callbackHash: string) {
+  if (!callbackHash) {
+    return baseUri;
+  }
+  const normalizedHash = callbackHash.startsWith("#") ? callbackHash : `#${callbackHash}`;
+  const sanitizedBase = baseUri.split("#")[0];
+  return `${sanitizedBase}${normalizedHash}`;
+}
+
+function resolveLaunchProgressPercent(statusMessage: WebUiVersionProgress) {
+  switch (statusMessage) {
+    case "초기 번들 준비중...":
+      return 22;
+    case "버전 체크중...":
+      return 46;
+    case "앱 번들 설치중...":
+      return 78;
+    case "앱 시작중...":
+      return 100;
+    default:
+      return 0;
+  }
 }
 
 async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
@@ -688,11 +722,26 @@ async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot | nul
   };
 }
 
-function FocusLaunchOverlay() {
+function FocusLaunchOverlay({
+  statusMessage,
+  progressPercent,
+}: {
+  statusMessage: string;
+  progressPercent: number;
+}) {
   const sweepProgress = useRef(new Animated.Value(0)).current;
-  const checkShortProgress = useRef(new Animated.Value(0)).current;
-  const checkLongProgress = useRef(new Animated.Value(0)).current;
+  const checkProgress = useRef(new Animated.Value(0)).current;
   const pulseOpacity = useRef(new Animated.Value(0.88)).current;
+  const progressWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(progressWidth, {
+      toValue: (LAUNCH_PROGRESS_BAR_WIDTH * Math.max(0, Math.min(progressPercent, 100))) / 100,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progressPercent, progressWidth]);
 
   useEffect(() => {
     const animationLoop = Animated.loop(
@@ -711,17 +760,11 @@ function FocusLaunchOverlay() {
             useNativeDriver: true,
           }),
         ]),
-        Animated.timing(checkShortProgress, {
+        Animated.timing(checkProgress, {
           toValue: 1,
           duration: LAUNCH_ANIMATION_CHECK_DURATION_MS,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: false,
-        }),
-        Animated.timing(checkLongProgress, {
-          toValue: 1,
-          duration: LAUNCH_ANIMATION_CHECK_DURATION_MS,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: false,
+          easing: Easing.out(Easing.back(1.6)),
+          useNativeDriver: true,
         }),
         Animated.delay(LAUNCH_ANIMATION_PAUSE_MS),
         Animated.parallel([
@@ -730,15 +773,10 @@ function FocusLaunchOverlay() {
             duration: 0,
             useNativeDriver: true,
           }),
-          Animated.timing(checkShortProgress, {
+          Animated.timing(checkProgress, {
             toValue: 0,
             duration: 0,
-            useNativeDriver: false,
-          }),
-          Animated.timing(checkLongProgress, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
           Animated.timing(pulseOpacity, {
             toValue: 0.88,
@@ -753,21 +791,21 @@ function FocusLaunchOverlay() {
     return () => {
       animationLoop.stop();
     };
-  }, [checkLongProgress, checkShortProgress, pulseOpacity, sweepProgress]);
+  }, [checkProgress, pulseOpacity, sweepProgress]);
 
   const ringRotate = sweepProgress.interpolate({
     inputRange: [0, 1],
     outputRange: ["-90deg", "270deg"],
   });
 
-  const shortCheckWidth = checkShortProgress.interpolate({
+  const checkOpacity = checkProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 28],
+    outputRange: [0, 1],
   });
 
-  const longCheckWidth = checkLongProgress.interpolate({
+  const checkScale = checkProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 62],
+    outputRange: [0.72, 1],
   });
 
   return (
@@ -783,10 +821,25 @@ function FocusLaunchOverlay() {
           ]}
         />
         <View style={styles.launchCheckWrap}>
-          <Animated.View style={[styles.launchCheckShort, { width: shortCheckWidth }]} />
-          <Animated.View style={[styles.launchCheckLong, { width: longCheckWidth }]} />
+        <Animated.View
+          style={[
+            styles.launchCheckIconWrap,
+            {
+              opacity: checkOpacity,
+              transform: [{ scale: checkScale }],
+            },
+          ]}
+        >
+          <Feather name="check" size={52} color="#F8FAFC" />
+        </Animated.View>
         </View>
       </Animated.View>
+      <View style={styles.launchProgressWrap}>
+        <View style={styles.launchProgressTrack}>
+          <Animated.View style={[styles.launchProgressFill, { width: progressWidth }]} />
+        </View>
+      </View>
+      <Text style={styles.launchStatusText}>{statusMessage}</Text>
     </View>
   );
 }
@@ -950,12 +1003,34 @@ export default function WebViewScreen() {
     onNavigate: navigateWebViewByTargetPath,
   });
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
+  const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
   const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
+  const [launchStatusMessage, setLaunchStatusMessage] = useState<WebUiVersionProgress>(
+    "초기 번들 준비중..."
+  );
   const [hasInitialWebViewLoaded, setHasInitialWebViewLoaded] = useState(false);
   const [hasLaunchOverlayMinElapsed, setHasLaunchOverlayMinElapsed] = useState(false);
   const { width, fontScale } = useWindowDimensions();
   const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
+  const webUiReleaseChannel = useMemo(
+    () =>
+      resolveWebUiReleaseChannel({
+        explicitChannel: process.env.EXPO_PUBLIC_WEBUI_CHANNEL,
+        isDev: __DEV__,
+      }),
+    []
+  );
+  const webUiManifestUrl = useMemo(
+    () =>
+      resolveWebUiManifestUrl({
+        channel: webUiReleaseChannel,
+        manifestUrlDev: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL_DEV,
+        manifestUrlProd: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL_PROD,
+        manifestUrlFallback: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL,
+      }),
+    [webUiReleaseChannel]
+  );
 
   const uiScale = useMemo(() => {
     const effectiveWidth = width / clamp(fontScale, 1, 1.2);
@@ -1210,36 +1285,23 @@ export default function WebViewScreen() {
   useEffect(() => {
     const prepareLocalHtmlFile = async () => {
       try {
-        const baseDir = `${FileSystem.cacheDirectory}web-ui/`;
-        const fileUri = `${baseDir}index.html`;
-
-        for (const file of embeddedWebUiFiles) {
-          const targetUri = `${baseDir}${file.path}`;
-          const targetDir = targetUri.slice(0, targetUri.lastIndexOf("/") + 1);
-
-          await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true });
-          await FileSystem.writeAsStringAsync(targetUri, file.contentBase64, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-        }
-
-        let currentHtml = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-        currentHtml = currentHtml.replace(/\s+crossorigin(?=[\s>])/gi, "");
-        await FileSystem.writeAsStringAsync(fileUri, currentHtml, {
-          encoding: FileSystem.EncodingType.UTF8,
+        setLaunchStatusMessage("초기 번들 준비중...");
+        const fallbackCurrentVersion =
+          Constants.expoConfig?.version?.trim() ||
+          Constants.manifest2?.extra?.expoClient?.version ||
+          "1.0.0";
+        const prepared = await prepareWebUiBundleVersion({
+          embeddedFiles: embeddedWebUiFiles,
+          releaseChannel: webUiReleaseChannel,
+          manifestUrl: webUiManifestUrl,
+          fallbackCurrentVersion,
+          onProgress: setLaunchStatusMessage,
         });
 
-        const indexInfo = await FileSystem.getInfoAsync(fileUri);
-        if (!indexInfo.exists) {
-          Alert.alert("WebView Error", `index.html not found at ${fileUri}`);
-          return;
-        }
-
-        console.log("Prepared local web-ui file:", fileUri);
-        setLocalFileUri(fileUri);
-        setWebViewUri(fileUri);
+        console.log("Prepared local web-ui file:", prepared.localIndexUri);
+        setLocalFileUri(prepared.localIndexUri);
+        setWebUiEntryUri(prepared.entryUri);
+        setWebViewUri(prepared.entryUri);
       } catch (error) {
         console.log("Failed to prepare local web-ui file:", error);
         Alert.alert("WebView Error", "Failed to prepare local web-ui file.");
@@ -1249,7 +1311,7 @@ export default function WebViewScreen() {
     };
 
     prepareLocalHtmlFile();
-  }, []);
+  }, [webUiManifestUrl, webUiReleaseChannel]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -1344,16 +1406,16 @@ export default function WebViewScreen() {
   }, [dispatchNativeBridgeEvent, dispatchPendingTodoSessionRecovery, persistNativeTodoSession]);
 
   useEffect(() => {
-    if (!localFileUri || !webViewRef.current) {
+    if (!webUiEntryUri || !webViewRef.current) {
       return;
     }
 
     if (!webViewUri) {
-      setWebViewUri(localFileUri);
+      setWebViewUri(webUiEntryUri);
     }
 
     webViewRef.current.injectJavaScript(applyScaleScript);
-  }, [localFileUri, webViewUri, applyScaleScript]);
+  }, [webUiEntryUri, webViewUri, applyScaleScript]);
 
   const source = webViewUri ? { uri: webViewUri } : null;
 
@@ -1756,12 +1818,21 @@ export default function WebViewScreen() {
 
   const showPermissionIntro = isPermissionIntroReady && isPermissionIntroVisible;
   const isLaunchDestinationReady = showPermissionIntro || hasInitialWebViewLoaded;
+  const launchProgressPercent = useMemo(
+    () => resolveLaunchProgressPercent(launchStatusMessage),
+    [launchStatusMessage]
+  );
   const shouldShowLaunchOverlay =
-    isPreparingLocalFile || !hasLaunchOverlayMinElapsed || !isLaunchDestinationReady;
+    FORCE_LAUNCH_OVERLAY_FOR_TEST ||
+    isPreparingLocalFile ||
+    !hasLaunchOverlayMinElapsed ||
+    !isLaunchDestinationReady;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {shouldShowLaunchOverlay ? <FocusLaunchOverlay /> : null}
+      {shouldShowLaunchOverlay ? (
+        <FocusLaunchOverlay statusMessage={launchStatusMessage} progressPercent={launchProgressPercent} />
+      ) : null}
       {source && !showPermissionIntro ? (
         <View style={styles.webViewContainer}>
           <View
@@ -1786,31 +1857,28 @@ export default function WebViewScreen() {
             allowUniversalAccessFromFileURLs
             onShouldStartLoadWithRequest={(request) => {
               console.log("WebView should start request:", request.url);
+              const activeEntryUri = webUiEntryUri ?? localFileUri;
 
               if (request.url.startsWith("mobile://")) {
                 const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
-                if (callbackHash && localFileUri) {
-                  const nextLocalUri = `${localFileUri}${callbackHash}`;
-                  setWebViewUri(nextLocalUri);
+                if (callbackHash && activeEntryUri) {
+                  const nextUri = buildWebUiUriWithHash(activeEntryUri, callbackHash);
+                  setWebViewUri(nextUri);
                 }
                 return false;
               }
 
-              if (
-                request.url.startsWith("file://") &&
-                request.url.includes("#/auth/callback") &&
-                request.url.includes("token=")
-              ) {
+              if (request.url.includes("#/auth/callback") && request.url.includes("token=")) {
                 return true;
               }
 
               const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
-              if (!callbackHash || !localFileUri) {
+              if (!callbackHash || !activeEntryUri) {
                 return true;
               }
 
-              const nextLocalUri = `${localFileUri}${callbackHash}`;
-              setWebViewUri(nextLocalUri);
+              const nextUri = buildWebUiUriWithHash(activeEntryUri, callbackHash);
+              setWebViewUri(nextUri);
               return false;
             }}
             onLoadStart={() => {
@@ -1912,28 +1980,40 @@ const styles = StyleSheet.create({
   },
   launchCheckWrap: {
     position: "absolute",
-    width: 90,
-    height: 68,
-    left: 37,
-    top: 44,
+    width: 74,
+    height: 74,
+    left: 45,
+    top: 45,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  launchCheckShort: {
-    position: "absolute",
-    left: 12,
-    top: 38,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#F8FAFC",
-    transform: [{ rotate: "45deg" }],
+  launchCheckIconWrap: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  launchCheckLong: {
-    position: "absolute",
-    left: 32,
-    top: 42,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#F8FAFC",
-    transform: [{ rotate: "-45deg" }],
+  launchStatusText: {
+    marginTop: 14,
+    color: "rgba(226, 232, 240, 0.96)",
+    fontSize: 14,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
+  launchProgressWrap: {
+    marginTop: 18,
+    width: LAUNCH_PROGRESS_BAR_WIDTH,
+    alignItems: "flex-start",
+  },
+  launchProgressTrack: {
+    width: LAUNCH_PROGRESS_BAR_WIDTH,
+    height: 6,
+    borderRadius: 99,
+    backgroundColor: "rgba(148, 163, 184, 0.24)",
+    overflow: "hidden",
+  },
+  launchProgressFill: {
+    height: "100%",
+    borderRadius: 99,
+    backgroundColor: "#2CE6A6",
   },
   webViewContainer: {
     flex: 1,

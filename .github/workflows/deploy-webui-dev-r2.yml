@@ -1,0 +1,161 @@
+name: Deploy Web UI to R2 (Dev)
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/web-ui/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-webui-dev-r2.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-webui-dev-r2
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID_DEV }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY_DEV }}
+      AWS_DEFAULT_REGION: auto
+      R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME_DEV }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL_DEV }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web-ui
+        run: pnpm web:build
+
+      - name: Resolve next version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LATEST_MANIFEST_URL="${R2_PUBLIC_BASE_URL}/latest/manifest.json"
+          LATEST_JSON="$(curl -fsSL "$LATEST_MANIFEST_URL" || true)"
+
+          NEXT_VERSION="$(LATEST_JSON="$LATEST_JSON" node - <<'NODE'
+          const raw = process.env.LATEST_JSON?.trim() ?? "";
+
+          const fallback = "1.0.0";
+          if (!raw) {
+            process.stdout.write(fallback);
+            process.exit(0);
+          }
+
+          try {
+            const parsed = JSON.parse(raw);
+            const version = String(parsed?.version ?? "").trim();
+            const matched = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+            if (!matched) {
+              process.stdout.write(fallback);
+              process.exit(0);
+            }
+            const major = Number(matched[1]);
+            const minor = Number(matched[2]);
+            const patch = Number(matched[3]);
+            process.stdout.write(`${major}.${minor}.${patch + 1}`);
+          } catch {
+            process.stdout.write(fallback);
+          }
+          NODE
+          )"
+
+          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Next version: $NEXT_VERSION"
+
+      - name: Package build artifacts
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.next_version }}"
+          RELEASE_DIR="$RUNNER_TEMP/webui-release"
+          mkdir -p "$RELEASE_DIR"
+
+          ZIP_PATH="$RELEASE_DIR/web-ui.zip"
+          (cd apps/web-ui/dist && zip -qr "$ZIP_PATH" .)
+
+          SHA256="$(sha256sum "$ZIP_PATH" | awk '{print $1}')"
+          CREATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          BUNDLE_URL="${R2_PUBLIC_BASE_URL}/releases/${VERSION}/web-ui.zip"
+          ENTRY_URL="${R2_PUBLIC_BASE_URL}/releases/${VERSION}/index.html"
+
+          MANIFEST_PATH="$RELEASE_DIR/manifest.json"
+          node - <<NODE
+          const fs = require("node:fs");
+          const manifest = {
+            version: "${VERSION}",
+            bundleUrl: "${BUNDLE_URL}",
+            entryUrl: "${ENTRY_URL}",
+            sha256: "${SHA256}",
+            createdAt: "${CREATED_AT}"
+          };
+          fs.writeFileSync("${MANIFEST_PATH}", JSON.stringify(manifest, null, 2));
+          NODE
+
+          echo "release_dir=$RELEASE_DIR" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+          echo "manifest_path=$MANIFEST_PATH" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to R2
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.next_version }}"
+          RELEASE_DIR="${{ steps.package.outputs.release_dir }}"
+          ENDPOINT_URL="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+          aws s3 cp \
+            "${RELEASE_DIR}/web-ui.zip" \
+            "s3://${R2_BUCKET_NAME}/releases/${VERSION}/web-ui.zip" \
+            --endpoint-url "$ENDPOINT_URL" \
+            --checksum-algorithm CRC32 \
+            --content-type "application/zip"
+
+          aws s3 cp \
+            "${RELEASE_DIR}/manifest.json" \
+            "s3://${R2_BUCKET_NAME}/releases/${VERSION}/manifest.json" \
+            --endpoint-url "$ENDPOINT_URL" \
+            --checksum-algorithm CRC32 \
+            --content-type "application/json" \
+            --cache-control "public, max-age=300"
+
+          aws s3 cp \
+            "${RELEASE_DIR}/manifest.json" \
+            "s3://${R2_BUCKET_NAME}/latest/manifest.json" \
+            --endpoint-url "$ENDPOINT_URL" \
+            --checksum-algorithm CRC32 \
+            --content-type "application/json" \
+            --cache-control "no-cache"
+
+      - name: Summary
+        run: |
+          echo "Deployed version: ${{ steps.version.outputs.next_version }}"
+          echo "Public manifest: ${R2_PUBLIC_BASE_URL}/latest/manifest.json"
