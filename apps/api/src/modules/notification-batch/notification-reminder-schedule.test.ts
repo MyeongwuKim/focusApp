@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { computeNextReminderAtAfterRun } from "./notification-reminder-schedule.js";
+import {
+  computeNextReminderAtAfterRun,
+  computeNextReminderAtForSettingsRefresh,
+} from "./notification-reminder-schedule.js";
 
 function createSettings(overrides: Record<string, unknown> = {}) {
   return {
@@ -55,3 +58,28 @@ describe("computeNextReminderAtAfterRun", () => {
   });
 });
 
+describe("computeNextReminderAtForSettingsRefresh", () => {
+  it("활성 시간대 변경 시 즉시 시각이 아닌 다음 간격 슬롯으로 예약한다", () => {
+    const nextReminderAt = computeNextReminderAtForSettingsRefresh({
+      settings: createSettings({
+        nextReminderAt: null,
+      }),
+      now: new Date("2026-05-11T01:34:00.000Z"),
+      timezone: "Asia/Seoul",
+    });
+
+    expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:04:00.000Z");
+  });
+
+  it("기존 예약 시각이 있으면 기존 예약 기준 주기를 유지한다", () => {
+    const nextReminderAt = computeNextReminderAtForSettingsRefresh({
+      settings: createSettings({
+        nextReminderAt: new Date("2026-05-11T02:00:00.000Z"),
+      }),
+      now: new Date("2026-05-11T01:40:00.000Z"),
+      timezone: "Asia/Seoul",
+    });
+
+    expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:00:00.000Z");
+  });
+});

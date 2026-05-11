@@ -35,6 +35,7 @@ export async function refreshReminderScheduleForUser(input: {
       typeIncomplete: true,
       typeFocusStart: true,
       systemPermission: true,
+      nextReminderAt: true,
     },
   });
 
@@ -42,16 +43,37 @@ export async function refreshReminderScheduleForUser(input: {
     return;
   }
 
-  const nextReminderAt = computeNextReminderAtFromSettings({
+  const nextReminderAt = computeNextReminderAtForSettingsRefresh({
     settings,
     now,
     timezone: input.timezone,
-    immediateIfAllowed: true,
   });
 
   await input.prisma.notificationSettings.update({
     where: { userId: input.userId },
     data: { nextReminderAt },
+  });
+}
+
+export function computeNextReminderAtForSettingsRefresh(input: {
+  settings: ReminderScheduleSettings;
+  now: Date;
+  timezone: string;
+}) {
+  const intervalMs = Math.max(input.settings.intervalMinutes, 1) * 60 * 1000;
+  const baseMs = input.settings.nextReminderAt?.getTime() ?? input.now.getTime();
+  const nowMs = input.now.getTime();
+  let nextMs = baseMs;
+
+  while (nextMs <= nowMs) {
+    nextMs += intervalMs;
+  }
+
+  return computeNextReminderAtFromSettings({
+    settings: input.settings,
+    now: new Date(nextMs),
+    timezone: input.timezone,
+    immediateIfAllowed: false,
   });
 }
 

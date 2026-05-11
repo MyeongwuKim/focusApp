@@ -220,6 +220,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       });
     };
     const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
+    const reminderIntervalMs = Math.max(settings.intervalMinutes, 1) * 60 * 1000;
     const dueTargetFocusTodos = pickDueTargetFocusTodos({
       todos,
       now,
@@ -358,6 +359,16 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         }
       }
 
+      await scheduleNextReminder();
+      continue;
+    }
+
+    const isWithinReminderCooldown =
+      !force &&
+      settings.lastFocusReminderSentAt !== null &&
+      now.getTime() - settings.lastFocusReminderSentAt.getTime() < reminderIntervalMs;
+
+    if (isWithinReminderCooldown) {
       await scheduleNextReminder();
       continue;
     }

@@ -261,4 +261,27 @@ describe("runNotificationBatch", () => {
     expect(result.sentCount).toBe(0);
     expect(result.deliveries).toHaveLength(0);
   });
+
+  it("마지막 발송 후 설정 간격이 지나지 않았으면 일반 리마인드를 보내지 않는다", async () => {
+    const prisma = createPrismaMock({
+      settings: [
+        createSettings({
+          intervalMinutes: 30,
+          lastFocusReminderSentAt: new Date("2026-05-04T07:40:00.000Z"),
+        }),
+      ],
+      todos: [createTodo({ content: "A", order: 0 })],
+    });
+
+    const result = await runNotificationBatch({
+      prisma: prisma as never,
+      now: new Date("2026-05-04T08:00:00.000Z"),
+      dryRun: false,
+      force: false,
+      timezone: "Asia/Seoul",
+    });
+
+    expect(result.sentCount).toBe(0);
+    expect(result.deliveries).toHaveLength(0);
+  });
 });
