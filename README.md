@@ -135,6 +135,41 @@
 - **Mobile:** Expo, React Native, React Native WebView
 - **Testing:** Vitest, Testing Library, Playwright
 
+## 🚚 CI/CD 구축 경험 (Web UI → Cloudflare R2)
+
+처음에는 모바일 앱에 웹 번들을 내장해 배포했는데, 화면의 작은 문구나 UI 하나만 바뀌어도 매번 앱 배포를 다시 해야 했습니다.  
+운영 속도가 계속 떨어져서 방법을 고민하던 중, 현재 근무 중인 회사에서 관리하는 MTS 소스의 버전 워커 방식(앱이 런타임에 새 번들을 교체 설치하는 구조)이 떠올랐고, 그 아이디어를 이 프로젝트에 맞게 재구성해 적용했습니다.
+
+핵심 방향:
+- 앱 업데이트와 화면 업데이트를 분리하는 구조 설계
+- 웹 변경은 R2 버전 릴리즈로 배포하고 앱은 해당 버전을 받아 교체
+- 앱스토어 심사/배포 주기와 무관하게 UI 수정 반영 속도 확보
+
+구현 포인트:
+- GitHub Actions로 dev/prod 배포 파이프라인 분리
+  - `develop` 브랜치: dev R2 배포 워크플로우
+  - `master` 브랜치: prod R2 배포 워크플로우
+- 웹 소스(`apps/web-ui/**`)가 해당 브랜치에 push되면 자동 배포 트리거
+- `latest/manifest.json` 기준으로 patch 버전 자동 증가 후 릴리즈 생성
+- R2 저장소(`releases/{version}/`)에 `web-ui.zip`, `manifest.json` 업로드
+- `latest/manifest.json`을 최신 릴리즈로 갱신
+
+운영하면서 정리한 기준:
+- 트리거는 `apps/web-ui/**`, lockfile, 워크플로우 파일 변경으로 제한
+- 배포 아티팩트는 `web-ui.zip + manifest.json`만 유지
+- `dist` 원본 파일 업로드를 제거해 릴리즈 구조 단순화
+
+결과:
+- 웹 변경을 앱 재설치 없이 반영 가능한 구조 확보
+- dev/prod 채널 분리 배포로 검증-배포 흐름 단순화
+- 릴리즈 버전 추적과 롤백 기준 명확화
+
+앱 실행 시 업데이트 동작:
+- 모바일 버전 워커가 앱 내 현재 번들 버전과 R2 매니페스트 버전 비교
+- 원격 버전이 더 높으면 기존 active 번들 디렉터리 삭제
+- 새 `web-ui.zip` 다운로드 후 staging 경로에 압축 해제
+- 검증 완료 후 staging을 active로 교체해 화면 번들 업데이트
+
 ## ✅ Test & Quality
 
 기준일: **2026-04-27**
