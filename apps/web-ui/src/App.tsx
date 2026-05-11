@@ -18,11 +18,13 @@ import { MAIN_ROUTE } from "./routes/route-config";
 import { confirm, toast, useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import {
-  getNativeExpoPushToken,
   getNotificationPermissionStatus,
+} from "./utils/notifications";
+import {
+  getNativeExpoPushToken,
   syncNativeAuthState,
   syncNativeWeatherSettings,
-} from "./utils/notifications";
+} from "./utils/nativeBridge";
 import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
 import { fetchNotificationSettings, updateNotificationSettings } from "./api/notificationSettingsApi";
 import { fetchMotivationMessage } from "./api/motivationMessageApi";

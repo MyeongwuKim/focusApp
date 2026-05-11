@@ -32,6 +32,12 @@ type StoredWebUiReleaseState = {
   updatedAt: string;
 };
 
+export type StoredWebUiReleaseSnapshot = {
+  version: string;
+  channel: WebUiReleaseChannel | "unknown";
+  updatedAt: string;
+};
+
 export function resolveWebUiReleaseChannel(input: {
   explicitChannel?: string;
   isDev: boolean;
@@ -163,6 +169,19 @@ export async function prepareWebUiBundleVersion(input: {
   return {
     localIndexUri: activeIndexUri,
     entryUri: nextEntryUri,
+  };
+}
+
+export async function readStoredWebUiReleaseSnapshot(): Promise<StoredWebUiReleaseSnapshot | null> {
+  const stored = await readStoredWebUiReleaseState();
+  if (!stored) {
+    return null;
+  }
+
+  return {
+    version: stored.version,
+    channel: stored.channel ?? "unknown",
+    updatedAt: stored.updatedAt,
   };
 }
 

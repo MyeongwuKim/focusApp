@@ -40,9 +40,12 @@ import {
   applyNativeWeatherSettings,
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
+import { routeWebViewBridgeMessage } from "../src/features/bridge/routeWebViewBridgeMessage";
+import type { TodoSessionSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
 import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
 import {
   prepareWebUiBundleVersion,
+  readStoredWebUiReleaseSnapshot,
   resolveWebUiManifestUrl,
   resolveWebUiReleaseChannel,
   type WebUiVersionProgress,
@@ -81,15 +84,6 @@ type GeolocationLike = {
     failure: (error?: unknown) => void,
     options?: { enableHighAccuracy?: boolean; timeout?: number; maximumAge?: number }
   ) => void;
-};
-
-type TodoSessionSyncPayload = {
-  active?: boolean;
-  dateKey?: string | null;
-  todoId?: string | null;
-  startedAt?: string | null;
-  sessionId?: string | null;
-  syncedAtMs?: number;
 };
 
 type TodoSessionRecoveryPayload = {
@@ -305,6 +299,21 @@ function resolveLaunchProgressPercent(statusMessage: WebUiVersionProgress) {
     default:
       return 0;
   }
+}
+
+function resolveNativeAppVersion() {
+  const expoVersion = Constants.expoConfig?.version;
+  if (typeof expoVersion === "string" && expoVersion.trim()) {
+    return expoVersion.trim();
+  }
+
+  const expoClientVersion = (Constants.manifest2?.extra as { expoClient?: { version?: string } } | undefined)
+    ?.expoClient?.version;
+  if (typeof expoClientVersion === "string" && expoClientVersion.trim()) {
+    return expoClientVersion.trim();
+  }
+
+  return null;
 }
 
 async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
@@ -893,6 +902,19 @@ export default function WebViewScreen() {
     },
     []
   );
+  const sendBridgeResult = useCallback(
+    (message: { type: string; requestId?: string | null; payload?: unknown }) => {
+      if (!webViewRef.current) {
+        return;
+      }
+      webViewRef.current.injectJavaScript(
+        `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
+          message
+        )} })); true;`
+      );
+    },
+    []
+  );
 
   const persistNativeTodoSession = useCallback(async (session: NativeTodoSession | null) => {
     nativeTodoSessionRef.current = session;
@@ -1418,6 +1440,47 @@ export default function WebViewScreen() {
   }, [webUiEntryUri, webViewUri, applyScaleScript]);
 
   const source = webViewUri ? { uri: webViewUri } : null;
+  const handleTodoSessionSync = useCallback(
+    async (payload: TodoSessionSyncPayload) => {
+      if (!payload.active) {
+        pendingTodoSessionRecoveryRef.current = null;
+        await persistNativeTodoSession(null);
+        return;
+      }
+
+      if (
+        typeof payload.dateKey !== "string" ||
+        typeof payload.todoId !== "string" ||
+        typeof payload.startedAt !== "string" ||
+        typeof payload.sessionId !== "string"
+      ) {
+        return;
+      }
+
+      const previous = nativeTodoSessionRef.current;
+      const shouldKeepBackgroundEnteredAt =
+        previous?.sessionId === payload.sessionId ? previous.backgroundEnteredAtMs : null;
+      await persistNativeTodoSession({
+        dateKey: payload.dateKey,
+        todoId: payload.todoId,
+        startedAt: payload.startedAt,
+        sessionId: payload.sessionId,
+        syncedAtMs: typeof payload.syncedAtMs === "number" ? payload.syncedAtMs : Date.now(),
+        backgroundEnteredAtMs: shouldKeepBackgroundEnteredAt,
+      });
+    },
+    [persistNativeTodoSession]
+  );
+  const applyWeatherSettingsSync = useCallback(
+    (payload: { enabled?: unknown; mood?: unknown; particleClarity?: unknown }) => {
+      applyNativeWeatherSettings({
+        enabled: typeof payload.enabled === "boolean" ? payload.enabled : undefined,
+        mood: typeof payload.mood === "string" ? payload.mood : undefined,
+        particleClarity: typeof payload.particleClarity === "number" ? payload.particleClarity : undefined,
+      });
+    },
+    []
+  );
 
   const handleMessage = async (event: WebViewMessageEvent) => {
     const { data } = event.nativeEvent;
@@ -1428,375 +1491,53 @@ export default function WebViewScreen() {
         console.log("[WebView debug]", parsedData.type, parsedData.payload);
         return;
       }
-      if (parsedData?.type === "REST_TODO_SESSION_SYNC") {
-        const payload = (parsedData?.payload ?? {}) as TodoSessionSyncPayload;
-        if (!payload.active) {
-          pendingTodoSessionRecoveryRef.current = null;
-          await persistNativeTodoSession(null);
-          return;
-        }
-
-        if (
-          typeof payload.dateKey !== "string" ||
-          typeof payload.todoId !== "string" ||
-          typeof payload.startedAt !== "string" ||
-          typeof payload.sessionId !== "string"
-        ) {
-          return;
-        }
-
-        const previous = nativeTodoSessionRef.current;
-        const shouldKeepBackgroundEnteredAt =
-          previous?.sessionId === payload.sessionId ? previous.backgroundEnteredAtMs : null;
-        await persistNativeTodoSession({
-          dateKey: payload.dateKey,
-          todoId: payload.todoId,
-          startedAt: payload.startedAt,
-          sessionId: payload.sessionId,
-          syncedAtMs: typeof payload.syncedAtMs === "number" ? payload.syncedAtMs : Date.now(),
-          backgroundEnteredAtMs: shouldKeepBackgroundEnteredAt,
-        });
-        return;
-      }
-      if (parsedData?.type === "REST_WEATHER_SETTINGS_SYNC") {
-        const payload =
-          parsedData?.payload && typeof parsedData.payload === "object"
-            ? (parsedData.payload as { enabled?: unknown; mood?: unknown; particleClarity?: unknown })
-            : null;
-        if (!payload) {
-          return;
-        }
-
-        applyNativeWeatherSettings({
-          enabled: typeof payload.enabled === "boolean" ? payload.enabled : undefined,
-          mood: typeof payload.mood === "string" ? payload.mood : undefined,
-          particleClarity:
-            typeof payload.particleClarity === "number" ? payload.particleClarity : undefined,
-        });
-        return;
-      }
-      if (parsedData?.type === "REST_AUTH_STATE_SYNC") {
-        // push permission intro 는 네이티브 첫 진입 시점에서 처리
-        return;
-      }
-      if (parsedData?.type === "REST_NOTIFICATION_PERMISSION_STATUS_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        const snapshot = await getRestNotificationPermissionSnapshot();
-        const bridgeMessage = {
-          type: "REST_NOTIFICATION_PERMISSION_STATUS_RESULT",
-          requestId,
-          payload: snapshot,
-        };
-        webViewRef.current?.injectJavaScript(
-          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-            bridgeMessage
-          )} })); true;`
-        );
-        return;
-      }
-
-      if (parsedData?.type === "REST_NOTIFICATION_PERMISSION_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        await requestRestNotificationPermission();
-        const snapshot = await getRestNotificationPermissionSnapshot();
-        const bridgeMessage = {
-          type: "REST_NOTIFICATION_PERMISSION_RESULT",
-          requestId,
-          payload: snapshot,
-        };
-        webViewRef.current?.injectJavaScript(
-          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-            bridgeMessage
-          )} })); true;`
-        );
-        return;
-      }
-
-      if (parsedData?.type === "REST_APP_OPEN_SETTINGS") {
-        await Linking.openSettings().catch((error) => {
-          console.log("Failed to open settings from web bridge:", error);
-        });
-        return;
-      }
-
-      if (parsedData?.type === "REST_AUTH_NAVER_LOGIN_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        if (!requestId) {
-          return;
-        }
-
-        try {
-          const accessToken = await requestNativeNaverAccessToken();
-          const session = await exchangeNaverAccessTokenForSession({
-            apiOrigin: hybridApiOrigin,
-            accessToken,
-          });
-
-          const bridgeMessage = {
-            type: "REST_AUTH_NAVER_LOGIN_RESULT",
-            requestId,
-            payload: {
-              ok: true,
-              token: session.token,
-              userId: session.userId,
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        } catch (error) {
-          console.log("Native Naver login bridge failed:", error);
-
-          const bridgeMessage = {
-            type: "REST_AUTH_NAVER_LOGIN_RESULT",
-            requestId,
-            payload: {
-              ok: false,
-              error: resolveNativeErrorCode(error, "NAVER_NATIVE_LOGIN_FAILED"),
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        }
-        return;
-      }
-
-      if (parsedData?.type === "REST_AUTH_KAKAO_LOGIN_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        if (!requestId) {
-          return;
-        }
-
-        try {
-          const oauthToken = await requestNativeKakaoOAuthToken();
-          if (!oauthToken?.accessToken) {
-            throw new Error("KAKAO_NATIVE_ACCESS_TOKEN_MISSING");
-          }
-
-          const session = await exchangeKakaoAccessTokenForSession({
-            apiOrigin: hybridApiOrigin,
-            accessToken: oauthToken.accessToken,
-          });
-
-          const bridgeMessage = {
-            type: "REST_AUTH_KAKAO_LOGIN_RESULT",
-            requestId,
-            payload: {
-              ok: true,
-              token: session.token,
-              userId: session.userId,
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        } catch (error) {
-          console.log("Native Kakao login bridge failed:", error);
-
-          const bridgeMessage = {
-            type: "REST_AUTH_KAKAO_LOGIN_RESULT",
-            requestId,
-            payload: {
-              ok: false,
-              error: resolveNativeErrorCode(error, "KAKAO_NATIVE_LOGIN_FAILED"),
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        }
-        return;
-      }
-
-      if (parsedData?.type === "REST_AUTH_NAVER_UNLINK_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        if (!requestId) {
-          return;
-        }
-
-        try {
-          await unlinkNaverAccountWithTimeout();
-          const bridgeMessage = {
-            type: "REST_AUTH_NAVER_UNLINK_RESULT",
-            requestId,
-            payload: {
-              ok: true,
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        } catch (error) {
-          console.log("Native Naver unlink bridge failed:", error);
-          const bridgeMessage = {
-            type: "REST_AUTH_NAVER_UNLINK_RESULT",
-            requestId,
-            payload: {
-              ok: false,
-              error:
-                error instanceof Error && error.message ? error.message : "NAVER_NATIVE_UNLINK_FAILED",
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        }
-        return;
-      }
-
-      if (parsedData?.type === "REST_AUTH_KAKAO_UNLINK_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        if (!requestId) {
-          return;
-        }
-
-        try {
-          await unlinkKakaoAccountWithTimeout();
-          const bridgeMessage = {
-            type: "REST_AUTH_KAKAO_UNLINK_RESULT",
-            requestId,
-            payload: {
-              ok: true,
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        } catch (error) {
-          console.log("Native Kakao unlink bridge failed:", error);
-          const bridgeMessage = {
-            type: "REST_AUTH_KAKAO_UNLINK_RESULT",
-            requestId,
-            payload: {
-              ok: false,
-              error:
-                error instanceof Error && error.message ? error.message : "KAKAO_NATIVE_UNLINK_FAILED",
-            },
-          };
-          webViewRef.current?.injectJavaScript(
-            `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-              bridgeMessage
-            )} })); true;`
-          );
-        }
-        return;
-      }
-
-      if (parsedData?.type === "REST_LOCATION_PERMISSION_STATUS_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        const snapshot = await getLocationPermissionSnapshot();
-        const bridgeMessage = {
-          type: "REST_LOCATION_PERMISSION_STATUS_RESULT",
-          requestId,
-          payload: snapshot,
-        };
-        webViewRef.current?.injectJavaScript(
-          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-            bridgeMessage
-          )} })); true;`
-        );
-        return;
-      }
-      if (parsedData?.type === "REST_LOCATION_PERMISSION_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        const requestedGranted = await requestLocationPermission();
-        const snapshot = await getLocationPermissionSnapshot();
-        const normalizedSnapshot =
-          requestedGranted && !snapshot.granted
-            ? { ...snapshot, granted: true, canAskAgain: true, status: "granted" as NativePermissionState }
-            : snapshot;
-        const bridgeMessage = {
-          type: "REST_LOCATION_PERMISSION_RESULT",
-          requestId,
-          payload: normalizedSnapshot,
-        };
-        webViewRef.current?.injectJavaScript(
-          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-            bridgeMessage
-          )} })); true;`
-        );
-        return;
-      }
-
-      if (parsedData?.type === "REST_LOCATION_COORDINATES_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        const snapshot = await getLocationCoordinatesSnapshot();
-        const bridgeMessage = {
-          type: "REST_LOCATION_COORDINATES_RESULT",
-          requestId,
-          payload: snapshot,
-        };
-        webViewRef.current?.injectJavaScript(
-          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-            bridgeMessage
-          )} })); true;`
-        );
-        return;
-      }
-
-      if (parsedData?.type === "REST_PUSH_TOKEN_REQUEST") {
-        const requestId =
-          typeof parsedData?.requestId === "string" && parsedData.requestId.trim()
-            ? parsedData.requestId
-            : null;
-        const snapshot = await getRestExpoPushTokenSnapshot();
-        const bridgeMessage = {
-          type: "REST_PUSH_TOKEN_RESULT",
-          requestId,
-          payload: snapshot,
-        };
-        webViewRef.current?.injectJavaScript(
-          `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-            bridgeMessage
-          )} })); true;`
-        );
-        return;
-      }
-
-      const isHandledBridgeMessage = await handleRestNotificationBridgeMessage(parsedData);
+      const isHandledBridgeMessage = await routeWebViewBridgeMessage(parsedData, {
+        sync: {
+          handleTodoSessionSync,
+          applyWeatherSettingsSync,
+        },
+        notification: {
+          sendBridgeResult,
+          requestRestNotificationPermission,
+          getRestNotificationPermissionSnapshot,
+          getRestExpoPushTokenSnapshot,
+          openAppSettings: async () => {
+            await Linking.openSettings().catch((error) => {
+              console.log("Failed to open settings from web bridge:", error);
+            });
+          },
+        },
+        location: {
+          sendBridgeResult,
+          getLocationPermissionSnapshot,
+          requestLocationPermission,
+          getLocationCoordinatesSnapshot,
+        },
+        version: {
+          sendBridgeResult,
+          getNativeAppVersion: resolveNativeAppVersion,
+          getStoredWebUiReleaseSnapshot: readStoredWebUiReleaseSnapshot,
+          webUiReleaseChannel,
+          platform: Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown",
+        },
+        auth: {
+          sendBridgeResult,
+          hybridApiOrigin,
+          requestNativeNaverAccessToken,
+          requestNativeKakaoOAuthToken,
+          exchangeNaverAccessTokenForSession,
+          exchangeKakaoAccessTokenForSession,
+          unlinkNaverAccountWithTimeout,
+          unlinkKakaoAccountWithTimeout,
+          resolveNativeErrorCode,
+        },
+      });
       if (isHandledBridgeMessage) {
+        return;
+      }
+
+      const isHandledNotificationBridgeMessage = await handleRestNotificationBridgeMessage(parsedData);
+      if (isHandledNotificationBridgeMessage) {
         return;
       }
       console.log("Message from web-ui:", parsedData);

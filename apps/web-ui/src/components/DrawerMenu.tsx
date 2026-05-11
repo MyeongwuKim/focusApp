@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DRAWER_ROUTES } from "../routes/route-config";
 import type { RouteKey } from "../routes/types";
@@ -8,6 +8,7 @@ import { logout } from "../api/authApi";
 import { fetchMe } from "../api/userApi";
 import { toast, useAuthStore } from "../stores";
 import { Button } from "./ui/Button";
+import { getNativeAppVersionInfo, type NativeAppVersionInfo } from "../utils/nativeBridge";
 
 type DrawerMenuProps = {
   isOpen: boolean;
@@ -54,6 +55,30 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
   const accountEmail = meQuery.data?.email ?? authUser?.email ?? "guest";
   const providerLabel =
     authProvider === "kakao" ? "카카오 로그인" : authProvider === "naver" ? "네이버 로그인" : null;
+  const [versionInfo, setVersionInfo] = useState<NativeAppVersionInfo | null>(null);
+  const hasRequestedVersionRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen || hasRequestedVersionRef.current) {
+      return;
+    }
+
+    hasRequestedVersionRef.current = true;
+    void getNativeAppVersionInfo().then((info) => {
+      setVersionInfo(info);
+    });
+  }, [isOpen]);
+
+  const appVersionLabel = versionInfo?.appVersion ?? "-";
+  const webUiVersionLabel = versionInfo?.webUiVersion ?? "-";
+  const releaseChannelLabel =
+    versionInfo?.webUiChannel === "dev"
+      ? "dev"
+      : versionInfo?.webUiChannel === "prod"
+        ? "prod"
+        : versionInfo?.webUiChannel === "none"
+          ? "none"
+          : "unknown";
 
   return (
     <div
@@ -79,49 +104,58 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
         ].join(" ")}
         aria-hidden={!isOpen}
       >
-        <div className="mb-3">
-          <p className="m-0 text-xs font-medium uppercase tracking-wide text-base-content/55">ACCOUNT</p>
-          <p className="mt-1 text-sm font-medium text-base-content/80 break-all">{accountEmail}</p>
-          {providerLabel ? <p className="mt-1 text-xs text-base-content/55">{providerLabel}</p> : null}
-        </div>
-        <div className="mb-3 h-px w-full bg-base-300/90" />
+        <div className="flex h-full flex-col">
+          <div className="mb-3">
+            <p className="m-0 text-xs font-medium uppercase tracking-wide text-base-content/55">ACCOUNT</p>
+            <p className="mt-1 text-sm font-medium text-base-content/80 break-all">{accountEmail}</p>
+            {providerLabel ? <p className="mt-1 text-xs text-base-content/55">{providerLabel}</p> : null}
+          </div>
+          <div className="mb-3 h-px w-full bg-base-300/90" />
 
-        <nav className="menu gap-1 p-0 text-sm">
-          {DRAWER_ROUTES.map((route) => (
+          <nav className="menu flex-1 gap-1 p-0 text-sm">
+            {DRAWER_ROUTES.map((route) => (
+              <Button
+                key={route.key}
+                variant={activeRoute === route.key ? "default" : "ghost"}
+                className={[
+                  "justify-start gap-2.5 rounded-lg border border-transparent px-2.5",
+                  activeRoute === route.key ? "bg-base-200 text-primary" : "text-base-content/80",
+                ].join(" ")}
+                onClick={() => handleNavigateFromDrawer(route.key)}
+              >
+                <span className="inline-flex h-4 w-4 items-center justify-center text-base-content/75">
+                  {ROUTE_ICON[route.key]}
+                </span>
+                {route.label}
+              </Button>
+            ))}
+
+            <div className="my-1 h-px w-full bg-base-300/80" />
+
             <Button
-              key={route.key}
-              variant={activeRoute === route.key ? "default" : "ghost"}
-              className={[
-                "justify-start gap-2.5 rounded-lg border border-transparent px-2.5",
-                activeRoute === route.key ? "bg-base-200 text-primary" : "text-base-content/80",
-              ].join(" ")}
-              onClick={() => handleNavigateFromDrawer(route.key)}
+              variant="ghost"
+              className="justify-start gap-2.5 text-error"
+              onClick={async () => {
+                await logout();
+                closeMenu();
+                goPage("/login", { replace: true });
+                toast.positive("로그아웃 되었어요.", "로그아웃");
+              }}
             >
-              <span className="inline-flex h-4 w-4 items-center justify-center text-base-content/75">
-                {ROUTE_ICON[route.key]}
+              <span className="inline-flex h-4 w-4 items-center justify-center">
+                <FiLogOut size={15} />
               </span>
-              {route.label}
+              로그아웃
             </Button>
-          ))}
-
-          <div className="my-1 h-px w-full bg-base-300/80" />
-
-          <Button
-            variant="ghost"
-            className="justify-start gap-2.5 text-error"
-            onClick={async () => {
-              await logout();
-              closeMenu();
-              goPage("/login", { replace: true });
-              toast.positive("로그아웃 되었어요.", "로그아웃");
-            }}
-          >
-            <span className="inline-flex h-4 w-4 items-center justify-center">
-              <FiLogOut size={15} />
-            </span>
-            로그아웃
-          </Button>
-        </nav>
+          </nav>
+          <div className="mt-4 border-t border-base-300/80 pt-3">
+            <p className="text-[11px] text-base-content/45">현재 버전</p>
+            <p className="mt-1 text-xs text-base-content/65">앱 {appVersionLabel}</p>
+            <p className="mt-0.5 text-xs text-base-content/65">
+              WebUI {webUiVersionLabel} ({releaseChannelLabel})
+            </p>
+          </div>
+        </div>
       </aside>
     </div>
   );

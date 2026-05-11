@@ -2,7 +2,7 @@ import { buildAuthHeaders } from "./authHeaders";
 import { fetchWithBackendStatus } from "./backendConnectivity";
 import { getGraphqlEndpoint } from "./graphqlEndpoint";
 import type { GraphQLResponse } from "./graphqlResponse";
-import { syncNativeTodoSession } from "../utils/notifications";
+import { syncNativeTodoSession } from "../utils/nativeBridge";
 
 const DAILY_LOGS_BY_MONTH_QUERY = /* GraphQL */ `
   query DailyLogsByMonth($monthKey: String!) {

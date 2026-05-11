@@ -8,7 +8,7 @@ import {
   getLocationPermissionStatus,
   openAppPermissionSettings,
   requestLocationPermission,
-} from "../../../utils/notifications";
+} from "../../../utils/nativeBridge";
 
 export function SettingsWeatherView() {
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);

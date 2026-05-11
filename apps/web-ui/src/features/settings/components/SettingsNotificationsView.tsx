@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { PermissionToggleButton } from "../../../components/ui/PermissionToggleButton";
 import {
-  getNativeExpoPushToken,
   getNotificationPermissionStatus,
-  openAppPermissionSettings,
   requestNotificationPermission,
 } from "../../../utils/notifications";
+import { getNativeExpoPushToken, openAppPermissionSettings } from "../../../utils/nativeBridge";
 import { SettingsDetailShell } from "./SettingsDetailShell";
 import { SegmentedToggle } from "../../../components/SegmentedToggle";
 import { TimePickerBottomSheet } from "../../../components/TimePickerBottomSheet";
