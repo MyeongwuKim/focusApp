@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
+import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -58,6 +59,8 @@ const LAUNCH_ANIMATION_RING_DURATION_MS = 900;
 const LAUNCH_ANIMATION_CHECK_DURATION_MS = 280;
 const LAUNCH_ANIMATION_PAUSE_MS = 280;
 const LAUNCH_OVERLAY_MIN_VISIBLE_MS = 800;
+const LAUNCH_PROGRESS_BAR_WIDTH = 196;
+const FORCE_LAUNCH_OVERLAY_FOR_TEST = process.env.EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY === "true";
 
 type NativePermissionState = "granted" | "denied" | "undetermined";
 type LocationPermissionSnapshot = {
@@ -287,6 +290,21 @@ function buildWebUiUriWithHash(baseUri: string, callbackHash: string) {
   const normalizedHash = callbackHash.startsWith("#") ? callbackHash : `#${callbackHash}`;
   const sanitizedBase = baseUri.split("#")[0];
   return `${sanitizedBase}${normalizedHash}`;
+}
+
+function resolveLaunchProgressPercent(statusMessage: WebUiVersionProgress) {
+  switch (statusMessage) {
+    case "초기 번들 준비중...":
+      return 22;
+    case "버전 체크중...":
+      return 46;
+    case "앱 번들 설치중...":
+      return 78;
+    case "앱 시작중...":
+      return 100;
+    default:
+      return 0;
+  }
 }
 
 async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
@@ -704,11 +722,26 @@ async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot | nul
   };
 }
 
-function FocusLaunchOverlay({ statusMessage }: { statusMessage: string }) {
+function FocusLaunchOverlay({
+  statusMessage,
+  progressPercent,
+}: {
+  statusMessage: string;
+  progressPercent: number;
+}) {
   const sweepProgress = useRef(new Animated.Value(0)).current;
-  const checkShortProgress = useRef(new Animated.Value(0)).current;
-  const checkLongProgress = useRef(new Animated.Value(0)).current;
+  const checkProgress = useRef(new Animated.Value(0)).current;
   const pulseOpacity = useRef(new Animated.Value(0.88)).current;
+  const progressWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(progressWidth, {
+      toValue: (LAUNCH_PROGRESS_BAR_WIDTH * Math.max(0, Math.min(progressPercent, 100))) / 100,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progressPercent, progressWidth]);
 
   useEffect(() => {
     const animationLoop = Animated.loop(
@@ -727,17 +760,11 @@ function FocusLaunchOverlay({ statusMessage }: { statusMessage: string }) {
             useNativeDriver: true,
           }),
         ]),
-        Animated.timing(checkShortProgress, {
+        Animated.timing(checkProgress, {
           toValue: 1,
           duration: LAUNCH_ANIMATION_CHECK_DURATION_MS,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: false,
-        }),
-        Animated.timing(checkLongProgress, {
-          toValue: 1,
-          duration: LAUNCH_ANIMATION_CHECK_DURATION_MS,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: false,
+          easing: Easing.out(Easing.back(1.6)),
+          useNativeDriver: true,
         }),
         Animated.delay(LAUNCH_ANIMATION_PAUSE_MS),
         Animated.parallel([
@@ -746,15 +773,10 @@ function FocusLaunchOverlay({ statusMessage }: { statusMessage: string }) {
             duration: 0,
             useNativeDriver: true,
           }),
-          Animated.timing(checkShortProgress, {
+          Animated.timing(checkProgress, {
             toValue: 0,
             duration: 0,
-            useNativeDriver: false,
-          }),
-          Animated.timing(checkLongProgress, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
           Animated.timing(pulseOpacity, {
             toValue: 0.88,
@@ -769,21 +791,21 @@ function FocusLaunchOverlay({ statusMessage }: { statusMessage: string }) {
     return () => {
       animationLoop.stop();
     };
-  }, [checkLongProgress, checkShortProgress, pulseOpacity, sweepProgress]);
+  }, [checkProgress, pulseOpacity, sweepProgress]);
 
   const ringRotate = sweepProgress.interpolate({
     inputRange: [0, 1],
     outputRange: ["-90deg", "270deg"],
   });
 
-  const shortCheckWidth = checkShortProgress.interpolate({
+  const checkOpacity = checkProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 28],
+    outputRange: [0, 1],
   });
 
-  const longCheckWidth = checkLongProgress.interpolate({
+  const checkScale = checkProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 62],
+    outputRange: [0.72, 1],
   });
 
   return (
@@ -799,10 +821,24 @@ function FocusLaunchOverlay({ statusMessage }: { statusMessage: string }) {
           ]}
         />
         <View style={styles.launchCheckWrap}>
-          <Animated.View style={[styles.launchCheckShort, { width: shortCheckWidth }]} />
-          <Animated.View style={[styles.launchCheckLong, { width: longCheckWidth }]} />
+        <Animated.View
+          style={[
+            styles.launchCheckIconWrap,
+            {
+              opacity: checkOpacity,
+              transform: [{ scale: checkScale }],
+            },
+          ]}
+        >
+          <Feather name="check" size={52} color="#F8FAFC" />
+        </Animated.View>
         </View>
       </Animated.View>
+      <View style={styles.launchProgressWrap}>
+        <View style={styles.launchProgressTrack}>
+          <Animated.View style={[styles.launchProgressFill, { width: progressWidth }]} />
+        </View>
+      </View>
       <Text style={styles.launchStatusText}>{statusMessage}</Text>
     </View>
   );
@@ -1782,12 +1818,21 @@ export default function WebViewScreen() {
 
   const showPermissionIntro = isPermissionIntroReady && isPermissionIntroVisible;
   const isLaunchDestinationReady = showPermissionIntro || hasInitialWebViewLoaded;
+  const launchProgressPercent = useMemo(
+    () => resolveLaunchProgressPercent(launchStatusMessage),
+    [launchStatusMessage]
+  );
   const shouldShowLaunchOverlay =
-    isPreparingLocalFile || !hasLaunchOverlayMinElapsed || !isLaunchDestinationReady;
+    FORCE_LAUNCH_OVERLAY_FOR_TEST ||
+    isPreparingLocalFile ||
+    !hasLaunchOverlayMinElapsed ||
+    !isLaunchDestinationReady;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {shouldShowLaunchOverlay ? <FocusLaunchOverlay statusMessage={launchStatusMessage} /> : null}
+      {shouldShowLaunchOverlay ? (
+        <FocusLaunchOverlay statusMessage={launchStatusMessage} progressPercent={launchProgressPercent} />
+      ) : null}
       {source && !showPermissionIntro ? (
         <View style={styles.webViewContainer}>
           <View
@@ -1935,35 +1980,40 @@ const styles = StyleSheet.create({
   },
   launchCheckWrap: {
     position: "absolute",
-    width: 90,
-    height: 68,
-    left: 37,
-    top: 44,
+    width: 74,
+    height: 74,
+    left: 45,
+    top: 45,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  launchCheckShort: {
-    position: "absolute",
-    left: 12,
-    top: 38,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#F8FAFC",
-    transform: [{ rotate: "45deg" }],
-  },
-  launchCheckLong: {
-    position: "absolute",
-    left: 32,
-    top: 42,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#F8FAFC",
-    transform: [{ rotate: "-45deg" }],
+  launchCheckIconWrap: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   launchStatusText: {
-    marginTop: 18,
+    marginTop: 14,
     color: "rgba(226, 232, 240, 0.96)",
     fontSize: 14,
     fontWeight: "600",
     letterSpacing: 0.2,
+  },
+  launchProgressWrap: {
+    marginTop: 18,
+    width: LAUNCH_PROGRESS_BAR_WIDTH,
+    alignItems: "flex-start",
+  },
+  launchProgressTrack: {
+    width: LAUNCH_PROGRESS_BAR_WIDTH,
+    height: 6,
+    borderRadius: 99,
+    backgroundColor: "rgba(148, 163, 184, 0.24)",
+    overflow: "hidden",
+  },
+  launchProgressFill: {
+    height: "100%",
+    borderRadius: 99,
+    backgroundColor: "#2CE6A6",
   },
   webViewContainer: {
     flex: 1,

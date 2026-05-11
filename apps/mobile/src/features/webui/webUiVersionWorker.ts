@@ -11,7 +11,7 @@ const WEB_UI_RELEASE_STATE_FILE_URI = `${
 const WEB_UI_MANIFEST_FETCH_TIMEOUT_MS = 5000;
 const WEB_UI_BUNDLE_FETCH_TIMEOUT_MS = 15000;
 
-export type WebUiReleaseChannel = "dev" | "prod";
+export type WebUiReleaseChannel = "dev" | "prod" | "none";
 export type WebUiVersionProgress =
   | "초기 번들 준비중..."
   | "버전 체크중..."
@@ -37,7 +37,7 @@ export function resolveWebUiReleaseChannel(input: {
   isDev: boolean;
 }): WebUiReleaseChannel {
   const channel = input.explicitChannel?.trim().toLowerCase();
-  if (channel === "dev" || channel === "prod") {
+  if (channel === "dev" || channel === "prod" || channel === "none") {
     return channel;
   }
   return input.isDev ? "dev" : "prod";
@@ -49,6 +49,10 @@ export function resolveWebUiManifestUrl(input: {
   manifestUrlProd?: string;
   manifestUrlFallback?: string;
 }) {
+  if (input.channel === "none") {
+    return null;
+  }
+
   const channelUrl =
     input.channel === "dev" ? input.manifestUrlDev : input.manifestUrlProd;
   const normalizedChannelUrl = normalizeOptionalUrl(channelUrl);

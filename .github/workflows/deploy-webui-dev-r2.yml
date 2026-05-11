@@ -140,14 +140,6 @@ jobs:
             --content-type "application/zip"
 
           aws s3 cp \
-            "apps/web-ui/dist/" \
-            "s3://${R2_BUCKET_NAME}/releases/${VERSION}/" \
-            --recursive \
-            --endpoint-url "$ENDPOINT_URL" \
-            --checksum-algorithm CRC32 \
-            --cache-control "public, max-age=300"
-
-          aws s3 cp \
             "${RELEASE_DIR}/manifest.json" \
             "s3://${R2_BUCKET_NAME}/releases/${VERSION}/manifest.json" \
             --endpoint-url "$ENDPOINT_URL" \

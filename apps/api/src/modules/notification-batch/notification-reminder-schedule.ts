@@ -13,6 +13,7 @@ type ReminderScheduleSettings = {
   typeIncomplete: boolean;
   typeFocusStart: boolean;
   systemPermission: string | null;
+  nextReminderAt?: Date | null;
 };
 
 export async function refreshReminderScheduleForUser(input: {
@@ -59,9 +60,19 @@ export function computeNextReminderAtAfterRun(input: {
   now: Date;
   timezone: string;
 }) {
+  const intervalMs = Math.max(input.settings.intervalMinutes, 1) * 60 * 1000;
+  const baseMs = input.settings.nextReminderAt?.getTime() ?? input.now.getTime();
+  const nowMs = input.now.getTime();
+  let nextMs = baseMs;
+
+  // 실행 지연이 있더라도 기존 예약 시각을 기준으로 간격을 유지해 드리프트를 방지한다.
+  while (nextMs <= nowMs) {
+    nextMs += intervalMs;
+  }
+
   return computeNextReminderAtFromSettings({
     settings: input.settings,
-    now: new Date(input.now.getTime() + Math.max(input.settings.intervalMinutes, 1) * 60 * 1000),
+    now: new Date(nextMs),
     timezone: input.timezone,
     immediateIfAllowed: false,
   });
