@@ -1,18 +1,18 @@
-name: Deploy Web UI to R2 (Dev)
+name: Deploy Web UI to R2 (Prod)
 
 on:
   push:
     branches:
-      - develop
+      - master
     paths:
       - "apps/web-ui/**"
       - "package.json"
       - "pnpm-lock.yaml"
-      - ".github/workflows/deploy-webui-dev-r2.yml"
+      - ".github/workflows/deploy-webui-prod-r2.yml"
   workflow_dispatch:
 
 concurrency:
-  group: deploy-webui-dev-r2
+  group: deploy-webui-prod-r2
   cancel-in-progress: true
 
 permissions:
@@ -22,12 +22,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID_DEV }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY_DEV }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID_PROD }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY_PROD }}
       AWS_DEFAULT_REGION: auto
       R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME_DEV }}
-      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL_DEV }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME_PROD }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL_PROD }}
 
     steps:
       - name: Checkout

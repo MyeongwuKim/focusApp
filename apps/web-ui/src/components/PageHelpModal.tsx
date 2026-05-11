@@ -32,14 +32,17 @@ export function PageHelpModal({ isOpen, guide, onClose }: PageHelpModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div className="pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center p-4">
       <button
         type="button"
         aria-label="도움말 닫기"
         className="absolute inset-0 bg-base-300/40 backdrop-blur-[1px]"
         onClick={onClose}
       />
-      <div className="relative z-[121] w-full max-w-md rounded-2xl border border-base-300/85 bg-base-100 p-4 shadow-2xl">
+      <div
+        className="relative z-[121] w-full max-w-md rounded-2xl border border-base-300/85 bg-base-100 p-4 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="m-0 text-base font-semibold text-base-content">{guide.title}</h2>
           <Button
