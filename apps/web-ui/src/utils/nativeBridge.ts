@@ -426,17 +426,9 @@ export async function getNativeExpoPushToken(): Promise<NativeExpoPushTokenSnaps
     };
   }
 
-  const requestId = `expo-push-token-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  const posted = postNativeBridgeMessage("REST_PUSH_TOKEN_REQUEST", { requestId });
-  if (!posted) {
-    return {
-      pushToken: null,
-      platform: "unknown",
-    };
-  }
-
   return await new Promise<NativeExpoPushTokenSnapshot>((resolve) => {
     let settled = false;
+    const requestId = `expo-push-token-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     const timeoutId = window.setTimeout(() => {
       if (settled) {
@@ -473,5 +465,16 @@ export async function getNativeExpoPushToken(): Promise<NativeExpoPushTokenSnaps
     };
 
     window.addEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+
+    const posted = postNativeBridgeMessage("REST_PUSH_TOKEN_REQUEST", { requestId });
+    if (!posted) {
+      settled = true;
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+      resolve({
+        pushToken: null,
+        platform: "unknown",
+      });
+    }
   });
 }

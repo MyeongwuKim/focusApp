@@ -260,37 +260,43 @@ export function DateTasksBottomSheet({
           aria-hidden={false}
         >
           <div className="border-t border-base-300/70 bg-base-200/75 px-2.5 py-2">
-            <div className="grid min-h-10 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-1">
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/45 transition-colors hover:bg-base-100/45"
-                onClick={() => onExpandedChange(!isExpanded)}
-                aria-label={isExpanded ? "오늘할일 접기" : "오늘할일 펼치기"}
-                tabIndex={0}
-              >
-                {isExpanded ? <FiChevronDown size={16} /> : <FiChevronUp size={16} />}
-              </button>
-              <button
-                type="button"
-                className="min-w-0 rounded-lg px-2 py-1 text-center text-[15px] font-semibold tracking-tight text-base-content/90 transition-colors hover:bg-base-100/40"
-                onClick={() => onExpandedChange(true)}
-                tabIndex={0}
-              >
-                <span className="inline-flex max-w-full items-center justify-center gap-1.5">
-                  <span className="truncate">{selectedDateLabel}</span>
-                  <span
-                    className={[
-                      "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
-                      canGoToday
-                        ? "pointer-events-none invisible border-transparent text-transparent"
-                        : "border-primary/30 bg-primary/10 text-primary",
-                    ].join(" ")}
-                  >
-                    오늘
+            <div className="relative min-h-10">
+              <div className="absolute left-0 top-1/2 -translate-y-1/2">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/45 transition-colors hover:bg-base-100/45"
+                  onClick={() => onExpandedChange(!isExpanded)}
+                  aria-label={isExpanded ? "오늘할일 접기" : "오늘할일 펼치기"}
+                  tabIndex={0}
+                >
+                  {isExpanded ? <FiChevronDown size={16} /> : <FiChevronUp size={16} />}
+                </button>
+              </div>
+
+              <div className="pointer-events-none absolute left-1/2 top-1/2 w-[calc(100%-11rem)] -translate-x-1/2 -translate-y-1/2">
+                <button
+                  type="button"
+                  className="pointer-events-auto w-full min-w-0 rounded-lg px-2 py-1 text-center text-[15px] font-semibold tracking-tight text-base-content/90 transition-colors hover:bg-base-100/40"
+                  onClick={() => onExpandedChange(true)}
+                  tabIndex={0}
+                >
+                  <span className="inline-flex max-w-full items-center justify-center gap-1.5">
+                    <span className="truncate">{selectedDateLabel}</span>
+                    <span
+                      className={[
+                        "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+                        canGoToday
+                          ? "pointer-events-none invisible border-transparent text-transparent"
+                          : "border-primary/30 bg-primary/10 text-primary",
+                      ].join(" ")}
+                    >
+                      오늘
+                    </span>
                   </span>
-                </span>
-              </button>
-              <div className="ml-auto flex items-center justify-end gap-1.5">
+                </button>
+              </div>
+
+              <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center justify-end gap-1.5">
                 <Button
                   className={[
                     "h-8 min-h-8 border-base-300 bg-base-100 px-3 text-xs font-semibold text-base-content shadow-sm",

@@ -24,6 +24,9 @@ type TimePickerTarget = "start" | "end";
 
 type NotificationTypeState = Record<NotificationTypeKey, boolean>;
 
+const PUSH_TOKEN_REGISTRATION_RETRY_DELAYS_MS = [1200, 2500, 5000, 10000] as const;
+const PUSH_TOKEN_REGISTRATION_MAX_RETRIES = PUSH_TOKEN_REGISTRATION_RETRY_DELAYS_MS.length;
+
 const PREVIEW_COPY: Record<PreviewTone, Record<NotificationTypeKey, string>> = {
   soft: {
     restEnd: "휴식이 끝났어요. 천천히 다시 집중해볼까요?",
@@ -62,9 +65,40 @@ export function SettingsNotificationsView() {
     focusStart: true,
   });
   const [hasHydratedFromServer, setHasHydratedFromServer] = useState(false);
+  const [pushTokenRegistrationAttemptSeed, setPushTokenRegistrationAttemptSeed] = useState(0);
   const lastSavedPayloadRef = useRef<string>("");
   const lastRegisteredPushTokenRef = useRef<string>("");
   const hasTriedPushTokenRegistrationRef = useRef(false);
+  const pushTokenRetryTimeoutRef = useRef<number | null>(null);
+  const pushTokenRetryCountRef = useRef(0);
+
+  const clearPushTokenRetry = () => {
+    if (pushTokenRetryTimeoutRef.current !== null) {
+      window.clearTimeout(pushTokenRetryTimeoutRef.current);
+      pushTokenRetryTimeoutRef.current = null;
+    }
+  };
+
+  const schedulePushTokenRetry = () => {
+    if (pushTokenRetryCountRef.current >= PUSH_TOKEN_REGISTRATION_MAX_RETRIES) {
+      return;
+    }
+
+    const retryIndex = pushTokenRetryCountRef.current;
+    const delay = PUSH_TOKEN_REGISTRATION_RETRY_DELAYS_MS[retryIndex];
+    pushTokenRetryCountRef.current += 1;
+    clearPushTokenRetry();
+    pushTokenRetryTimeoutRef.current = window.setTimeout(() => {
+      hasTriedPushTokenRegistrationRef.current = false;
+      setPushTokenRegistrationAttemptSeed((prev) => prev + 1);
+    }, delay);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearPushTokenRetry();
+    };
+  }, []);
 
   useEffect(() => {
     const settings = notificationSettingsQuery.data;
@@ -130,8 +164,9 @@ export function SettingsNotificationsView() {
         return;
       }
 
-      setPermissionStatus(status.status || "unknown");
-      if (!status.granted) {
+      const resolvedStatus = status.status || "unknown";
+      setPermissionStatus(resolvedStatus);
+      if (!status.granted && (resolvedStatus === "denied" || resolvedStatus === "unsupported")) {
         setIsOn(false);
       }
       setIsPermissionLoading(false);
@@ -206,8 +241,13 @@ export function SettingsNotificationsView() {
   useEffect(() => {
     if (!hasHydratedFromServer || !isOn || permissionStatus !== "granted") {
       hasTriedPushTokenRegistrationRef.current = false;
+      pushTokenRetryCountRef.current = 0;
+      clearPushTokenRetry();
       return;
     }
+
+    clearPushTokenRetry();
+
     if (hasTriedPushTokenRegistrationRef.current) {
       return;
     }
@@ -216,9 +256,11 @@ export function SettingsNotificationsView() {
     void (async () => {
       const snapshot = await getNativeExpoPushToken();
       if (!snapshot.pushToken) {
+        schedulePushTokenRetry();
         return;
       }
       if (snapshot.pushToken === lastRegisteredPushTokenRef.current) {
+        pushTokenRetryCountRef.current = 0;
         return;
       }
 
@@ -228,16 +270,18 @@ export function SettingsNotificationsView() {
           platform: snapshot.platform,
         });
         lastRegisteredPushTokenRef.current = snapshot.pushToken;
+        pushTokenRetryCountRef.current = 0;
       } catch (error) {
         const message = getUserFacingErrorMessage(error, "푸쉬 토큰 등록 중 오류가 발생했어요.");
         toast.error(message, "토큰 등록 실패");
-        hasTriedPushTokenRegistrationRef.current = false;
+        schedulePushTokenRetry();
       }
     })();
   }, [
     hasHydratedFromServer,
     isOn,
     permissionStatus,
+    pushTokenRegistrationAttemptSeed,
     registerPushDeviceTokenMutation.mutateAsync,
   ]);
 
