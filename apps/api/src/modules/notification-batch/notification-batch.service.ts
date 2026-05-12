@@ -8,7 +8,6 @@ import {
 
 type ReminderTone = "soft" | "balanced" | "firm";
 type ReminderKind =
-  | "focus_start"
   | "empty_todo_start"
   | "incomplete_todo"
   | "scheduled_todo_start"
@@ -45,12 +44,6 @@ export type NotificationBatchResult = {
 const DEFAULT_TIMEZONE = "Asia/Seoul";
 const NEW_USER_REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
 const WEEKDAY_SET = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
-
-const FOCUS_COPY: Record<ReminderTone, string> = {
-  soft: "집중 시간이에요. 오늘 목표부터 차분히 시작해볼까요?",
-  balanced: "집중 시작 시간입니다. 우선순위 작업부터 진행해보세요.",
-  firm: "집중 시작 시간입니다. 즉시 핵심 작업을 시작해 주세요.",
-};
 
 const EMPTY_TODO_COPY: Record<ReminderTone, string> = {
   soft: "오늘 할일이 아직 없어요. 가볍게 하나부터 시작해볼까요?",
@@ -504,40 +497,6 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       continue;
     }
 
-    deliveries.push({
-      userId: settings.userId,
-      kind: "focus_start",
-      title: "집중 시작",
-      body: FOCUS_COPY[tone],
-      tone,
-    });
-
-    if (!dryRun) {
-      const targetPath = `/date-tasks?date=${nowInTimezone.dateKey}`;
-      const tokens = await input.prisma.pushDeviceToken.findMany({
-        where: { userId: settings.userId, isActive: true },
-        select: { pushToken: true },
-      });
-      attemptedTokenCount += tokens.length;
-      if (tokens.length > 0) {
-        await sendExpoPushMessages({
-          entries: tokens.map((token) => ({
-            pushToken: token.pushToken,
-            title: "집중 시작",
-            body: FOCUS_COPY[tone],
-            data: {
-              kind: "focus_start",
-              dateKey: nowInTimezone.dateKey,
-              targetPath,
-            },
-          })),
-          prisma: input.prisma,
-        });
-        await updateReminderMarkers(input.prisma, settings.userId, {
-          lastFocusReminderSentAt: now,
-        });
-      }
-    }
     await scheduleNextReminder();
   }
 

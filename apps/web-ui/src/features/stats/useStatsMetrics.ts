@@ -315,33 +315,55 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
     };
   }, [countStats.dailySeries, countStats.doneTodos, countStats.incompleteTodos, rangeDays, timeStats.dailySeries]);
 
-  const weeklyReview = useMemo(() => {
+  const periodReview = useMemo(() => {
     const combined = countStats.dailySeries.map((countItem, index) => {
       const timeItem = timeStats.dailySeries[index];
+      const dayTodos = (detailMap.get(countItem.key)?.todos ?? []).filter((todo) =>
+        matchesTask(todo, taskId, taskLabel)
+      );
+      const startedIncomplete = dayTodos.filter((todo) => {
+        if (todo.done) {
+          return false;
+        }
+        const resumed = Math.max(todo.resumeCount ?? 0, 0) > 0;
+        const focused = Math.max(todo.actualFocusSeconds ?? 0, 0) > 0;
+        return Boolean(todo.startedAt) || resumed || focused;
+      }).length;
+
+      const focusMin = timeItem?.focusMin ?? 0;
+      const engaged =
+        countItem.done > 0 || startedIncomplete > 0 || focusMin > 0 || countItem.resumeCount > 0;
+
       return {
         key: countItem.key,
         done: countItem.done,
-        incomplete: countItem.incomplete,
+        startedIncomplete,
         resumeCount: countItem.resumeCount,
-        focusMin: timeItem?.focusMin ?? 0,
+        focusMin,
+        engaged,
       };
     });
-    const latest7 = combined.slice(-7);
-    const goodDays = latest7.filter(
-      (item) => item.done >= 1 && item.focusMin >= 25 && item.incomplete <= item.done && item.resumeCount <= 2
-    ).length;
-    const roughDays = latest7.filter(
+
+    const evaluable = combined.filter((item) => item.engaged);
+    const goodDays = evaluable.filter(
       (item) =>
-        item.incomplete > item.done || (item.incomplete > 0 && item.focusMin === 0) || item.resumeCount >= 4
+        item.done >= 1 &&
+        item.focusMin >= 25 &&
+        item.startedIncomplete <= item.done &&
+        item.resumeCount <= 2
+    ).length;
+    const roughDays = evaluable.filter(
+      (item) => item.startedIncomplete > item.done || item.resumeCount >= 4
     ).length;
 
     return {
-      startDate: latest7[0]?.key ?? null,
-      endDate: latest7[latest7.length - 1]?.key ?? null,
+      startDate: combined[0]?.key ?? null,
+      endDate: combined[combined.length - 1]?.key ?? null,
       goodDays,
       roughDays,
+      evaluableDays: evaluable.length,
     };
-  }, [countStats.dailySeries, timeStats.dailySeries]);
+  }, [countStats.dailySeries, detailMap, taskId, taskLabel, timeStats.dailySeries]);
 
   return {
     count: {
@@ -362,7 +384,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       useMonthlyBar: timeStats.useMonthlyBar,
       data: timeBars,
     },
-    weeklyReview,
+    periodReview,
     signal: activitySignal,
     isFetching:
       monthlyLogsQuery.dailyLogQueries.some((query) => query.isFetching) ||

@@ -43,6 +43,12 @@ const requestSchema = z.object({
 type StatsCommentaryRequest = z.infer<typeof requestSchema>;
 type ServiceErrorCode = "OPENAI_KEY_MISSING" | "OPENAI_REQUEST_FAILED" | "OPENAI_EMPTY_RESPONSE";
 
+function pickCoachVoice(payload: StatsCommentaryRequest) {
+  const daySeed = Number(payload.period.end.replaceAll("-", "")) || payload.period.days;
+  const variants = ["담백한 코치", "전략형 플래너", "차분한 파트너"] as const;
+  return variants[daySeed % variants.length];
+}
+
 function buildPrompt(payload: StatsCommentaryRequest) {
   const frequentIncompleteTaskLine =
     payload.frequentIncompleteTasks.length > 0
@@ -81,36 +87,52 @@ function buildPrompt(payload: StatsCommentaryRequest) {
       : periodMode === "monthly"
       ? "이번 달 흐름의 변화와 유지/정비 포인트 제안"
       : "넓은 기간이더라도 실제 기록된 활동일 기준으로만 판단";
+  const coachVoice = pickCoachVoice(payload);
+  const sparseToneHint = sparseData
+    ? "기록이 적으면 판단 경고를 딱딱하게 쓰지 말고, 부드러운 관찰 문장으로 짧게 안내"
+    : lowData
+    ? "표본이 충분하지 않다면 결론 단정 대신 최근 관찰 중심으로 정리"
+    : "기록 근거를 바탕으로 간결하게 요약";
 
   return [
-    "너는 생산성 코치다. 사용자에게 한국어로 따뜻하고 공손한 서비스 톤으로 짧은 코멘트를 작성한다.",
-    "출력 형식은 아래 5줄로 고정한다.",
-    "1) 한줄요약: ...",
-    "2) 잘한점: ...",
-    "3) 미완료패턴: ...",
-    "4) 개선포인트: ...",
-    "5) 다음한걸음: ...",
-    "각 줄은 50자 이내로 짧게 작성하고, 비난/의학 조언/단정 표현은 금지한다.",
-    "문체 규칙:",
-    "- 친절한 안내 문체를 사용한다.",
-    "- 제안 문장은 '...해보는 건 어떨까요?' 형태를 우선 사용한다.",
-    "- 압박하거나 평가하는 말투는 금지한다.",
-    "- 반말 금지, 과장 금지.",
-    "- 근거 없는 장기 단정 금지(예: '1년 내내', '항상', '꾸준히 유지 중').",
-    "- 동일 의미 표현 반복 금지(비슷한 칭찬/권고 중복 금지).",
-    "- 미완료패턴 줄에는 '작업명(횟수)'를 1~2개 반드시 포함한다. 데이터가 없으면 '반복 미완료 작업 없음'으로 작성한다.",
-    "기간 해석 규칙:",
-    "- daily: 당일 실행감 중심, 바로 실천 가능한 한걸음 제안",
-    "- weekly: 반복 습관/패턴 중심, 다음 주에 유지할 1가지 제안",
-    "- monthly: 추세 중심, 우선순위 정리/정비 제안",
-    "- yearly/longterm: 큰 흐름 중심, 지속 가능한 페이스/회고 제안",
-    "데이터 신뢰도 규칙:",
-    "- activeDays가 3일 이하이거나 coverage가 매우 낮으면 '표본이 적어 단정은 어려움'을 짧게 반영한다.",
-    "- activeDays가 7일 이하면 장기 성과 평가 대신 최근 관찰 위주로 작성한다.",
-    "- period가 길어도 activeDays가 충분하지 않으면 장기 습관 확정 표현 금지.",
+    "너는 생산성 코치이자 일정 플래너다.",
+    "사용자가 실제로 다음 행동을 선택할 수 있게, 근거 기반으로 짧고 자연스럽게 조언한다.",
+    `이번 응답의 말투 페르소나: ${coachVoice}`,
+    "절대 규칙:",
+    "- 반드시 한국어로 작성한다.",
+    "- 반드시 아래 5줄 형식을 정확히 지킨다(순서/제목 고정).",
+    "- 각 줄은 70자 이내, 한 줄당 1~2문장으로 작성한다.",
+    "- 비난, 훈계, 과장, 반말, 근거 없는 단정 금지.",
+    "- 어색한 메타 표현 금지(예: '추세 판단은 조심해야 합니다').",
+    "- 같은 표현 반복 금지(특히 '~어떨까요?' 반복 금지).",
+    "- 추상 조언 금지. 실행 가능한 행동 1개를 구체적으로 제시한다.",
+    "",
+    "출력 형식(그대로):",
+    "1) 한줄요약: 기간 전체 흐름을 한 문장으로 정리",
+    "2) 잘한점: 데이터 근거 1개를 넣어 칭찬",
+    "3) 미완료패턴: 반복 미완료 작업명(횟수) 1~2개 포함",
+    "4) 개선포인트: 원인 가설 + 조정 방법 1개",
+    "5) 다음한걸음: 오늘/내일 바로 가능한 10~30분 단위 행동 1개",
+    "",
+    "플래너 품질 기준:",
+    "- 완료율/재개횟수/활동일 수를 함께 보고 리듬 문제인지 난이도 문제인지 구분한다.",
+    "- 활동일이 적으면 결론 대신 최근 관찰 중심으로 표현한다.",
+    "- 기간이 길어도 표본이 적으면 장기 습관 확정 표현을 쓰지 않는다.",
+    "- 미완료 작업이 있으면 우선순위/분할/시작 문턱 낮추기 중 하나를 제안한다.",
+    "",
+    "저표본 문장 가이드:",
+    "- '기록이 아직 적어 이번엔 최근 흐름 위주로 정리해볼게요.'",
+    "- '이번 기간은 표본이 작아 결론보다 관찰 중심으로 볼게요.'",
+    "",
+    "금지 어휘/문장 예시:",
+    "- 추세 판단은 조심해야 합니다",
+    "- 꾸준히 잘하고 있습니다(근거 없음)",
+    "- 항상/절대/반드시",
+    "",
     `이번 요청의 기간모드: ${periodMode}`,
     `이번 요청의 초점 렌즈: ${primaryLens}`,
     `기간 톤 힌트: ${periodToneHint}`,
+    `저표본 문장 톤 힌트: ${sparseToneHint}`,
     "",
     `기간: ${payload.period.start} ~ ${payload.period.end} (${payload.period.days}일, preset=${payload.period.preset})`,
     `활동 기록일: ${payload.meta.activeDays}일 (coverage ${payload.meta.dataCoverageRate.toFixed(1)}%)`,
@@ -128,7 +150,10 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     `활동일 평균 미완료: ${payload.meta.avgIncompletePerActiveDay.toFixed(2)}개`,
     `자주 미완료된 작업: ${frequentIncompleteTaskLine}`,
     `저표본 여부: ${sparseData ? "매우 높음" : lowData ? "있음" : "낮음"}`,
-    "미완료패턴/개선포인트/다음한걸음에서는 가능하면 자주 미완료된 작업을 구체적으로 언급한다.",
+    "작성 전 체크:",
+    "- 5줄 제목이 정확한가?",
+    "- 각 줄이 자연스러운 한국어인가?",
+    "- 다음한걸음이 실제로 바로 실행 가능한가?",
   ].join("\n");
 }
 
@@ -148,8 +173,8 @@ async function requestCommentary(payload: StatsCommentaryRequest) {
     body: JSON.stringify({
       model: env.OPENAI_MODEL,
       input: buildPrompt(payload),
-      temperature: 0.7,
-      max_output_tokens: 220,
+      temperature: 0.85,
+      max_output_tokens: 280,
     }),
   });
 

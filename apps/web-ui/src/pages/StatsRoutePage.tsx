@@ -24,7 +24,7 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
     () => normalizeStatsSearchParams(effectiveSearchParams),
     [effectiveSearchParams]
   );
-  const { count, time, weeklyReview, signal, isFetching } = useStatsMetrics({
+  const { count, time, periodReview, signal, isFetching } = useStatsMetrics({
     start: normalized.start,
     end: normalized.end,
     todayKey: normalized.todayKey,
@@ -108,19 +108,15 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
             { label: "휴식 분", value: `${todayKpi.restMinutes}분` },
           ]}
         />
-        {weeklyReview.startDate && weeklyReview.endDate ? (
+        {periodReview.startDate && periodReview.endDate ? (
           <StatsWeeklyReviewCard
-            startDate={weeklyReview.startDate}
-            endDate={weeklyReview.endDate}
-            goodDays={weeklyReview.goodDays}
-            roughDays={weeklyReview.roughDays}
+            startDate={periodReview.startDate}
+            endDate={periodReview.endDate}
+            goodDays={periodReview.goodDays}
+            roughDays={periodReview.roughDays}
+            evaluableDays={periodReview.evaluableDays}
           />
         ) : null}
-        <StatsAiCommentaryCard
-          payload={aiCommentaryPayload}
-          isDataFetching={isFetching}
-          canUseCommentary={signal.activeDayCount > 0}
-        />
         <StatsCountSection
           completionRate={count.completionRate}
           incompleteRate={count.incompleteRate}
@@ -136,6 +132,11 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
           totalRest={time.totalRest}
           useMonthlyBar={time.useMonthlyBar}
           data={time.data}
+        />
+        <StatsAiCommentaryCard
+          payload={aiCommentaryPayload}
+          isDataFetching={isFetching}
+          canUseCommentary={signal.activeDayCount > 0}
         />
         {isFetching ? <p className="text-xs text-base-content/60">통계 데이터 불러오는 중...</p> : null}
       </div>
