@@ -35,8 +35,18 @@ export class NotificationSettingsService {
     const normalized = normalizeUpdateInput(input);
 
     if (normalized.intervalMinutes !== undefined) {
-      // 인터벌 변경은 즉시 반영하고, 미적용 예약 값은 항상 비운다.
-      normalized.pendingIntervalMinutes = null;
+      const existing = await this.repository.findByUserId(input.userId);
+      const hasFutureReminder =
+        !!existing?.nextReminderAt && existing.nextReminderAt.getTime() > Date.now();
+
+      if (existing && existing.intervalMinutes !== normalized.intervalMinutes && hasFutureReminder) {
+        // 현재 사이클은 유지하고, 다음 사이클부터 pending interval을 적용한다.
+        normalized.pendingIntervalMinutes = normalized.intervalMinutes;
+        normalized.intervalMinutes = existing.intervalMinutes;
+      } else {
+        // 예약 사이클이 없거나 동일 값이면 즉시 반영한다.
+        normalized.pendingIntervalMinutes = null;
+      }
     }
 
     return this.repository.updateByUserId(input.userId, normalized);

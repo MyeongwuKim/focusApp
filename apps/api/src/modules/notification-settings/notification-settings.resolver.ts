@@ -90,17 +90,24 @@ export const notificationSettingsResolvers = {
       context: GraphQLContext
     ) => {
       try {
+        const userId = getUserId(context);
+        const previous = await context.prisma.notificationSettings.findUnique({
+          where: { userId },
+        });
         const service = createNotificationSettingsService(context);
         const updated = await service.updateNotificationSettings({
-          userId: getUserId(context),
+          userId,
           ...args.input,
         });
+        const touchesInterval = args.input.intervalMinutes !== undefined;
+        const touchesScheduleGuard = hasScheduleGuardChange(previous, args.input);
+
         await refreshReminderScheduleForUser({
           prisma: context.prisma,
           userId: updated.userId,
           timezone: env.NOTIFICATION_BATCH_TIMEZONE,
-          preserveCurrentCycle: false,
-          preserveValidFutureReminder: false,
+          preserveCurrentCycle: touchesInterval && !touchesScheduleGuard,
+          preserveValidFutureReminder: true,
         });
         return context.prisma.notificationSettings.findUniqueOrThrow({
           where: { userId: updated.userId },
@@ -127,4 +134,56 @@ function createNotificationSettingsService(context: GraphQLContext) {
 
 function getUserId(context: GraphQLContext) {
   return requireUserId(context);
+}
+
+function hasScheduleGuardChange(
+  previous: {
+    pushEnabled: boolean;
+    activeStartTime: string;
+    activeEndTime: string;
+    dayMode: string;
+    typeIncomplete: boolean;
+    typeFocusStart: boolean;
+    systemPermission: string | null;
+  } | null,
+  input: {
+    pushEnabled?: boolean;
+    activeStartTime?: string;
+    activeEndTime?: string;
+    dayMode?: string;
+    typeIncomplete?: boolean;
+    typeFocusStart?: boolean;
+    systemPermission?: string | null;
+  }
+) {
+  if (!previous) {
+    return true;
+  }
+
+  if (input.pushEnabled !== undefined && input.pushEnabled !== previous.pushEnabled) {
+    return true;
+  }
+  if (input.activeStartTime !== undefined && input.activeStartTime.trim() !== previous.activeStartTime) {
+    return true;
+  }
+  if (input.activeEndTime !== undefined && input.activeEndTime.trim() !== previous.activeEndTime) {
+    return true;
+  }
+  if (input.dayMode !== undefined && input.dayMode.trim() !== previous.dayMode) {
+    return true;
+  }
+  if (input.typeIncomplete !== undefined && input.typeIncomplete !== previous.typeIncomplete) {
+    return true;
+  }
+  if (input.typeFocusStart !== undefined && input.typeFocusStart !== previous.typeFocusStart) {
+    return true;
+  }
+  if (input.systemPermission !== undefined) {
+    const normalizedPermission = input.systemPermission ? input.systemPermission.trim() : null;
+    if (normalizedPermission !== previous.systemPermission) {
+      return true;
+    }
+  }
+
+  return false;
 }

@@ -15,6 +15,7 @@ function createService() {
 describe("NotificationSettingsService", () => {
   it("유효한 입력값을 정규화해서 저장한다", async () => {
     const { service, repository } = createService();
+    vi.mocked(repository.findByUserId).mockResolvedValue(null);
 
     await service.updateNotificationSettings({
       userId: "user-1",
@@ -38,6 +39,74 @@ describe("NotificationSettingsService", () => {
       systemPermission: "granted",
       lastFocusReminderSentAt: new Date("2026-04-29T00:00:00.000Z"),
       lastEmptyTodoReminderDate: "2026-04-29",
+    });
+  });
+
+  it("기존 사이클이 남아 있으면 interval 변경을 pendingIntervalMinutes로 유예한다", async () => {
+    const { service, repository } = createService();
+    vi.mocked(repository.findByUserId).mockResolvedValue({
+      id: "settings-1",
+      userId: "user-1",
+      pushEnabled: true,
+      intervalMinutes: 30,
+      pendingIntervalMinutes: null,
+      activeStartTime: "09:00",
+      activeEndTime: "23:00",
+      dayMode: "everyday",
+      typeRestEnd: true,
+      typeIncomplete: true,
+      typeFocusStart: true,
+      tone: "soft",
+      systemPermission: "granted",
+      lastFocusReminderSentAt: null,
+      lastEmptyTodoReminderDate: null,
+      nextReminderAt: new Date(Date.now() + 10 * 60 * 1000),
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    } as never);
+
+    await service.updateNotificationSettings({
+      userId: "user-1",
+      intervalMinutes: 60,
+    });
+
+    expect(repository.updateByUserId).toHaveBeenCalledWith("user-1", {
+      intervalMinutes: 30,
+      pendingIntervalMinutes: 60,
+    });
+  });
+
+  it("기존 사이클이 없으면 interval 변경을 즉시 반영한다", async () => {
+    const { service, repository } = createService();
+    vi.mocked(repository.findByUserId).mockResolvedValue({
+      id: "settings-1",
+      userId: "user-1",
+      pushEnabled: true,
+      intervalMinutes: 30,
+      pendingIntervalMinutes: null,
+      activeStartTime: "09:00",
+      activeEndTime: "23:00",
+      dayMode: "everyday",
+      typeRestEnd: true,
+      typeIncomplete: true,
+      typeFocusStart: true,
+      tone: "soft",
+      systemPermission: "granted",
+      lastFocusReminderSentAt: null,
+      lastEmptyTodoReminderDate: null,
+      nextReminderAt: new Date(Date.now() - 10 * 60 * 1000),
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    } as never);
+
+    await service.updateNotificationSettings({
+      userId: "user-1",
+      intervalMinutes: 60,
+    });
+
+    expect(repository.updateByUserId).toHaveBeenCalledWith("user-1", {
+      intervalMinutes: 60,
+      pendingIntervalMinutes: null,
     });
   });
 
