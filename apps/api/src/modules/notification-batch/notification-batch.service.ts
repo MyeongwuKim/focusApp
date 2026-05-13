@@ -5,14 +5,25 @@ import {
   computeNextReminderAtAfterRun,
   computeNextReminderAtForSettingsRefresh,
 } from "./notification-reminder-schedule.js";
+import {
+  getTodoReminderStatus,
+  getZonedNow,
+  getTodoLabel,
+  isDayAllowed,
+  isWithinWindow,
+  normalizeTone,
+  parseHHmmToMinutes,
+  pickDueScheduledTodos,
+  pickDueTargetFocusTodos,
+  pickFirstOpenTodo,
+  type ReminderTone,
+} from "./notification-batch.utils.js";
 
-type ReminderTone = "soft" | "balanced" | "firm";
 type ReminderKind =
   | "empty_todo_start"
   | "incomplete_todo"
   | "scheduled_todo_start"
   | "focus_target_elapsed";
-type TodoReminderStatus = "not_started" | "in_progress" | "paused" | "done";
 
 type RunNotificationBatchInput = {
   prisma: PrismaClient;
@@ -43,7 +54,6 @@ export type NotificationBatchResult = {
 
 const DEFAULT_TIMEZONE = "Asia/Seoul";
 const NEW_USER_REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
-const WEEKDAY_SET = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
 
 const EMPTY_TODO_COPY: Record<ReminderTone, string> = {
   soft: "오늘 할일이 아직 없어요. 가볍게 하나부터 시작해볼까요?",
@@ -650,192 +660,4 @@ async function updateReminderMarkers(
       ...(input.lastEmptyTodoReminderDate ? { lastEmptyTodoReminderDate: input.lastEmptyTodoReminderDate } : {}),
     },
   });
-}
-
-function isDayAllowed(dayMode: string, weekdayShort: string) {
-  if (dayMode === "everyday") {
-    return true;
-  }
-  return WEEKDAY_SET.has(weekdayShort);
-}
-
-function parseHHmmToMinutes(value: string): number | null {
-  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
-  if (!matched) {
-    return null;
-  }
-  const hours = Number(matched[1]);
-  const minutes = Number(matched[2]);
-  return hours * 60 + minutes;
-}
-
-function isWithinWindow(nowMinutes: number, startMinutes: number, endMinutes: number) {
-  if (startMinutes <= endMinutes) {
-    return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-  }
-  return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
-}
-
-function normalizeTone(value: string): ReminderTone {
-  if (value === "balanced" || value === "firm") {
-    return value;
-  }
-  return "soft";
-}
-
-function getZonedNow(now: Date, timezone: string) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    weekday: "short",
-  });
-
-  const parts = formatter.formatToParts(now);
-  const partValue = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-
-  const year = partValue("year");
-  const month = partValue("month");
-  const day = partValue("day");
-  const hour = Number(partValue("hour"));
-  const minute = Number(partValue("minute"));
-  const weekdayShort = partValue("weekday");
-
-  return {
-    dateKey: `${year}-${month}-${day}`,
-    hour: Number.isFinite(hour) ? hour : 0,
-    minute: Number.isFinite(minute) ? minute : 0,
-    weekdayShort,
-  };
-}
-
-type TodoReminderEntry = {
-  id?: string;
-  done: boolean;
-  startedAt?: Date | null;
-  pausedAt?: Date | null;
-  completedAt?: Date | null;
-  scheduledStartAt?: Date | null;
-  targetFocusMinutes?: number | null;
-  deviationSeconds?: number | null;
-  content?: string | null;
-  titleSnapshot?: string | null;
-  order?: number;
-};
-
-function getTodoReminderStatus(todo: TodoReminderEntry): TodoReminderStatus {
-  if (todo.done || todo.completedAt) {
-    return "done";
-  }
-  if (!todo.startedAt) {
-    return "not_started";
-  }
-  if (todo.pausedAt) {
-    return "paused";
-  }
-  return "in_progress";
-}
-
-function pickFirstOpenTodo(todos: TodoReminderEntry[]) {
-  const sorted = [...todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  return sorted.find((todo) => getTodoReminderStatus(todo) !== "done") ?? null;
-}
-
-function getTodoLabel(todo: TodoReminderEntry) {
-  const snapshot = todo.titleSnapshot?.trim();
-  if (snapshot) {
-    return snapshot;
-  }
-
-  const content = todo.content?.trim();
-  if (content) {
-    return content;
-  }
-
-  return "미완료 작업";
-}
-
-function pickDueScheduledTodos(input: {
-  todos: TodoReminderEntry[];
-  now: Date;
-  scheduleWindowMs: number;
-}) {
-  const sorted = [...input.todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const matches: Array<{ label: string; todoId: string; scheduledAtMs: number }> = [];
-
-  for (const todo of sorted) {
-    if (todo.done || todo.completedAt || !todo.scheduledStartAt) {
-      continue;
-    }
-
-    const scheduledAt = new Date(todo.scheduledStartAt).getTime();
-    if (!Number.isFinite(scheduledAt)) {
-      continue;
-    }
-
-    const diffMs = input.now.getTime() - scheduledAt;
-    if (diffMs < 0 || diffMs > input.scheduleWindowMs) {
-      continue;
-    }
-
-    const label = todo.titleSnapshot?.trim() || todo.content?.trim() || "할일";
-    matches.push({
-      label,
-      todoId: todo.id ?? label,
-      scheduledAtMs: scheduledAt,
-    });
-  }
-
-  return matches;
-}
-
-function pickDueTargetFocusTodos(input: {
-  todos: TodoReminderEntry[];
-  now: Date;
-  scheduleWindowMs: number;
-}) {
-  const sorted = [...input.todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const matches: Array<{ label: string; todoId: string; reachedAtMs: number; targetFocusMinutes: number }> = [];
-
-  for (const todo of sorted) {
-    if (todo.done || todo.completedAt || !todo.startedAt || todo.pausedAt) {
-      continue;
-    }
-
-    const targetFocusMinutes =
-      typeof todo.targetFocusMinutes === "number" && Number.isFinite(todo.targetFocusMinutes)
-        ? Math.floor(todo.targetFocusMinutes)
-        : null;
-    if (!targetFocusMinutes || targetFocusMinutes < 30) {
-      continue;
-    }
-
-    const startedAtMs = new Date(todo.startedAt).getTime();
-    if (!Number.isFinite(startedAtMs)) {
-      continue;
-    }
-
-    const deviationSeconds =
-      typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
-        ? Math.max(Math.floor(todo.deviationSeconds), 0)
-        : 0;
-    const reachedAtMs = startedAtMs + (targetFocusMinutes * 60 + deviationSeconds) * 1000;
-    const diffMs = input.now.getTime() - reachedAtMs;
-    if (diffMs < 0 || diffMs > input.scheduleWindowMs) {
-      continue;
-    }
-
-    matches.push({
-      label: getTodoLabel(todo),
-      todoId: todo.id ?? getTodoLabel(todo),
-      reachedAtMs,
-      targetFocusMinutes,
-    });
-  }
-
-  return matches;
 }

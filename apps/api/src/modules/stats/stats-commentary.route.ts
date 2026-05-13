@@ -49,6 +49,15 @@ function pickCoachVoice(payload: StatsCommentaryRequest) {
   return variants[daySeed % variants.length];
 }
 
+function normalizeCommentaryTone(text: string) {
+  return text
+    .replaceAll("해봅시다", "해볼까요?")
+    .replaceAll("해보시죠", "해볼까요?")
+    .replaceAll("합시다", "해볼까요?")
+    .replaceAll("하세요.", "해요.")
+    .replaceAll("하세요!", "해요!");
+}
+
 function buildPrompt(payload: StatsCommentaryRequest) {
   const frequentIncompleteTaskLine =
     payload.frequentIncompleteTasks.length > 0
@@ -105,6 +114,9 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     "- 비난, 훈계, 과장, 반말, 근거 없는 단정 금지.",
     "- 어색한 메타 표현 금지(예: '추세 판단은 조심해야 합니다').",
     "- 같은 표현 반복 금지(특히 '~어떨까요?' 반복 금지).",
+    "- 문체는 반드시 부드러운 해요체로 작성한다.",
+    "- 종결 어미는 '~해요', '~해볼까요?' 중심으로 사용한다.",
+    "- '~합시다', '~해봅시다', '~하십시오' 같은 지시형 말투는 금지한다.",
     "- 추상 조언 금지. 실행 가능한 행동 1개를 구체적으로 제시한다.",
     "",
     "출력 형식(그대로):",
@@ -205,7 +217,7 @@ async function requestCommentary(payload: StatsCommentaryRequest) {
     (error as Error & { code?: ServiceErrorCode }).code = "OPENAI_EMPTY_RESPONSE";
     throw error;
   }
-  return text;
+  return normalizeCommentaryTone(text);
 }
 
 export async function registerStatsCommentaryRoute(app: FastifyInstance) {

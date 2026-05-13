@@ -1581,7 +1581,7 @@ export default function WebViewScreen() {
             style={styles.weatherLayer}>
             <NativeWeatherLayer />
           </View>
-          <WebView
+	          <WebView
             ref={webViewRef}
             style={styles.webView}
             source={source}
@@ -1667,9 +1667,9 @@ export default function WebViewScreen() {
               setHasInitialWebViewLoaded(true);
               Alert.alert("WebView Error", msg);
             }}
-          />
-        </View>
-      ) : null}
+	          />
+	        </View>
+	      ) : null}
       {showPermissionIntro ? (
         <PermissionIntroModal
           isRequestingNotificationPermission={isRequestingNotificationPermission}
