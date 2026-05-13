@@ -5,6 +5,7 @@ import { NotificationSettingsService } from "./notification-settings.service.js"
 function createService() {
   const repository = {
     upsertDefaults: vi.fn(),
+    findByUserId: vi.fn(),
     updateByUserId: vi.fn(async (_userId: string, input: Record<string, unknown>) => input),
   } as unknown as NotificationSettingsRepository;
   const service = new NotificationSettingsService(repository);
@@ -29,6 +30,7 @@ describe("NotificationSettingsService", () => {
 
     expect(repository.updateByUserId).toHaveBeenCalledWith("user-1", {
       intervalMinutes: 30,
+      pendingIntervalMinutes: null,
       activeStartTime: "09:00",
       activeEndTime: "18:30",
       dayMode: "weekday",

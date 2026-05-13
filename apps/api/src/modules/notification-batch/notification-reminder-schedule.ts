@@ -23,6 +23,7 @@ export async function refreshReminderScheduleForUser(input: {
   now?: Date;
   timezone: string;
   preserveCurrentCycle?: boolean;
+  preserveValidFutureReminder?: boolean;
 }) {
   const now = input.now ?? new Date();
   const settings = await input.prisma.notificationSettings.findUnique({
@@ -54,6 +55,28 @@ export async function refreshReminderScheduleForUser(input: {
     settings.nextReminderAt.getTime() > now.getTime()
   ) {
     return;
+  }
+
+  // 이미 미래 시각으로 예약된 nextReminderAt이 현재 설정(요일/활성 시간/권한)에 유효하면
+  // 설정 저장 시점마다 now+interval로 재앵커링하지 않고 기존 예약을 유지한다.
+  if (
+    (input.preserveValidFutureReminder ?? true) &&
+    settings.nextReminderAt &&
+    settings.nextReminderAt.getTime() > now.getTime()
+  ) {
+    const normalizedExisting = computeNextReminderAtFromSettings({
+      settings,
+      now: settings.nextReminderAt,
+      timezone: input.timezone,
+      immediateIfAllowed: false,
+    });
+
+    if (
+      normalizedExisting &&
+      Math.abs(normalizedExisting.getTime() - settings.nextReminderAt.getTime()) < 1000
+    ) {
+      return;
+    }
   }
 
   const nextReminderAt = computeNextReminderAtForSettingsRefresh({

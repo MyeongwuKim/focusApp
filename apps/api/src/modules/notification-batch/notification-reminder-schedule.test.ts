@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   computeNextReminderAtAfterRun,
   computeNextReminderAtForSettingsRefresh,
+  refreshReminderScheduleForUser,
 } from "./notification-reminder-schedule.js";
 
 function createSettings(overrides: Record<string, unknown> = {}) {
@@ -109,5 +110,36 @@ describe("computeNextReminderAtForSettingsRefresh", () => {
     });
 
     expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:34:00.000Z");
+  });
+});
+
+describe("refreshReminderScheduleForUser", () => {
+  it("preserveValidFutureReminder=false면 기존 미래 예약이 있어도 현재 시점 기준으로 재계산한다", async () => {
+    const findUnique = vi.fn().mockResolvedValue(
+      createSettings({
+        intervalMinutes: 30,
+        nextReminderAt: new Date("2026-05-11T08:20:00.000Z"),
+      })
+    );
+    const update = vi.fn().mockResolvedValue(null);
+    const prisma = {
+      notificationSettings: {
+        findUnique,
+        update,
+      },
+    } as never;
+
+    await refreshReminderScheduleForUser({
+      prisma,
+      userId: "user-1",
+      now: new Date("2026-05-11T08:10:00.000Z"),
+      timezone: "Asia/Seoul",
+      preserveValidFutureReminder: false,
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      data: { nextReminderAt: new Date("2026-05-11T08:40:00.000Z") },
+    });
   });
 });
