@@ -59,7 +59,7 @@ describe("computeNextReminderAtAfterRun", () => {
 });
 
 describe("computeNextReminderAtForSettingsRefresh", () => {
-  it("활성 시간대 변경 시 즉시 시각이 아닌 다음 간격 슬롯으로 예약한다", () => {
+  it("리프레시 시점을 기준으로 다음 간격 시각으로 예약한다", () => {
     const nextReminderAt = computeNextReminderAtForSettingsRefresh({
       settings: createSettings({
         nextReminderAt: null,
@@ -71,7 +71,7 @@ describe("computeNextReminderAtForSettingsRefresh", () => {
     expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:04:00.000Z");
   });
 
-  it("기존 예약 시각이 있으면 기존 예약 기준 주기를 유지한다", () => {
+  it("기존 예약 시각이 있어도 현재 시점을 기준으로 재앵커링한다", () => {
     const nextReminderAt = computeNextReminderAtForSettingsRefresh({
       settings: createSettings({
         nextReminderAt: new Date("2026-05-11T02:00:00.000Z"),
@@ -80,7 +80,7 @@ describe("computeNextReminderAtForSettingsRefresh", () => {
       timezone: "Asia/Seoul",
     });
 
-    expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:00:00.000Z");
+    expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:10:00.000Z");
   });
 
   it("기존 예약 시각이 너무 멀리 있으면 다음 간격 슬롯으로 당겨 예약한다", () => {

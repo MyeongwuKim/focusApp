@@ -61,18 +61,7 @@ export function computeNextReminderAtForSettingsRefresh(input: {
   timezone: string;
 }) {
   const intervalMs = Math.max(input.settings.intervalMinutes, 1) * 60 * 1000;
-  const nowMs = input.now.getTime();
-  const maxPreservedMs = nowMs + intervalMs;
-  const rawPreservedMs = input.settings.nextReminderAt?.getTime();
-  const baseMs =
-    typeof rawPreservedMs === "number" && Number.isFinite(rawPreservedMs)
-      ? Math.min(rawPreservedMs, maxPreservedMs)
-      : nowMs;
-  let nextMs = baseMs;
-
-  while (nextMs <= nowMs) {
-    nextMs += intervalMs;
-  }
+  const nextMs = input.now.getTime() + intervalMs;
 
   return computeNextReminderAtFromSettings({
     settings: input.settings,

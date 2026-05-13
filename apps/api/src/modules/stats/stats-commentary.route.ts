@@ -55,7 +55,9 @@ function normalizeCommentaryTone(text: string) {
     .replaceAll("해보시죠", "해볼까요?")
     .replaceAll("합시다", "해볼까요?")
     .replaceAll("하세요.", "해요.")
-    .replaceAll("하세요!", "해요!");
+    .replaceAll("하세요!", "해요!")
+    .replace(/(\d+)분간/g, "$1분 동안")
+    .replaceAll("작업 중", "작업할 때");
 }
 
 function buildPrompt(payload: StatsCommentaryRequest) {
@@ -125,6 +127,10 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     "3) 미완료패턴: 반복 미완료 작업명(횟수) 1~2개 포함",
     "4) 개선포인트: 원인 가설 + 조정 방법 1개",
     "5) 다음한걸음: 오늘/내일 바로 가능한 10~30분 단위 행동 1개",
+    "- 5) 다음한걸음은 반드시 1~2문장으로 작성한다.",
+    "- 5) 다음한걸음 첫 문장은 '[오늘/내일] [시간] 동안 [행동 1개]를 해요' 구조로 작성한다.",
+    "- 5) 다음한걸음 둘째 문장은 '[가장 작은 단위]부터 시작해볼까요?' 형태만 허용한다.",
+    "- 5) 다음한걸음에서 명사 나열체 금지(예: '테스트 작업 중 착수 문턱 낮추기').",
     "",
     "플래너 품질 기준:",
     "- 완료율/재개횟수/활동일 수를 함께 보고 리듬 문제인지 난이도 문제인지 구분한다.",
