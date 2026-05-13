@@ -33,6 +33,29 @@ export class NotificationSettingsService {
 
   async updateNotificationSettings(input: UpdateNotificationSettingsInput) {
     const normalized = normalizeUpdateInput(input);
+
+    if (normalized.intervalMinutes !== undefined) {
+      const current = await this.repository.findByUserId(input.userId);
+      if (current) {
+        const nowMs = Date.now();
+        const hasFutureCycle = Boolean(
+          current.nextReminderAt && current.nextReminderAt.getTime() > nowMs
+        );
+        const nextInterval = normalized.intervalMinutes;
+
+        if (nextInterval === current.intervalMinutes) {
+          normalized.pendingIntervalMinutes = null;
+        } else if (hasFutureCycle) {
+          normalized.pendingIntervalMinutes = nextInterval;
+          delete normalized.intervalMinutes;
+        } else {
+          normalized.pendingIntervalMinutes = null;
+        }
+      } else {
+        normalized.pendingIntervalMinutes = null;
+      }
+    }
+
     return this.repository.updateByUserId(input.userId, normalized);
   }
 }

@@ -13,6 +13,7 @@ export const notificationSettingsTypeDefs = gql`
     userId: ID!
     pushEnabled: Boolean!
     intervalMinutes: Int!
+    pendingIntervalMinutes: Int
     activeStartTime: String!
     activeEndTime: String!
     dayMode: String!
@@ -98,6 +99,10 @@ export const notificationSettingsResolvers = {
           prisma: context.prisma,
           userId: updated.userId,
           timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+          preserveCurrentCycle:
+            args.input.intervalMinutes !== undefined &&
+            updated.pendingIntervalMinutes !== null &&
+            updated.pendingIntervalMinutes !== undefined,
         });
         return context.prisma.notificationSettings.findUniqueOrThrow({
           where: { userId: updated.userId },

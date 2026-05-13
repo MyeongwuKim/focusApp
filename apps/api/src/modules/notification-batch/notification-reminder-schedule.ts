@@ -7,6 +7,7 @@ type ReminderScheduleSettings = {
   userId: string;
   pushEnabled: boolean;
   intervalMinutes: number;
+  pendingIntervalMinutes?: number | null;
   activeStartTime: string;
   activeEndTime: string;
   dayMode: string;
@@ -21,6 +22,7 @@ export async function refreshReminderScheduleForUser(input: {
   userId: string;
   now?: Date;
   timezone: string;
+  preserveCurrentCycle?: boolean;
 }) {
   const now = input.now ?? new Date();
   const settings = await input.prisma.notificationSettings.findUnique({
@@ -29,6 +31,7 @@ export async function refreshReminderScheduleForUser(input: {
       userId: true,
       pushEnabled: true,
       intervalMinutes: true,
+      pendingIntervalMinutes: true,
       activeStartTime: true,
       activeEndTime: true,
       dayMode: true,
@@ -40,6 +43,16 @@ export async function refreshReminderScheduleForUser(input: {
   });
 
   if (!settings) {
+    return;
+  }
+
+  // 현재 인터벌 사이클(nextReminderAt)이 진행 중이면, interval 변경은 다음 사이클부터 적용한다.
+  if (
+    input.preserveCurrentCycle &&
+    Number.isFinite(settings.pendingIntervalMinutes) &&
+    settings.nextReminderAt &&
+    settings.nextReminderAt.getTime() > now.getTime()
+  ) {
     return;
   }
 
@@ -76,7 +89,8 @@ export function computeNextReminderAtAfterRun(input: {
   now: Date;
   timezone: string;
 }) {
-  const intervalMs = Math.max(input.settings.intervalMinutes, 1) * 60 * 1000;
+  const nextIntervalMinutes = resolveNextIntervalMinutes(input.settings);
+  const intervalMs = Math.max(nextIntervalMinutes, 1) * 60 * 1000;
   const baseMs = input.settings.nextReminderAt?.getTime() ?? input.now.getTime();
   const nowMs = input.now.getTime();
   let nextMs = baseMs;
@@ -87,11 +101,24 @@ export function computeNextReminderAtAfterRun(input: {
   }
 
   return computeNextReminderAtFromSettings({
-    settings: input.settings,
+    settings: {
+      ...input.settings,
+      intervalMinutes: nextIntervalMinutes,
+    },
     now: new Date(nextMs),
     timezone: input.timezone,
     immediateIfAllowed: false,
   });
+}
+
+function resolveNextIntervalMinutes(settings: ReminderScheduleSettings) {
+  if (
+    Number.isFinite(settings.pendingIntervalMinutes) &&
+    (settings.pendingIntervalMinutes as number) > 0
+  ) {
+    return settings.pendingIntervalMinutes as number;
+  }
+  return settings.intervalMinutes;
 }
 
 function computeNextReminderAtFromSettings(input: {

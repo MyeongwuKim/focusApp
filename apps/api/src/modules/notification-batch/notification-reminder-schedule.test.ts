@@ -16,6 +16,7 @@ function createSettings(overrides: Record<string, unknown> = {}) {
     typeFocusStart: true,
     systemPermission: "granted",
     nextReminderAt: null,
+    pendingIntervalMinutes: null,
     ...overrides,
   };
 }
@@ -55,6 +56,20 @@ describe("computeNextReminderAtAfterRun", () => {
     });
 
     expect(nextReminderAt?.toISOString()).toBe("2026-05-12T00:00:00.000Z");
+  });
+
+  it("pending interval이 있으면 다음 사이클부터 pending interval을 적용한다", () => {
+    const nextReminderAt = computeNextReminderAtAfterRun({
+      settings: createSettings({
+        intervalMinutes: 30,
+        pendingIntervalMinutes: 60,
+        nextReminderAt: new Date("2026-05-11T01:30:00.000Z"),
+      }),
+      now: new Date("2026-05-11T01:34:00.000Z"),
+      timezone: "Asia/Seoul",
+    });
+
+    expect(nextReminderAt?.toISOString()).toBe("2026-05-11T02:30:00.000Z");
   });
 });
 

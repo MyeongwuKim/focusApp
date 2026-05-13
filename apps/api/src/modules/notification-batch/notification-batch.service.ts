@@ -155,6 +155,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       userId: settings.userId,
       pushEnabled: settings.pushEnabled,
       intervalMinutes: settings.intervalMinutes,
+      pendingIntervalMinutes: settings.pendingIntervalMinutes,
       activeStartTime: settings.activeStartTime,
       activeEndTime: settings.activeEndTime,
       dayMode: settings.dayMode,
@@ -239,6 +240,14 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       if (dryRun) {
         return;
       }
+
+      const hasPendingInterval =
+        Number.isFinite(reminderScheduleSettings.pendingIntervalMinutes) &&
+        (reminderScheduleSettings.pendingIntervalMinutes as number) > 0;
+      const nextIntervalMinutes = hasPendingInterval
+        ? (reminderScheduleSettings.pendingIntervalMinutes as number)
+        : reminderScheduleSettings.intervalMinutes;
+
       await input.prisma.notificationSettings.update({
         where: { userId: settings.userId },
         data: {
@@ -247,6 +256,8 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
             now,
             timezone,
           }),
+          intervalMinutes: nextIntervalMinutes,
+          pendingIntervalMinutes: hasPendingInterval ? null : settings.pendingIntervalMinutes ?? null,
         },
       });
     };

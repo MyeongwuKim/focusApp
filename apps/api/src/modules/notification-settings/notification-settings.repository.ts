@@ -3,6 +3,7 @@ import type { NotificationSettings, PrismaClient } from "@prisma/client";
 export interface NotificationSettingsUpdateInput {
   pushEnabled?: boolean;
   intervalMinutes?: number;
+  pendingIntervalMinutes?: number | null;
   activeStartTime?: string;
   activeEndTime?: string;
   dayMode?: string;
@@ -17,6 +18,12 @@ export interface NotificationSettingsUpdateInput {
 
 export class NotificationSettingsRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  findByUserId(userId: string): Promise<NotificationSettings | null> {
+    return this.prisma.notificationSettings.findUnique({
+      where: { userId },
+    });
+  }
 
   upsertDefaults(userId: string): Promise<NotificationSettings> {
     return this.prisma.notificationSettings.upsert({

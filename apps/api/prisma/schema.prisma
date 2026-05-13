@@ -107,6 +107,7 @@ model NotificationSettings {
   userId                   String   @unique
   pushEnabled              Boolean  @default(false)
   intervalMinutes          Int      @default(60)
+  pendingIntervalMinutes   Int?
   activeStartTime          String   @default("09:00")
   activeEndTime            String   @default("23:00")
   dayMode                  String   @default("weekday")
