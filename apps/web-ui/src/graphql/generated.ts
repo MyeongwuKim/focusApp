@@ -296,7 +296,6 @@ export type NotificationSettings = {
   id: Scalars['ID']['output'];
   intervalMinutes: Scalars['Int']['output'];
   lastEmptyTodoReminderDate?: Maybe<Scalars['String']['output']>;
-  lastFocusReminderSentAt?: Maybe<Scalars['String']['output']>;
   nextReminderAt?: Maybe<Scalars['String']['output']>;
   pushEnabled: Scalars['Boolean']['output'];
   systemPermission?: Maybe<Scalars['String']['output']>;
@@ -462,7 +461,6 @@ export type UpdateNotificationSettingsInput = {
   dayMode?: InputMaybe<Scalars['String']['input']>;
   intervalMinutes?: InputMaybe<Scalars['Int']['input']>;
   lastEmptyTodoReminderDate?: InputMaybe<Scalars['String']['input']>;
-  lastFocusReminderSentAt?: InputMaybe<Scalars['String']['input']>;
   pushEnabled?: InputMaybe<Scalars['Boolean']['input']>;
   systemPermission?: InputMaybe<Scalars['String']['input']>;
   tone?: InputMaybe<Scalars['String']['input']>;
@@ -631,14 +629,14 @@ export type StopRestSessionMutation = { __typename?: 'Mutation', stopRestSession
 export type NotificationSettingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type NotificationSettingsQuery = { __typename?: 'Query', notificationSettings: { __typename?: 'NotificationSettings', id: string, userId: string, pushEnabled: boolean, intervalMinutes: number, activeStartTime: string, activeEndTime: string, dayMode: string, typeRestEnd: boolean, typeIncomplete: boolean, typeFocusStart: boolean, tone: string, systemPermission?: string | null, lastFocusReminderSentAt?: string | null, lastEmptyTodoReminderDate?: string | null, createdAt: string, updatedAt: string } };
+export type NotificationSettingsQuery = { __typename?: 'Query', notificationSettings: { __typename?: 'NotificationSettings', id: string, userId: string, pushEnabled: boolean, intervalMinutes: number, activeStartTime: string, activeEndTime: string, dayMode: string, typeRestEnd: boolean, typeIncomplete: boolean, typeFocusStart: boolean, tone: string, systemPermission?: string | null, lastEmptyTodoReminderDate?: string | null, createdAt: string, updatedAt: string } };
 
 export type UpdateNotificationSettingsMutationVariables = Exact<{
   input: UpdateNotificationSettingsInput;
 }>;
 
 
-export type UpdateNotificationSettingsMutation = { __typename?: 'Mutation', updateNotificationSettings: { __typename?: 'NotificationSettings', id: string, userId: string, pushEnabled: boolean, intervalMinutes: number, activeStartTime: string, activeEndTime: string, dayMode: string, typeRestEnd: boolean, typeIncomplete: boolean, typeFocusStart: boolean, tone: string, systemPermission?: string | null, lastFocusReminderSentAt?: string | null, lastEmptyTodoReminderDate?: string | null, createdAt: string, updatedAt: string } };
+export type UpdateNotificationSettingsMutation = { __typename?: 'Mutation', updateNotificationSettings: { __typename?: 'NotificationSettings', id: string, userId: string, pushEnabled: boolean, intervalMinutes: number, activeStartTime: string, activeEndTime: string, dayMode: string, typeRestEnd: boolean, typeIncomplete: boolean, typeFocusStart: boolean, tone: string, systemPermission?: string | null, lastEmptyTodoReminderDate?: string | null, createdAt: string, updatedAt: string } };
 
 export type RegisterPushDeviceTokenMutationVariables = Exact<{
   input: RegisterPushDeviceTokenInput;

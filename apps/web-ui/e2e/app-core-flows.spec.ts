@@ -36,7 +36,6 @@ type MockNotificationSettings = {
   typeFocusStart: boolean;
   tone: "soft" | "balanced" | "firm";
   systemPermission: string | null;
-  lastFocusReminderSentAt: string | null;
   lastEmptyTodoReminderDate: string | null;
   createdAt: string;
   updatedAt: string;
@@ -127,7 +126,6 @@ function createGraphqlState(todayKey: string, options?: { initialRestActive?: bo
       typeFocusStart: true,
       tone: "soft",
       systemPermission: "granted",
-      lastFocusReminderSentAt: null,
       lastEmptyTodoReminderDate: null,
       createdAt: nowIso,
       updatedAt: nowIso,

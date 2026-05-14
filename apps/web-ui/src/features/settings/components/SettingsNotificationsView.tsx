@@ -67,6 +67,7 @@ export function SettingsNotificationsView() {
   const [hasHydratedFromServer, setHasHydratedFromServer] = useState(false);
   const [pushTokenRegistrationAttemptSeed, setPushTokenRegistrationAttemptSeed] = useState(0);
   const lastSavedPayloadRef = useRef<string>("");
+  const lastFailedPayloadRef = useRef<string>("");
   const lastRegisteredPushTokenRef = useRef<string>("");
   const hasTriedPushTokenRegistrationRef = useRef(false);
   const pushTokenRetryTimeoutRef = useRef<number | null>(null);
@@ -139,6 +140,7 @@ export function SettingsNotificationsView() {
       tone: normalizedTone,
       systemPermission: settings.systemPermission ?? "unknown",
     });
+    lastFailedPayloadRef.current = "";
     setHasHydratedFromServer(true);
   }, [hasHydratedFromServer, notificationSettingsQuery.data]);
 
@@ -149,6 +151,7 @@ export function SettingsNotificationsView() {
 
     toast.error("알림 설정을 불러오지 못해 기본값으로 표시 중이에요.", "불러오기 실패");
     lastSavedPayloadRef.current = "";
+    lastFailedPayloadRef.current = "";
     setHasHydratedFromServer(true);
   }, [hasHydratedFromServer, notificationSettingsQuery.isError]);
 
@@ -207,13 +210,18 @@ export function SettingsNotificationsView() {
     if (serialized === lastSavedPayloadRef.current) {
       return;
     }
+    if (serialized === lastFailedPayloadRef.current) {
+      return;
+    }
 
     const timeoutId = window.setTimeout(() => {
       void updateNotificationSettingsMutation.mutateAsync(payload).then(
         () => {
           lastSavedPayloadRef.current = serialized;
+          lastFailedPayloadRef.current = "";
         },
         (error: unknown) => {
+          lastFailedPayloadRef.current = serialized;
           const message = getUserFacingErrorMessage(error, "알림 설정 저장 중 오류가 발생했어요.");
           toast.error(message, "저장 실패");
         }

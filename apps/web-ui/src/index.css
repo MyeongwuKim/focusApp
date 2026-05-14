@@ -526,6 +526,12 @@
     pointer-events: none;
   }
 
+  .memo-editor .tiptap,
+  .memo-editor .ProseMirror {
+    height: 100%;
+    min-height: 100%;
+  }
+
   .memo-editor .ProseMirror h1,
   .memo-editor .ProseMirror h2,
   .memo-editor .ProseMirror h3,

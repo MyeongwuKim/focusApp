@@ -19,7 +19,6 @@ export type NotificationSettingsRecord = {
   typeFocusStart: boolean;
   tone: NotificationSettingsTone;
   systemPermission: string | null;
-  lastFocusReminderSentAt: string | null;
   lastEmptyTodoReminderDate: string | null;
   createdAt: string;
   updatedAt: string;
@@ -36,7 +35,6 @@ export type UpdateNotificationSettingsInput = {
   typeFocusStart?: boolean;
   tone?: NotificationSettingsTone;
   systemPermission?: string | null;
-  lastFocusReminderSentAt?: string | null;
   lastEmptyTodoReminderDate?: string | null;
 };
 
@@ -55,7 +53,6 @@ const NOTIFICATION_SETTINGS_QUERY = /* GraphQL */ `
       typeFocusStart
       tone
       systemPermission
-      lastFocusReminderSentAt
       lastEmptyTodoReminderDate
       createdAt
       updatedAt
@@ -78,7 +75,6 @@ const UPDATE_NOTIFICATION_SETTINGS_MUTATION = /* GraphQL */ `
       typeFocusStart
       tone
       systemPermission
-      lastFocusReminderSentAt
       lastEmptyTodoReminderDate
       createdAt
       updatedAt

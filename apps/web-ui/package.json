@@ -7,6 +7,8 @@
     "dev": "vite",
     "hybrid": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -45,6 +47,8 @@
     "@graphql-codegen/typescript": "^4.1.6",
     "@graphql-codegen/typescript-operations": "^4.6.1",
     "@playwright/test": "^1.59.1",
+    "@storybook/addon-essentials": "8.6.14",
+    "@storybook/react-vite": "8.6.14",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -52,7 +56,7 @@
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "5.0.4",
     "@vitest/coverage-v8": "^4.1.5",
     "daisyui": "^5.5.19",
     "eslint": "^9.39.4",
@@ -64,7 +68,8 @@
     "tailwindcss": "^4.2.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",
-    "vite": "^8.0.1",
-    "vitest": "^4.1.5"
+    "vite": "6.3.5",
+    "vitest": "^4.1.5",
+    "storybook": "8.6.14"
   }
 }

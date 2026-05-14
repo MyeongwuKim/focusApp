@@ -7,6 +7,7 @@ import { RangeSlider } from "../../../components/ui/RangeSlider";
 import {
   getLocationPermissionStatus,
   openAppPermissionSettings,
+  requestNativeWeatherSnapshot,
   requestLocationPermission,
 } from "../../../utils/nativeBridge";
 
@@ -17,6 +18,7 @@ export function SettingsWeatherView() {
   const setWeatherEnabled = useWeatherStore((state) => state.setWeatherEnabled);
   const setWeatherMood = useWeatherStore((state) => state.setWeatherMood);
   const setWeatherParticleClarity = useWeatherStore((state) => state.setWeatherParticleClarity);
+  const setWeather = useWeatherStore((state) => state.setWeather);
   const [isLoading, setIsLoading] = useState(true);
   const [isLocationOn, setIsLocationOn] = useState(false);
 
@@ -85,10 +87,21 @@ export function SettingsWeatherView() {
           }
         }
         setIsLocationOn(refreshed.granted || optimisticGranted);
+        if (refreshed.granted || optimisticGranted) {
+          requestNativeWeatherSnapshot();
+        } else {
+          setWeather(null);
+        }
         setIsLoading(false);
       }
     })();
   };
+
+  useEffect(() => {
+    if (!isLocationOn) {
+      setWeather(null);
+    }
+  }, [isLocationOn, setWeather]);
 
   const isWeatherOptionsDisabled = !isLocationOn;
   const disabledClassName = isWeatherOptionsDisabled ? "opacity-45 pointer-events-none select-none" : "";

@@ -101,7 +101,7 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
       <div className="space-y-5">
         <StatsPeriodFilter />
         <MetricCardGrid
-          className="grid grid-cols-1 gap-2 md:grid-cols-3 md:gap-3"
+          className="grid grid-cols-3 gap-2 md:gap-3"
           items={[
             { label: "오늘 한 일", value: `${todayKpi.doneCount}개` },
             { label: "집중 분", value: `${todayKpi.focusMinutes}분` },

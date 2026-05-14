@@ -21,7 +21,9 @@ import {
   getNotificationPermissionStatus,
 } from "./utils/notifications";
 import {
+  getLocationPermissionStatus,
   getNativeExpoPushToken,
+  requestNativeWeatherSnapshot,
   syncNativeAuthState,
   syncNativeWeatherSettings,
 } from "./utils/nativeBridge";
@@ -564,6 +566,44 @@ function App() {
     if (!weatherEnabled) {
       useWeatherStore.getState().setWeather(null);
     }
+  }, [weatherEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncWeatherVisibilityByLocationPermission = async () => {
+      if (!weatherEnabled) {
+        useWeatherStore.getState().setWeather(null);
+        return;
+      }
+
+      try {
+        const status = await getLocationPermissionStatus();
+        if (cancelled) {
+          return;
+        }
+
+        if (!status.granted) {
+          useWeatherStore.getState().setWeather(null);
+          return;
+        }
+
+        requestNativeWeatherSnapshot();
+      } catch (error) {
+        console.warn("Failed to sync weather visibility with location permission:", error);
+      }
+    };
+
+    void syncWeatherVisibilityByLocationPermission();
+    const handleFocus = () => {
+      void syncWeatherVisibilityByLocationPermission();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [weatherEnabled]);
 
   useEffect(() => {

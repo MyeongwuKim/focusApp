@@ -81,6 +81,10 @@ export function syncNativeAuthState(payload: NativeAuthStateSyncPayload) {
   return postNativeBridgeMessage("REST_AUTH_STATE_SYNC", { payload });
 }
 
+export function requestNativeWeatherSnapshot() {
+  return postNativeBridgeMessage("REST_WEATHER_SNAPSHOT_REQUEST");
+}
+
 function getBrowserLocationPermissionStatus(): NativeLocationPermissionStatus {
   if (typeof window === "undefined" || typeof navigator === "undefined" || !navigator.geolocation) {
     return {
