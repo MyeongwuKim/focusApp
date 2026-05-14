@@ -90,38 +90,9 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
   const timezone = input.timezone ?? DEFAULT_TIMEZONE;
   const dryRun = input.dryRun ?? false;
   const force = input.force ?? false;
-  const activeSessionUserIds = Array.from(
-    new Set(
-      (
-        await input.prisma.session.findMany({
-          where: {
-            expiresAt: { gt: now },
-          },
-          select: {
-            userId: true,
-          },
-        })
-      ).map((session) => session.userId)
-    )
-  );
-
-  if (activeSessionUserIds.length === 0) {
-    return {
-      checkedUsers: 0,
-      eligibleUsers: 0,
-      sentCount: 0,
-      attemptedTokenCount: 0,
-      dryRun,
-      force,
-      deliveries: [],
-    };
-  }
 
   const settingsList = await input.prisma.notificationSettings.findMany({
     where: {
-      userId: {
-        in: activeSessionUserIds,
-      },
       pushEnabled: true,
       systemPermission: "granted",
       AND: [{ OR: [{ typeFocusStart: true }, { typeIncomplete: true }] }],
@@ -447,17 +418,11 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
 
     if (todoCount === 0) {
       if (!settings.typeFocusStart) {
-        if (!dryRun && acquiredLockToken) {
-          await releaseReminderLock(input.prisma, settings.userId, acquiredLockToken);
-          acquiredLockToken = null;
-        }
+        await scheduleNextReminder();
         continue;
       }
       if (!force && settings.lastEmptyTodoReminderDate === nowInTimezone.dateKey) {
-        if (!dryRun && acquiredLockToken) {
-          await releaseReminderLock(input.prisma, settings.userId, acquiredLockToken);
-          acquiredLockToken = null;
-        }
+        await scheduleNextReminder();
         continue;
       }
 
@@ -697,19 +662,6 @@ async function updateLastEmptyTodoReminderDate(prisma: PrismaClient, userId: str
     where: { userId },
     data: {
       lastEmptyTodoReminderDate: dateKey,
-    },
-  });
-}
-
-async function releaseReminderLock(prisma: PrismaClient, userId: string, lockToken: string) {
-  await prisma.notificationSettings.updateMany({
-    where: {
-      userId,
-      reminderLockToken: lockToken,
-    },
-    data: {
-      reminderLockToken: null,
-      reminderLockUntil: null,
     },
   });
 }
