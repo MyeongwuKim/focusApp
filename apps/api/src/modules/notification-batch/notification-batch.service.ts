@@ -193,13 +193,17 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       const lockToken = createReminderLockToken(settings.userId, now);
       const lockUntil = new Date(now.getTime() + REMINDER_LOCK_TTL_MS);
       const claimed = await input.prisma.notificationSettings.updateMany({
-        where: {
-          userId: settings.userId,
-          pushEnabled: true,
-          systemPermission: "granted",
-          nextReminderAt: settings.nextReminderAt ?? null,
-          OR: [{ reminderLockUntil: null }, { reminderLockUntil: { lt: now } }],
-        },
+          where: {
+            userId: settings.userId,
+            pushEnabled: true,
+            systemPermission: "granted",
+            nextReminderAt: settings.nextReminderAt ?? null,
+            OR: [
+              { reminderLockUntil: null },
+              { reminderLockUntil: { isSet: false } },
+              { reminderLockUntil: { lt: now } },
+            ],
+          },
         data: {
           reminderLockToken: lockToken,
           reminderLockUntil: lockUntil,
