@@ -6,6 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "web:dev": "pnpm -C apps/web-ui dev",
+    "web:storybook": "pnpm -C apps/web-ui storybook",
+    "web:storybook:build": "pnpm -C apps/web-ui storybook:build",
     "web:build": "pnpm -C apps/web-ui build",
     "web:type": "pnpm -C apps/web-ui graphql:codegen",
     "api:dev": "pnpm -C apps/api dev",
