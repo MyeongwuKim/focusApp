@@ -13,7 +13,6 @@ function createSettings(overrides: Record<string, unknown> = {}) {
     activeEndTime: "23:59",
     intervalMinutes: 30,
     tone: "balanced",
-    lastFocusReminderSentAt: null,
     lastEmptyTodoReminderDate: null,
     ...overrides,
   };
@@ -55,6 +54,7 @@ function createPrismaMock(input: {
     notificationSettings: {
       findMany: vi.fn(async () => settings),
       update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 1 })),
     },
     dailyLog: {
       findUnique: vi.fn(async () => ({
@@ -262,12 +262,12 @@ describe("runNotificationBatch", () => {
     expect(result.deliveries).toHaveLength(0);
   });
 
-  it("마지막 발송 후 설정 간격이 지나지 않았으면 일반 리마인드를 보내지 않는다", async () => {
+  it("nextReminderAt 도달 시에는 마지막 발송 시각과 무관하게 일반 리마인드를 보낸다", async () => {
     const prisma = createPrismaMock({
       settings: [
         createSettings({
           intervalMinutes: 30,
-          lastFocusReminderSentAt: new Date("2026-05-04T07:40:00.000Z"),
+          nextReminderAt: new Date("2026-05-04T08:00:00.000Z"),
         }),
       ],
       todos: [createTodo({ content: "A", order: 0 })],
@@ -281,8 +281,8 @@ describe("runNotificationBatch", () => {
       timezone: "Asia/Seoul",
     });
 
-    expect(result.sentCount).toBe(0);
-    expect(result.deliveries).toHaveLength(0);
+    expect(result.sentCount).toBe(1);
+    expect(result.deliveries).toHaveLength(1);
   });
 
   it("다음 알림 시각이 과하게 미래로 밀리면 배치 실행 중 다음 간격 슬롯으로 자동 보정한다", async () => {

@@ -12,7 +12,6 @@ export interface NotificationSettingsUpdateInput {
   typeFocusStart?: boolean;
   tone?: string;
   systemPermission?: string | null;
-  lastFocusReminderSentAt?: Date | null;
   lastEmptyTodoReminderDate?: string | null;
 }
 

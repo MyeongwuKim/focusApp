@@ -15,7 +15,6 @@ interface UpdateNotificationSettingsInput {
   typeFocusStart?: boolean;
   tone?: string;
   systemPermission?: string | null;
-  lastFocusReminderSentAt?: string | null;
   lastEmptyTodoReminderDate?: string | null;
 }
 
@@ -113,18 +112,6 @@ function normalizeUpdateInput(input: UpdateNotificationSettingsInput): Notificat
 
   if (input.systemPermission !== undefined) {
     next.systemPermission = input.systemPermission ? input.systemPermission.trim() : null;
-  }
-
-  if (input.lastFocusReminderSentAt !== undefined) {
-    if (input.lastFocusReminderSentAt === null) {
-      next.lastFocusReminderSentAt = null;
-    } else {
-      const parsed = new Date(input.lastFocusReminderSentAt);
-      if (Number.isNaN(parsed.getTime())) {
-        throw new Error("NOTIFICATION_LAST_FOCUS_SENT_AT_INVALID");
-      }
-      next.lastFocusReminderSentAt = parsed;
-    }
   }
 
   if (input.lastEmptyTodoReminderDate !== undefined) {

@@ -22,7 +22,6 @@ export const notificationSettingsTypeDefs = gql`
     typeFocusStart: Boolean!
     tone: String!
     systemPermission: String
-    lastFocusReminderSentAt: String
     lastEmptyTodoReminderDate: String
     nextReminderAt: String
     createdAt: String!
@@ -40,7 +39,6 @@ export const notificationSettingsTypeDefs = gql`
     typeFocusStart: Boolean
     tone: String
     systemPermission: String
-    lastFocusReminderSentAt: String
     lastEmptyTodoReminderDate: String
   }
 
@@ -58,7 +56,6 @@ const notificationSettingsErrorMapping = {
   NOTIFICATION_ACTIVE_TIME_INVALID: { message: "활성화 시간은 HH:mm 형식으로 입력해 주세요." },
   NOTIFICATION_DAY_MODE_INVALID: { message: "요일 선택 값이 올바르지 않아요." },
   NOTIFICATION_TONE_INVALID: { message: "알림 톤 값이 올바르지 않아요." },
-  NOTIFICATION_LAST_FOCUS_SENT_AT_INVALID: { message: "마지막 발송 시간 값이 올바르지 않아요." },
 };
 
 export const notificationSettingsResolvers = {
@@ -83,7 +80,6 @@ export const notificationSettingsResolvers = {
           typeFocusStart?: boolean;
           tone?: string;
           systemPermission?: string | null;
-          lastFocusReminderSentAt?: string | null;
           lastEmptyTodoReminderDate?: string | null;
         };
       },
@@ -120,8 +116,6 @@ export const notificationSettingsResolvers = {
   NotificationSettings: {
     createdAt: (parent: { createdAt: Date }) => parent.createdAt.toISOString(),
     updatedAt: (parent: { updatedAt: Date }) => parent.updatedAt.toISOString(),
-    lastFocusReminderSentAt: (parent: { lastFocusReminderSentAt: Date | null }) =>
-      parent.lastFocusReminderSentAt ? parent.lastFocusReminderSentAt.toISOString() : null,
     nextReminderAt: (parent: { nextReminderAt: Date | null }) =>
       parent.nextReminderAt ? parent.nextReminderAt.toISOString() : null,
   },

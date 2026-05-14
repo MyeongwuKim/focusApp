@@ -83,6 +83,7 @@ const sentScheduledReminderMap = new Map<string, number>();
 const SCHEDULED_REMINDER_DEDUPE_TTL_MS = 10 * 60 * 1000;
 const sentTargetFocusElapsedReminderMap = new Map<string, number>();
 const TARGET_FOCUS_ELAPSED_DEDUPE_TTL_MS = 45 * 60 * 1000;
+const REMINDER_LOCK_TTL_MS = 90 * 1000;
 
 export async function runNotificationBatch(input: RunNotificationBatchInput): Promise<NotificationBatchResult> {
   const now = input.now ?? new Date();
@@ -151,6 +152,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
   let attemptedTokenCount = 0;
 
   for (const settings of settingsList) {
+    let acquiredLockToken: string | null = null;
     const reminderScheduleSettings = {
       userId: settings.userId,
       pushEnabled: settings.pushEnabled,
@@ -216,6 +218,29 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
 
     }
 
+    if (!force && !dryRun) {
+      const lockToken = createReminderLockToken(settings.userId, now);
+      const lockUntil = new Date(now.getTime() + REMINDER_LOCK_TTL_MS);
+      const claimed = await input.prisma.notificationSettings.updateMany({
+        where: {
+          userId: settings.userId,
+          pushEnabled: true,
+          systemPermission: "granted",
+          nextReminderAt: settings.nextReminderAt ?? null,
+          OR: [{ reminderLockUntil: null }, { reminderLockUntil: { lt: now } }],
+        },
+        data: {
+          reminderLockToken: lockToken,
+          reminderLockUntil: lockUntil,
+        },
+      });
+
+      if (claimed.count === 0) {
+        continue;
+      }
+      acquiredLockToken = lockToken;
+    }
+
     eligibleUsers += 1;
 
     const dailyLog = await input.prisma.dailyLog.findUnique({
@@ -248,17 +273,33 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         ? (reminderScheduleSettings.pendingIntervalMinutes as number)
         : reminderScheduleSettings.intervalMinutes;
 
+      const nextReminderAt = computeNextReminderAtAfterRun({
+        settings: reminderScheduleSettings,
+        now,
+        timezone,
+      });
+      const updateData = {
+        nextReminderAt,
+        intervalMinutes: nextIntervalMinutes,
+        pendingIntervalMinutes: hasPendingInterval ? null : settings.pendingIntervalMinutes ?? null,
+        ...(acquiredLockToken ? { reminderLockToken: null, reminderLockUntil: null } : {}),
+      };
+
+      if (acquiredLockToken) {
+        await input.prisma.notificationSettings.updateMany({
+          where: {
+            userId: settings.userId,
+            reminderLockToken: acquiredLockToken,
+          },
+          data: updateData,
+        });
+        acquiredLockToken = null;
+        return;
+      }
+
       await input.prisma.notificationSettings.update({
         where: { userId: settings.userId },
-        data: {
-          nextReminderAt: computeNextReminderAtAfterRun({
-            settings: reminderScheduleSettings,
-            now,
-            timezone,
-          }),
-          intervalMinutes: nextIntervalMinutes,
-          pendingIntervalMinutes: hasPendingInterval ? null : settings.pendingIntervalMinutes ?? null,
-        },
+        data: updateData,
       });
     };
     const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
@@ -404,21 +445,19 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       continue;
     }
 
-    const isWithinReminderCooldown =
-      !force &&
-      settings.lastFocusReminderSentAt !== null &&
-      now.getTime() - settings.lastFocusReminderSentAt.getTime() < reminderIntervalMs;
-
-    if (isWithinReminderCooldown) {
-      await scheduleNextReminder();
-      continue;
-    }
-
     if (todoCount === 0) {
       if (!settings.typeFocusStart) {
+        if (!dryRun && acquiredLockToken) {
+          await releaseReminderLock(input.prisma, settings.userId, acquiredLockToken);
+          acquiredLockToken = null;
+        }
         continue;
       }
       if (!force && settings.lastEmptyTodoReminderDate === nowInTimezone.dateKey) {
+        if (!dryRun && acquiredLockToken) {
+          await releaseReminderLock(input.prisma, settings.userId, acquiredLockToken);
+          acquiredLockToken = null;
+        }
         continue;
       }
 
@@ -451,10 +490,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
             })),
             prisma: input.prisma,
           });
-          await updateReminderMarkers(input.prisma, settings.userId, {
-            lastFocusReminderSentAt: now,
-            lastEmptyTodoReminderDate: nowInTimezone.dateKey,
-          });
+          await updateLastEmptyTodoReminderDate(input.prisma, settings.userId, nowInTimezone.dateKey);
         }
       }
       await scheduleNextReminder();
@@ -498,9 +534,6 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
               },
             })),
             prisma: input.prisma,
-          });
-          await updateReminderMarkers(input.prisma, settings.userId, {
-            lastFocusReminderSentAt: now,
           });
         }
       }
@@ -659,16 +692,28 @@ async function sendExpoPushMessages(input: { entries: ExpoPushEntry[]; prisma: P
   }
 }
 
-async function updateReminderMarkers(
-  prisma: PrismaClient,
-  userId: string,
-  input: { lastFocusReminderSentAt: Date; lastEmptyTodoReminderDate?: string }
-) {
+async function updateLastEmptyTodoReminderDate(prisma: PrismaClient, userId: string, dateKey: string) {
   await prisma.notificationSettings.update({
     where: { userId },
     data: {
-      lastFocusReminderSentAt: input.lastFocusReminderSentAt,
-      ...(input.lastEmptyTodoReminderDate ? { lastEmptyTodoReminderDate: input.lastEmptyTodoReminderDate } : {}),
+      lastEmptyTodoReminderDate: dateKey,
     },
   });
+}
+
+async function releaseReminderLock(prisma: PrismaClient, userId: string, lockToken: string) {
+  await prisma.notificationSettings.updateMany({
+    where: {
+      userId,
+      reminderLockToken: lockToken,
+    },
+    data: {
+      reminderLockToken: null,
+      reminderLockUntil: null,
+    },
+  });
+}
+
+function createReminderLockToken(userId: string, now: Date) {
+  return `${userId}:${now.getTime()}:${Math.random().toString(36).slice(2, 10)}`;
 }

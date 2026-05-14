@@ -25,7 +25,6 @@ describe("NotificationSettingsService", () => {
       dayMode: " weekday ",
       tone: " balanced ",
       systemPermission: " granted ",
-      lastFocusReminderSentAt: "2026-04-29T00:00:00.000Z",
       lastEmptyTodoReminderDate: " 2026-04-29 ",
     });
 
@@ -37,7 +36,6 @@ describe("NotificationSettingsService", () => {
       dayMode: "weekday",
       tone: "balanced",
       systemPermission: "granted",
-      lastFocusReminderSentAt: new Date("2026-04-29T00:00:00.000Z"),
       lastEmptyTodoReminderDate: "2026-04-29",
     });
   });
@@ -58,7 +56,6 @@ describe("NotificationSettingsService", () => {
       typeFocusStart: true,
       tone: "soft",
       systemPermission: "granted",
-      lastFocusReminderSentAt: null,
       lastEmptyTodoReminderDate: null,
       nextReminderAt: new Date(Date.now() + 10 * 60 * 1000),
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -92,7 +89,6 @@ describe("NotificationSettingsService", () => {
       typeFocusStart: true,
       tone: "soft",
       systemPermission: "granted",
-      lastFocusReminderSentAt: null,
       lastEmptyTodoReminderDate: null,
       nextReminderAt: new Date(Date.now() - 10 * 60 * 1000),
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
