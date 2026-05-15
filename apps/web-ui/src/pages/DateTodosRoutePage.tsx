@@ -41,6 +41,7 @@ export function DateTodosRoutePage({
   const resolvedDateKey = dateKey ?? formatDateKey(new Date());
   const restFinishedRequested = searchParams.get("restFinished") === "1";
   const focusTargetElapsedRequested = searchParams.get("focusTargetElapsed") === "1";
+  const startTodoPromptRequested = searchParams.get("startTodoPrompt") === "1";
   const focusTargetTodoId = searchParams.get("todoId");
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
   const isRoutineImportRoute = normalizedPathname === "/date-tasks/routines";
@@ -57,10 +58,23 @@ export function DateTodosRoutePage({
       query: {
         date: resolvedDateKey,
         ...(restFinishedRequested ? { restFinished: "1" } : {}),
+        ...(focusTargetElapsedRequested ? { focusTargetElapsed: "1" } : {}),
+        ...(startTodoPromptRequested ? { startTodoPrompt: "1" } : {}),
+        ...(focusTargetTodoId ? { todoId: focusTargetTodoId } : {}),
       },
       replace: true,
     });
-  }, [dateKey, goPage, isActive, pathname, resolvedDateKey, restFinishedRequested]);
+  }, [
+    dateKey,
+    focusTargetElapsedRequested,
+    focusTargetTodoId,
+    goPage,
+    isActive,
+    pathname,
+    resolvedDateKey,
+    restFinishedRequested,
+    startTodoPromptRequested,
+  ]);
 
   const closeSubRoute = () => {
     const historyState = window.history.state as { idx?: number } | null;
@@ -152,6 +166,7 @@ export function DateTodosRoutePage({
       dateKey={resolvedDateKey}
       restFinishedRequested={restFinishedRequested}
       focusTargetElapsedRequested={focusTargetElapsedRequested}
+      startTodoPromptRequested={startTodoPromptRequested}
       focusTargetTodoId={focusTargetTodoId}
       onOpenMemo={openMemoRoute}
       onOpenTaskPicker={openTaskPickerRoute}

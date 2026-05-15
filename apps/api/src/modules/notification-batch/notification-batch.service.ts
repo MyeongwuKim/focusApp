@@ -14,7 +14,6 @@ import {
   normalizeTone,
   parseHHmmToMinutes,
   pickDueScheduledTodos,
-  pickDueTargetFocusTodos,
   pickFirstOpenTodo,
   type ReminderTone,
 } from "./notification-batch.utils.js";
@@ -22,8 +21,7 @@ import {
 type ReminderKind =
   | "empty_todo_start"
   | "incomplete_todo"
-  | "scheduled_todo_start"
-  | "focus_target_elapsed";
+  | "scheduled_todo_start";
 
 type RunNotificationBatchInput = {
   prisma: PrismaClient;
@@ -73,16 +71,8 @@ const SCHEDULED_START_COPY_BY_TONE: Record<ReminderTone, string> = {
   firm: "설정해둔 시작 시간이 됐습니다. 지금 바로 시작해 주세요.",
 };
 
-const TARGET_FOCUS_ELAPSED_COPY_BY_TONE: Record<ReminderTone, string> = {
-  soft: "설정한 집중 시간이 끝났어요. 더 이어갈지, 완료할지 정리해볼까요?",
-  balanced: "설정한 집중 시간이 끝났어요. 이어가기 또는 완료를 선택해 주세요.",
-  firm: "설정한 집중 시간이 지났습니다. 이어가거나 완료 처리해 주세요.",
-};
-
 const sentScheduledReminderMap = new Map<string, number>();
 const SCHEDULED_REMINDER_DEDUPE_TTL_MS = 10 * 60 * 1000;
-const sentTargetFocusElapsedReminderMap = new Map<string, number>();
-const TARGET_FOCUS_ELAPSED_DEDUPE_TTL_MS = 45 * 60 * 1000;
 const REMINDER_LOCK_TTL_MS = 90 * 1000;
 
 export async function runNotificationBatch(input: RunNotificationBatchInput): Promise<NotificationBatchResult> {
@@ -233,7 +223,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
 
     const todos = dailyLog?.todos ?? [];
     const todoCount = dailyLog?.todoCount ?? todos.length;
-    const firstOpenTodo = pickFirstOpenTodo(todos);
+    const firstOpenTodo = pickFirstOpenTodo(todos, nowInTimezone.dateKey);
     const firstOpenTodoStatus = firstOpenTodo ? getTodoReminderStatus(firstOpenTodo) : null;
     const tone = normalizeTone(settings.tone);
     const scheduleNextReminder = async () => {
@@ -278,81 +268,11 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       });
     };
     const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
-    const dueTargetFocusTodos = pickDueTargetFocusTodos({
-      todos,
-      now,
-      scheduleWindowMs,
-    });
-
-    if (dueTargetFocusTodos.length > 0 && settings.typeFocusStart) {
-      const dedupeTargets = dueTargetFocusTodos.filter((target) => {
-        const reachedBucket = Math.floor(target.reachedAtMs / 60000);
-        const dedupeKey = `${settings.userId}:${target.todoId}:${target.targetFocusMinutes}:${reachedBucket}`;
-        const sentAt = sentTargetFocusElapsedReminderMap.get(dedupeKey);
-        return !(sentAt && now.getTime() - sentAt <= TARGET_FOCUS_ELAPSED_DEDUPE_TTL_MS);
-      });
-
-      if (dedupeTargets.length === 0) {
-        await scheduleNextReminder();
-        continue;
-      }
-
-      const topTarget = dedupeTargets[0];
-      const targetLabel = topTarget.label;
-      const targetFocusMinutes = topTarget.targetFocusMinutes;
-      const targetCountSuffix =
-        dedupeTargets.length > 1 ? ` 외 ${dedupeTargets.length - 1}개 할일` : "";
-      const targetBodyBase = `${targetLabel}${targetCountSuffix}, ${targetFocusMinutes}분 목표`;
-      const targetBody = `${targetBodyBase}. ${TARGET_FOCUS_ELAPSED_COPY_BY_TONE[tone]}`;
-      const targetPath = `/calendar?sheet=1&date=${nowInTimezone.dateKey}&focusTargetElapsed=1&todoId=${encodeURIComponent(topTarget.todoId)}`;
-
-      deliveries.push({
-        userId: settings.userId,
-        kind: "focus_target_elapsed",
-        title: "목표 집중시간 도달",
-        body: targetBody,
-        tone,
-      });
-
-      if (!dryRun) {
-        const tokens = await input.prisma.pushDeviceToken.findMany({
-          where: { userId: settings.userId, isActive: true },
-          select: { pushToken: true },
-        });
-        attemptedTokenCount += tokens.length;
-        if (tokens.length > 0) {
-          await sendExpoPushMessages({
-            entries: tokens.map((token) => ({
-              pushToken: token.pushToken,
-              title: "목표 집중시간 도달",
-              body: targetBody,
-              data: {
-                kind: "focus_target_elapsed",
-                taskLabel: targetLabel,
-                targetFocusMinutes,
-                todoId: topTarget.todoId,
-                dateKey: nowInTimezone.dateKey,
-                targetPath,
-              },
-            })),
-            prisma: input.prisma,
-          });
-          dedupeTargets.forEach((target) => {
-            const reachedBucket = Math.floor(target.reachedAtMs / 60000);
-            const dedupeKey = `${settings.userId}:${target.todoId}:${target.targetFocusMinutes}:${reachedBucket}`;
-            sentTargetFocusElapsedReminderMap.set(dedupeKey, now.getTime());
-          });
-        }
-      }
-
-      await scheduleNextReminder();
-      continue;
-    }
-
     const scheduledTargets = pickDueScheduledTodos({
       todos,
       now,
       scheduleWindowMs,
+      dateKey: nowInTimezone.dateKey,
     });
 
     if (scheduledTargets.length > 0 && settings.typeFocusStart) {
@@ -386,7 +306,10 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       });
 
       if (!dryRun) {
-        const targetPath = `/date-tasks?date=${nowInTimezone.dateKey}`;
+        const topScheduledTodoId = dedupeTargets[0]?.todoId;
+        const targetPath = topScheduledTodoId
+          ? `/date-tasks?date=${nowInTimezone.dateKey}&startTodoPrompt=1&todoId=${encodeURIComponent(topScheduledTodoId)}`
+          : `/date-tasks?date=${nowInTimezone.dateKey}`;
         const tokens = await input.prisma.pushDeviceToken.findMany({
           where: { userId: settings.userId, isActive: true },
           select: { pushToken: true },
@@ -402,6 +325,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
                 kind: "scheduled_todo_start",
                 taskLabel: scheduledLabel,
                 taskCount: dedupeTargets.length,
+                todoId: topScheduledTodoId ?? null,
                 dateKey: nowInTimezone.dateKey,
                 targetPath,
               },
@@ -483,7 +407,10 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       });
 
       if (!dryRun) {
-        const targetPath = `/date-tasks?date=${nowInTimezone.dateKey}`;
+        const todoIdForPrompt = firstOpenTodo.id ?? null;
+        const targetPath = todoIdForPrompt
+          ? `/date-tasks?date=${nowInTimezone.dateKey}&startTodoPrompt=1&todoId=${encodeURIComponent(todoIdForPrompt)}`
+          : `/date-tasks?date=${nowInTimezone.dateKey}`;
         const tokens = await input.prisma.pushDeviceToken.findMany({
           where: { userId: settings.userId, isActive: true },
           select: { pushToken: true },
@@ -498,6 +425,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
               data: {
                 kind: "incomplete_todo",
                 taskLabel: incompleteLabel,
+                todoId: todoIdForPrompt,
                 dateKey: nowInTimezone.dateKey,
                 targetPath,
               },

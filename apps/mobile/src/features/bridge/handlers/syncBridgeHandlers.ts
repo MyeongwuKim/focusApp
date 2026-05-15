@@ -13,6 +13,13 @@ export type TodoSessionSyncPayload = {
   syncedAtMs?: number;
 };
 
+export type TodoViewSyncPayload = {
+  isViewingTodayTodoSurface?: boolean;
+  source?: "date-tasks" | "calendar-sheet" | "none";
+  dateKey?: string | null;
+  routePath?: string;
+};
+
 type WeatherSettingsRawPayload = {
   enabled?: unknown;
   mood?: unknown;
@@ -21,7 +28,9 @@ type WeatherSettingsRawPayload = {
 
 export type SyncBridgeHandlerDeps = {
   handleTodoSessionSync: (payload: TodoSessionSyncPayload) => Promise<void>;
+  handleTodoViewSync: (payload: TodoViewSyncPayload) => void;
   applyWeatherSettingsSync: (payload: WeatherSettingsRawPayload) => void;
+  refreshNativeWeatherSnapshot: () => Promise<void>;
 };
 
 export async function handleSyncBridgeMessage(
@@ -49,8 +58,19 @@ export async function handleSyncBridgeMessage(
     return true;
   }
 
+  if (messageType === "REST_TODO_VIEW_SYNC") {
+    const payload = (readBridgePayloadRecord(parsedData) ?? {}) as TodoViewSyncPayload;
+    deps.handleTodoViewSync(payload);
+    return true;
+  }
+
   if (messageType === "REST_AUTH_STATE_SYNC") {
     // push permission intro 는 네이티브 첫 진입 시점에서 처리
+    return true;
+  }
+
+  if (messageType === "REST_WEATHER_SNAPSHOT_REQUEST") {
+    await deps.refreshNativeWeatherSnapshot();
     return true;
   }
 

@@ -46,6 +46,13 @@ export type NativeAuthStateSyncPayload = {
   loggedIn: boolean;
 };
 
+export type NativeTodoViewSyncPayload = {
+  isViewingTodayTodoSurface: boolean;
+  source: "date-tasks" | "calendar-sheet" | "none";
+  dateKey: string | null;
+  routePath: string;
+};
+
 export function getNativeWebViewBridge(): NativeWebViewBridge | null {
   if (typeof window === "undefined") {
     return null;
@@ -79,6 +86,10 @@ export function syncNativeWeatherSettings(payload: NativeWeatherSettingsSyncPayl
 
 export function syncNativeAuthState(payload: NativeAuthStateSyncPayload) {
   return postNativeBridgeMessage("REST_AUTH_STATE_SYNC", { payload });
+}
+
+export function syncNativeTodoView(payload: NativeTodoViewSyncPayload) {
+  return postNativeBridgeMessage("REST_TODO_VIEW_SYNC", { payload });
 }
 
 export function requestNativeWeatherSnapshot() {

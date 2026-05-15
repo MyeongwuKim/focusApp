@@ -8,6 +8,7 @@ export type TaskItem = {
   startedAt: number | null;
   scheduledStartAt: number | null;
   targetFocusMinutes: number | null;
+  muteReminderDateKey?: string | null;
   completedAt: number | null;
   completedDurationMs: number | null;
 };

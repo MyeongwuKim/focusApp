@@ -100,65 +100,84 @@ export async function prepareWebUiBundleVersion(input: {
         "WEB_UI_MANIFEST_FETCH_TIMEOUT"
       );
 
-      if (manifestResponse.ok) {
-        const manifest = (await manifestResponse.json()) as WebUiManifest;
-        const remoteVersion =
-          typeof manifest.version === "string" ? manifest.version.trim() : "";
-        const remoteBundleUrl = resolveWebUiBundleUrl(manifest);
-        const previousRelease = await readStoredWebUiReleaseState();
-        const currentVersion =
-          previousRelease?.version ?? input.fallbackCurrentVersion;
+      if (!manifestResponse.ok) {
+        throw new Error(`WEB_UI_MANIFEST_HTTP_${manifestResponse.status}`);
+      }
 
-        if (remoteBundleUrl && parseSemver(remoteVersion)) {
-          const compared = compareSemver(remoteVersion, currentVersion);
-          if (compared > 0) {
-            input.onProgress?.("앱 번들 설치중...");
-            const bundleResponse = await withTimeout(
-              fetch(remoteBundleUrl),
-              WEB_UI_BUNDLE_FETCH_TIMEOUT_MS,
-              "WEB_UI_BUNDLE_FETCH_TIMEOUT"
-            );
-            if (!bundleResponse.ok) {
-              throw new Error(`WEB_UI_BUNDLE_HTTP_${bundleResponse.status}`);
-            }
+      let manifest: WebUiManifest;
+      try {
+        manifest = (await manifestResponse.json()) as WebUiManifest;
+      } catch {
+        throw new Error("WEB_UI_MANIFEST_PARSE_FAILED");
+      }
 
-            const zipArrayBuffer = await bundleResponse.arrayBuffer();
-            await extractWebUiZipToDirectory({
-              zipArrayBuffer,
-              directoryUri: WEB_UI_STAGING_DIR,
-            });
+      const remoteVersion =
+        typeof manifest.version === "string" ? manifest.version.trim() : "";
+      if (!parseSemver(remoteVersion)) {
+        throw new Error("WEB_UI_MANIFEST_VERSION_INVALID");
+      }
 
-            await FileSystem.deleteAsync(WEB_UI_ACTIVE_DIR, { idempotent: true });
-            await FileSystem.moveAsync({
-              from: WEB_UI_STAGING_DIR,
-              to: WEB_UI_ACTIVE_DIR,
-            });
-            nextEntryUri = activeIndexUri;
+      const remoteBundleUrl = resolveWebUiBundleUrl(manifest);
+      const previousRelease = await readStoredWebUiReleaseState();
+      const currentVersion =
+        previousRelease?.version ?? input.fallbackCurrentVersion;
 
-            await writeStoredWebUiReleaseState({
-              version: remoteVersion,
-              channel: input.releaseChannel,
-            });
-
-            console.log("Upgraded web-ui release from R2:", {
-              channel: input.releaseChannel,
-              from: currentVersion,
-              to: remoteVersion,
-              manifestUrl: input.manifestUrl,
-              bundleUrl: remoteBundleUrl,
-            });
-          } else if (compared < 0) {
-            console.log("Skipped downgrade web-ui release:", {
-              channel: input.releaseChannel,
-              current: currentVersion,
-              remote: remoteVersion,
-            });
-          }
+      const compared = compareSemver(remoteVersion, currentVersion);
+      if (compared > 0) {
+        if (!remoteBundleUrl) {
+          throw new Error("WEB_UI_BUNDLE_URL_MISSING");
         }
+
+        input.onProgress?.("앱 번들 설치중...");
+        const bundleResponse = await withTimeout(
+          fetch(remoteBundleUrl),
+          WEB_UI_BUNDLE_FETCH_TIMEOUT_MS,
+          "WEB_UI_BUNDLE_FETCH_TIMEOUT"
+        );
+        if (!bundleResponse.ok) {
+          throw new Error(`WEB_UI_BUNDLE_HTTP_${bundleResponse.status}`);
+        }
+
+        const zipArrayBuffer = await bundleResponse.arrayBuffer();
+        try {
+          await extractWebUiZipToDirectory({
+            zipArrayBuffer,
+            directoryUri: WEB_UI_STAGING_DIR,
+          });
+        } catch {
+          throw new Error("WEB_UI_BUNDLE_EXTRACT_FAILED");
+        }
+
+        await FileSystem.deleteAsync(WEB_UI_ACTIVE_DIR, { idempotent: true });
+        await FileSystem.moveAsync({
+          from: WEB_UI_STAGING_DIR,
+          to: WEB_UI_ACTIVE_DIR,
+        });
+        nextEntryUri = activeIndexUri;
+
+        await writeStoredWebUiReleaseState({
+          version: remoteVersion,
+          channel: input.releaseChannel,
+        });
+
+        console.log("Upgraded web-ui release from R2:", {
+          channel: input.releaseChannel,
+          from: currentVersion,
+          to: remoteVersion,
+          manifestUrl: input.manifestUrl,
+          bundleUrl: remoteBundleUrl,
+        });
+      } else if (compared < 0) {
+        console.log("Skipped downgrade web-ui release:", {
+          channel: input.releaseChannel,
+          current: currentVersion,
+          remote: remoteVersion,
+        });
       }
     }
   } catch (error) {
     console.log("Failed to load/update remote web-ui manifest:", error);
+    throw error;
   } finally {
     await FileSystem.deleteAsync(WEB_UI_STAGING_DIR, { idempotent: true }).catch(
       () => undefined

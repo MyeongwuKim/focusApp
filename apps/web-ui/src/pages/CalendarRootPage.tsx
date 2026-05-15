@@ -38,6 +38,7 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   const requestedDateKeyFromUrl = routeSearchParams.get("date");
   const restFinishedRequestedFromUrl = routeSearchParams.get("restFinished") === "1";
   const focusTargetElapsedRequestedFromUrl = routeSearchParams.get("focusTargetElapsed") === "1";
+  const startTodoPromptRequestedFromUrl = routeSearchParams.get("startTodoPrompt") === "1";
   const focusTargetTodoIdFromUrl = routeSearchParams.get("todoId");
   const lastAppliedSearchRef = useRef<string | null>(null);
 
@@ -139,6 +140,8 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         }${
           focusTargetElapsedRequestedFromUrl ? "&focusTargetElapsed=1" : ""
         }${
+          startTodoPromptRequestedFromUrl ? "&startTodoPrompt=1" : ""
+        }${
           focusTargetTodoIdFromUrl ? `&todoId=${encodeURIComponent(focusTargetTodoIdFromUrl)}` : ""
         }`
       : "/calendar";
@@ -157,6 +160,7 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
     isOverlayActive,
     restFinishedRequestedFromUrl,
     focusTargetElapsedRequestedFromUrl,
+    startTodoPromptRequestedFromUrl,
     focusTargetTodoIdFromUrl,
     selectedDateKey,
   ]);
@@ -175,6 +179,7 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         isExpanded={isDateSheetExpanded}
         restFinishedRequested={restFinishedRequestedFromUrl}
         focusTargetElapsedRequested={focusTargetElapsedRequestedFromUrl}
+        startTodoPromptRequested={startTodoPromptRequestedFromUrl}
         focusTargetTodoId={focusTargetTodoIdFromUrl}
         onExpandedChange={setIsDateSheetExpanded}
       />

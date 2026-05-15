@@ -148,6 +148,7 @@ type DailyTaskEntry {
   startedAt          DateTime?
   scheduledStartAt   DateTime?
   targetFocusMinutes Int?
+  muteReminderDateKey String?
   pausedAt           DateTime?
   completedAt        DateTime?
   deviationSeconds   Int

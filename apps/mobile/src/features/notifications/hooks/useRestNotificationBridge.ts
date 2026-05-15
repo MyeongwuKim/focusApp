@@ -14,6 +14,13 @@ const BRIDGE_NOTIFICATION_TYPES = {
 } as const;
 
 let notificationHandlerInitialized = false;
+let shouldSuppressForegroundBanner: (notification: Notifications.Notification) => boolean = () => false;
+
+function setShouldSuppressForegroundBanner(
+  resolver: ((notification: Notifications.Notification) => boolean) | null
+) {
+  shouldSuppressForegroundBanner = resolver ?? (() => false);
+}
 
 function ensureNotificationHandler() {
   if (notificationHandlerInitialized) {
@@ -21,13 +28,16 @@ function ensureNotificationHandler() {
   }
 
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      const shouldSuppress = shouldSuppressForegroundBanner(notification);
+      return {
+        shouldShowAlert: !shouldSuppress,
+        shouldPlaySound: !shouldSuppress,
+        shouldSetBadge: false,
+        shouldShowBanner: !shouldSuppress,
+        shouldShowList: !shouldSuppress,
+      };
+    },
   });
   notificationHandlerInitialized = true;
 }
@@ -72,8 +82,33 @@ function normalizeTargetPath(path: string) {
   if (params.get("restFinished") === "1") {
     next.set("restFinished", "1");
   }
+  if (params.get("focusTargetElapsed") === "1") {
+    next.set("focusTargetElapsed", "1");
+  }
+  if (params.get("startTodoPrompt") === "1") {
+    next.set("startTodoPrompt", "1");
+  }
+  const todoId = params.get("todoId");
+  if (todoId) {
+    next.set("todoId", todoId);
+  }
 
   return `/calendar?${next.toString()}`;
+}
+
+function getNotificationTargetPath(notification: Notifications.Notification) {
+  const data = asRecord(notification.request.content.data);
+  const rawTargetPath = asString(data?.targetPath);
+  if (!rawTargetPath) {
+    return null;
+  }
+  return normalizeTargetPath(rawTargetPath);
+}
+
+function isStartTodoPromptTargetPath(targetPath: string) {
+  const [_, rawSearch = ""] = targetPath.split("?", 2);
+  const params = new URLSearchParams(rawSearch);
+  return params.get("startTodoPrompt") === "1";
 }
 
 async function ensureNotificationPermission() {
@@ -106,6 +141,7 @@ async function ensureNotificationChannelIfNeeded() {
 
 type UseRestNotificationBridgeInput = {
   onNavigate: (path: string) => void;
+  shouldInlineStartTodoPromptInForeground?: (targetPath: string) => boolean;
 };
 
 type RestNotificationPermissionSnapshot = {
@@ -127,13 +163,55 @@ type RestNotificationSchedulePayload = {
   seconds?: number;
 };
 
-export function useRestNotificationBridge({ onNavigate }: UseRestNotificationBridgeInput) {
+export function useRestNotificationBridge({
+  onNavigate,
+  shouldInlineStartTodoPromptInForeground,
+}: UseRestNotificationBridgeInput) {
   const notificationIdByKeyRef = useRef<Map<string, string>>(new Map());
   const handledResponseIdRef = useRef<string | null>(null);
+  const handledReceivedIdRef = useRef<string | null>(null);
+
+  const shouldInlineForegroundNotification = useCallback(
+    (notification: Notifications.Notification) => {
+      const targetPath = getNotificationTargetPath(notification);
+      if (!targetPath || !isStartTodoPromptTargetPath(targetPath)) {
+        return false;
+      }
+      return shouldInlineStartTodoPromptInForeground?.(targetPath) ?? false;
+    },
+    [shouldInlineStartTodoPromptInForeground]
+  );
 
   useEffect(() => {
+    setShouldSuppressForegroundBanner(shouldInlineForegroundNotification);
     ensureNotificationHandler();
-  }, []);
+    return () => {
+      setShouldSuppressForegroundBanner(null);
+    };
+  }, [shouldInlineForegroundNotification]);
+
+  useEffect(() => {
+    const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+      if (!shouldInlineForegroundNotification(notification)) {
+        return;
+      }
+
+      const receivedId = notification.request.identifier;
+      if (handledReceivedIdRef.current === receivedId) {
+        return;
+      }
+      handledReceivedIdRef.current = receivedId;
+
+      const targetPath = getNotificationTargetPath(notification);
+      if (targetPath) {
+        onNavigate(targetPath);
+      }
+    });
+
+    return () => {
+      receivedSubscription.remove();
+    };
+  }, [onNavigate, shouldInlineForegroundNotification]);
 
   const handleNotificationResponseNavigation = useCallback(
     (response: Notifications.NotificationResponse | null) => {
@@ -147,12 +225,9 @@ export function useRestNotificationBridge({ onNavigate }: UseRestNotificationBri
       }
       handledResponseIdRef.current = responseId;
 
-      const targetPath = response.notification.request.content.data?.targetPath;
-      if (typeof targetPath === "string") {
-        const normalizedPath = normalizeTargetPath(targetPath);
-        if (normalizedPath) {
-          onNavigate(normalizedPath);
-        }
+      const targetPath = getNotificationTargetPath(response.notification);
+      if (targetPath) {
+        onNavigate(targetPath);
       }
     },
     [onNavigate]

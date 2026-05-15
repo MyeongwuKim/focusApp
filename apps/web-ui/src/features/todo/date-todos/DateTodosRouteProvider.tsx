@@ -4,7 +4,13 @@ import type { RoutineTemplate } from "../../../api/routineTemplateApi";
 import { useDailyLogMutation, useDailyLogQuery, useRoutineTemplateMutation, useRoutineTemplateQuery } from "../../../queries";
 import { confirm, toast, useAppStore } from "../../../stores";
 import { formatDateKey } from "../../../utils/holidays";
-import { cancelNativeRestNotification, notifyRestFinished, scheduleNativeRestNotification } from "../../../utils/notifications";
+import {
+  cancelNativeRestNotification,
+  cancelNativeTargetFocusNotification,
+  notifyRestFinished,
+  scheduleNativeRestNotification,
+  scheduleNativeTargetFocusNotification,
+} from "../../../utils/notifications";
 import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 import { useDateTodosTaskActions } from "./hooks/useDateTodosTaskActions";
 import { useDateTodosRoutineActions } from "./hooks/useDateTodosRoutineActions";
@@ -26,12 +32,14 @@ type DateTodosSession = {
 type DailyLogWithTodos = {
   todos: Array<{
     id: string;
+    titleSnapshot?: string | null;
     content: string;
     done: boolean;
     order: number;
     startedAt: string | null;
     scheduledStartAt: string | null;
     targetFocusMinutes: number | null;
+    muteReminderDateKey: string | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
@@ -118,12 +126,14 @@ function mapDailyLogTodosToTaskItems(
   todayKey: string,
   todos: Array<{
     id: string;
+    titleSnapshot?: string | null;
     content: string;
     done: boolean;
     order: number;
     startedAt: string | null;
     scheduledStartAt: string | null;
     targetFocusMinutes: number | null;
+    muteReminderDateKey: string | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
@@ -158,6 +168,7 @@ function mapDailyLogTodosToTaskItems(
         startedAt: status === "in_progress" ? startedAt : null,
         scheduledStartAt,
         targetFocusMinutes,
+        muteReminderDateKey: todo.muteReminderDateKey ?? null,
         completedAt: status === "done" ? completedAt : null,
         completedDurationMs,
       };
@@ -180,6 +191,7 @@ function isSameTaskItems(a: TaskItem[], b: TaskItem[]) {
       current.startedAt !== next.startedAt ||
       current.scheduledStartAt !== next.scheduledStartAt ||
       current.targetFocusMinutes !== next.targetFocusMinutes ||
+      current.muteReminderDateKey !== next.muteReminderDateKey ||
       current.completedAt !== next.completedAt ||
       current.completedDurationMs !== next.completedDurationMs
     ) {
@@ -203,6 +215,7 @@ export function DateTodosRouteProvider({
   dateKey,
   restFinishedRequested = false,
   focusTargetElapsedRequested = false,
+  startTodoPromptRequested = false,
   focusTargetTodoId = null,
   onOpenMemo,
   onOpenTaskPicker,
@@ -213,6 +226,7 @@ export function DateTodosRouteProvider({
   dateKey: string | null;
   restFinishedRequested?: boolean;
   focusTargetElapsedRequested?: boolean;
+  startTodoPromptRequested?: boolean;
   focusTargetTodoId?: string | null;
   onOpenMemo?: () => void;
   onOpenTaskPicker?: () => void;
@@ -244,6 +258,12 @@ export function DateTodosRouteProvider({
   const pendingFocusTargetPromptRef = useRef(false);
   const focusTargetPromptInFlightRef = useRef(false);
   const focusTargetPromptKeyRef = useRef<string | null>(null);
+  const autoFocusTargetPromptInFlightRef = useRef(false);
+  const autoFocusTargetPromptedSetRef = useRef<Set<string>>(new Set());
+  const pendingStartTodoPromptRef = useRef(false);
+  const startTodoPromptInFlightRef = useRef(false);
+  const startTodoPromptKeyRef = useRef<string | null>(null);
+  const scheduledTargetFocusNotificationKeyRef = useRef<{ dateKey: string; todoId: string } | null>(null);
   const reorderPersistRequestIdRef = useRef(0);
 
   const { dailyLogByDateQuery: dailyLogQuery } = useDailyLogQuery({ dateKey });
@@ -265,6 +285,8 @@ export function DateTodosRouteProvider({
     updateTodoActualFocusMutation,
     updateTodoScheduleMutation,
     updateTodoTargetFocusMutation,
+    muteTodoReminderTodayMutation,
+    unmuteTodoReminderMutation,
     startRestSessionMutation,
     stopRestSessionMutation,
   } = useDailyLogMutation();
@@ -293,6 +315,11 @@ export function DateTodosRouteProvider({
       pendingFocusTargetPromptRef.current = false;
       focusTargetPromptInFlightRef.current = false;
       focusTargetPromptKeyRef.current = null;
+      autoFocusTargetPromptInFlightRef.current = false;
+      autoFocusTargetPromptedSetRef.current.clear();
+      pendingStartTodoPromptRef.current = false;
+      startTodoPromptInFlightRef.current = false;
+      startTodoPromptKeyRef.current = null;
       setHydratedDateKey(null);
       return;
     }
@@ -304,8 +331,80 @@ export function DateTodosRouteProvider({
     pendingFocusTargetPromptRef.current = false;
     focusTargetPromptInFlightRef.current = false;
     focusTargetPromptKeyRef.current = null;
+    autoFocusTargetPromptInFlightRef.current = false;
+    autoFocusTargetPromptedSetRef.current.clear();
+    pendingStartTodoPromptRef.current = false;
+    startTodoPromptInFlightRef.current = false;
+    startTodoPromptKeyRef.current = null;
     setHydratedDateKey(null);
   }, [dateKey]);
+
+  useEffect(() => {
+    const previous = scheduledTargetFocusNotificationKeyRef.current;
+    if (!dateKey) {
+      if (previous) {
+        cancelNativeTargetFocusNotification(previous);
+        scheduledTargetFocusNotificationKeyRef.current = null;
+      }
+      return;
+    }
+
+    const todos = dailyLogQuery.data?.todos ?? [];
+    const inProgressWithTarget = todos.find(
+      (todo) =>
+        !todo.done &&
+        Boolean(todo.startedAt) &&
+        !todo.pausedAt &&
+        typeof todo.targetFocusMinutes === "number" &&
+        Number.isFinite(todo.targetFocusMinutes) &&
+        Math.floor(todo.targetFocusMinutes) >= 1
+    );
+
+    if (!inProgressWithTarget || !inProgressWithTarget.startedAt) {
+      if (previous) {
+        cancelNativeTargetFocusNotification(previous);
+        scheduledTargetFocusNotificationKeyRef.current = null;
+      }
+      return;
+    }
+
+    const startedAtMs = toEpochMillis(inProgressWithTarget.startedAt);
+    if (!startedAtMs) {
+      if (previous) {
+        cancelNativeTargetFocusNotification(previous);
+        scheduledTargetFocusNotificationKeyRef.current = null;
+      }
+      return;
+    }
+
+    const nextKey = {
+      dateKey,
+      todoId: inProgressWithTarget.id,
+    };
+    if (
+      previous &&
+      (previous.dateKey !== nextKey.dateKey || previous.todoId !== nextKey.todoId)
+    ) {
+      cancelNativeTargetFocusNotification(previous);
+    }
+
+    const deviationSeconds =
+      typeof inProgressWithTarget.deviationSeconds === "number" && Number.isFinite(inProgressWithTarget.deviationSeconds)
+        ? Math.max(Math.floor(inProgressWithTarget.deviationSeconds), 0)
+        : 0;
+    const targetSeconds = Math.max(Math.floor((inProgressWithTarget.targetFocusMinutes ?? 0) * 60), 0);
+    const actualFocusSeconds = Math.max(Math.floor((Date.now() - startedAtMs) / 1000) - deviationSeconds, 0);
+    const remainingSeconds = Math.max(targetSeconds - actualFocusSeconds, 0);
+
+    scheduleNativeTargetFocusNotification({
+      dateKey,
+      todoId: inProgressWithTarget.id,
+      seconds: Math.max(remainingSeconds, 1),
+      taskLabel: inProgressWithTarget.titleSnapshot ?? inProgressWithTarget.content,
+      targetFocusMinutes: inProgressWithTarget.targetFocusMinutes,
+    });
+    scheduledTargetFocusNotificationKeyRef.current = nextKey;
+  }, [dateKey, dailyLogQuery.data?.todos]);
 
   useEffect(() => {
     if (!dateKey || !restFinishedRequested) {
@@ -327,6 +426,20 @@ export function DateTodosRouteProvider({
     focusTargetPromptKeyRef.current = promptKey;
     pendingFocusTargetPromptRef.current = true;
   }, [dateKey, focusTargetElapsedRequested, focusTargetTodoId]);
+
+  useEffect(() => {
+    if (!dateKey || !startTodoPromptRequested || !focusTargetTodoId) {
+      return;
+    }
+
+    const promptKey = `${dateKey}:${focusTargetTodoId}`;
+    if (startTodoPromptKeyRef.current === promptKey) {
+      return;
+    }
+
+    startTodoPromptKeyRef.current = promptKey;
+    pendingStartTodoPromptRef.current = true;
+  }, [dateKey, startTodoPromptRequested, focusTargetTodoId]);
 
   useEffect(() => {
     if (!dateKey || !dailyLogQuery.isSuccess) {
@@ -617,6 +730,178 @@ export function DateTodosRouteProvider({
     hydratedDateKey,
   ]);
 
+  useEffect(() => {
+    if (!dateKey || focusTargetPromptInFlightRef.current || autoFocusTargetPromptInFlightRef.current) {
+      return;
+    }
+    if (pendingFocusTargetPromptRef.current || pendingStartTodoPromptRef.current) {
+      return;
+    }
+    if (!dailyLogQuery.isSuccess || !hydratedDateKey || hydratedDateKey !== dateKey) {
+      return;
+    }
+
+    const todayKey = formatDateKey(new Date());
+    if (dateKey !== todayKey) {
+      return;
+    }
+
+    const nowMs = Date.now();
+    const todos = dailyLogQuery.data?.todos ?? [];
+    const targetTodo = todos.find((todo) => {
+      if (todo.done || todo.completedAt || !todo.startedAt || todo.pausedAt) {
+        return false;
+      }
+      const targetMinutes =
+        typeof todo.targetFocusMinutes === "number" && Number.isFinite(todo.targetFocusMinutes)
+          ? Math.floor(todo.targetFocusMinutes)
+          : null;
+      if (!targetMinutes || targetMinutes < 1) {
+        return false;
+      }
+      const startedAtMs = toEpochMillis(todo.startedAt);
+      if (!startedAtMs) {
+        return false;
+      }
+      const deviationSeconds =
+        typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
+          ? Math.max(Math.floor(todo.deviationSeconds), 0)
+          : 0;
+      const actualFocusSeconds = Math.max(Math.floor((nowMs - startedAtMs) / 1000) - deviationSeconds, 0);
+      const remainingSeconds = targetMinutes * 60 - actualFocusSeconds;
+      return remainingSeconds <= 0;
+    });
+
+    if (!targetTodo) {
+      return;
+    }
+
+    const promptKey = `${dateKey}:${targetTodo.id}:${targetTodo.startedAt ?? ""}:${targetTodo.targetFocusMinutes ?? 0}`;
+    if (autoFocusTargetPromptedSetRef.current.has(promptKey)) {
+      return;
+    }
+
+    autoFocusTargetPromptedSetRef.current.add(promptKey);
+    autoFocusTargetPromptInFlightRef.current = true;
+    void (async () => {
+      try {
+        const selected = await confirm({
+          title: "목표 집중시간이 끝났어요",
+          message: `${targetTodo.content}을(를) 완료 처리할까요?`,
+          buttons: [
+            { label: "아니요", value: "continue", tone: "neutral" },
+            { label: "예", value: "complete", tone: "primary" },
+          ],
+        });
+
+        if (selected !== "complete") {
+          return;
+        }
+
+        const nextLog = await completeTodoMutation.mutateAsync({ dateKey, todoId: targetTodo.id });
+        applyDailyLog(nextLog);
+        toast.show({
+          type: "positive",
+          title: "완료 처리됨",
+          message: "목표 시간 도달 작업을 완료로 표시했어요.",
+          duration: 1800,
+        });
+      } catch (error) {
+        const message = getUserFacingErrorMessage(error, "목표 시간 처리 중 오류가 발생했어요.");
+        toast.show({
+          type: "error",
+          title: "처리 실패",
+          message,
+          duration: 2200,
+        });
+      } finally {
+        autoFocusTargetPromptInFlightRef.current = false;
+      }
+    })();
+  }, [completeTodoMutation, dailyLogQuery.data?.todos, dailyLogQuery.isSuccess, dateKey, hydratedDateKey, liveTick]);
+
+  useEffect(() => {
+    if (!dateKey || !focusTargetTodoId || !pendingStartTodoPromptRef.current || startTodoPromptInFlightRef.current) {
+      return;
+    }
+
+    if (!dailyLogQuery.isSuccess || !hydratedDateKey || hydratedDateKey !== dateKey) {
+      return;
+    }
+
+    const target = dateTasksRouteItems.find((item) => item.id === focusTargetTodoId);
+    if (!target || target.status === "done" || target.status === "overdue" || target.status === "in_progress") {
+      pendingStartTodoPromptRef.current = false;
+      return;
+    }
+
+    startTodoPromptInFlightRef.current = true;
+    void (async () => {
+      try {
+        const selected = await confirm({
+          title: "지금 집중 시작할까요?",
+          message: `${target.label}을(를) 바로 진행할까요?`,
+          buttons: [
+            { label: "아니요", value: "cancel", tone: "neutral" },
+            { label: "오늘은 그만", value: "mute_today", tone: "neutral" },
+            { label: "예", value: "start", tone: "primary" },
+          ],
+        });
+
+        if (selected === "mute_today") {
+          const nextLog = await muteTodoReminderTodayMutation.mutateAsync({
+            dateKey,
+            todoId: target.id,
+          });
+          applyDailyLog(nextLog);
+          toast.show({
+            type: "positive",
+            title: "오늘 리마인드 중지",
+            message: `${target.label} 알림을 오늘은 보내지 않아요.`,
+            duration: 1800,
+          });
+          return;
+        }
+
+        if (selected !== "start") {
+          return;
+        }
+
+        const nextLog =
+          target.status === "paused"
+            ? await resumeTodoMutation.mutateAsync({ dateKey, todoId: target.id })
+            : await startTodoMutation.mutateAsync({ dateKey, todoId: target.id });
+        applyDailyLog(nextLog);
+        toast.show({
+          type: "positive",
+          title: "집중 시작",
+          message: `${target.label}을(를) 시작했어요.`,
+          duration: 1800,
+        });
+      } catch (error) {
+        const message = getUserFacingErrorMessage(error, "집중 시작 처리 중 오류가 발생했어요.");
+        toast.show({
+          type: "error",
+          title: "시작 실패",
+          message,
+          duration: 2200,
+        });
+      } finally {
+        pendingStartTodoPromptRef.current = false;
+        startTodoPromptInFlightRef.current = false;
+      }
+    })();
+  }, [
+    dailyLogQuery.isSuccess,
+    dateKey,
+    dateTasksRouteItems,
+    focusTargetTodoId,
+    hydratedDateKey,
+    muteTodoReminderTodayMutation,
+    resumeTodoMutation,
+    startTodoMutation,
+  ]);
+
   const {
     handleDateTaskAction,
     handleEditActualFocus,
@@ -648,6 +933,8 @@ export function DateTodosRouteProvider({
     updateTodoActualFocus: updateTodoActualFocusMutation.mutateAsync,
     updateTodoSchedule: updateTodoScheduleMutation.mutateAsync,
     updateTodoTargetFocus: updateTodoTargetFocusMutation.mutateAsync,
+    muteTodoReminderToday: muteTodoReminderTodayMutation.mutateAsync,
+    unmuteTodoReminder: unmuteTodoReminderMutation.mutateAsync,
   });
 
   const {

@@ -23,6 +23,7 @@ export interface TodoItemRecord {
   deviationSeconds: number;
   resumeCount: number;
   actualFocusSeconds: number | null;
+  muteReminderDateKey?: string | null;
 }
 
 export class DailyLogRepository {

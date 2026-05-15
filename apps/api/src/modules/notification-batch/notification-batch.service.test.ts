@@ -188,6 +188,35 @@ describe("runNotificationBatch", () => {
     expect(result.deliveries[0]?.body).toContain("B");
   });
 
+  it("첫번째 미완료가 오늘은 그만 상태면 다음 미완료 할일로 리마인드를 보낸다", async () => {
+    const prisma = createPrismaMock({
+      todos: [
+        createTodo({
+          content: "A",
+          order: 0,
+          muteReminderDateKey: "2026-05-04",
+        }),
+        createTodo({
+          id: "todo-2",
+          content: "B",
+          order: 1,
+        }),
+      ],
+    });
+
+    const result = await runNotificationBatch({
+      prisma: prisma as never,
+      now: new Date("2026-05-04T08:00:00.000Z"),
+      dryRun: true,
+      force: true,
+      timezone: "Asia/Seoul",
+    });
+
+    expect(result.sentCount).toBe(1);
+    expect(result.deliveries[0]?.kind).toBe("incomplete_todo");
+    expect(result.deliveries[0]?.body).toContain("B");
+  });
+
   it("가입 후 24시간 이내 유저에게는 알림을 보내지 않는다", async () => {
     const prisma = createPrismaMock({
       userCreatedAt: new Date("2026-05-04T07:00:00.000Z"),
@@ -199,62 +228,6 @@ describe("runNotificationBatch", () => {
       now: new Date("2026-05-04T20:00:00.000Z"),
       dryRun: true,
       force: false,
-      timezone: "Asia/Seoul",
-    });
-
-    expect(result.sentCount).toBe(0);
-    expect(result.deliveries).toHaveLength(0);
-  });
-
-  it("진행 중 할일의 목표 집중시간 도달 시 서버 푸시 알림을 보낸다", async () => {
-    const prisma = createPrismaMock({
-      todos: [
-        createTodo({
-          content: "리액트",
-          order: 0,
-          startedAt: new Date("2026-05-04T07:30:00.000Z"),
-          targetFocusMinutes: 30,
-          pausedAt: null,
-        }),
-      ],
-    });
-
-    const result = await runNotificationBatch({
-      prisma: prisma as never,
-      now: new Date("2026-05-04T08:02:00.000Z"),
-      dryRun: true,
-      force: true,
-      timezone: "Asia/Seoul",
-    });
-
-    expect(result.sentCount).toBe(1);
-    expect(result.deliveries[0]).toMatchObject({
-      userId: "user-1",
-      kind: "focus_target_elapsed",
-      title: "목표 집중시간 도달",
-    });
-    expect(result.deliveries[0]?.body).toContain("리액트");
-    expect(result.deliveries[0]?.body).toContain("30분 목표");
-  });
-
-  it("목표 집중시간이 30분 미만이면 목표 도달 알림을 보내지 않는다", async () => {
-    const prisma = createPrismaMock({
-      todos: [
-        createTodo({
-          content: "리액트",
-          order: 0,
-          startedAt: new Date("2026-05-04T07:30:00.000Z"),
-          targetFocusMinutes: 25,
-          pausedAt: null,
-        }),
-      ],
-    });
-
-    const result = await runNotificationBatch({
-      prisma: prisma as never,
-      now: new Date("2026-05-04T08:02:00.000Z"),
-      dryRun: true,
-      force: true,
       timezone: "Asia/Seoul",
     });
 

@@ -12,6 +12,7 @@ export type TodoReminderEntry = {
   scheduledStartAt?: Date | null;
   targetFocusMinutes?: number | null;
   deviationSeconds?: number | null;
+  muteReminderDateKey?: string | null;
   content?: string | null;
   titleSnapshot?: string | null;
   order?: number;
@@ -91,9 +92,28 @@ export function getTodoReminderStatus(todo: TodoReminderEntry): TodoReminderStat
   return "in_progress";
 }
 
-export function pickFirstOpenTodo(todos: TodoReminderEntry[]) {
+function isTodoReminderMutedToday(todo: TodoReminderEntry, dateKey: string) {
+  return typeof todo.muteReminderDateKey === "string" && todo.muteReminderDateKey === dateKey;
+}
+
+export function pickFirstOpenTodo(todos: TodoReminderEntry[], dateKey: string) {
   const sorted = [...todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  return sorted.find((todo) => getTodoReminderStatus(todo) !== "done") ?? null;
+
+  for (const todo of sorted) {
+    const status = getTodoReminderStatus(todo);
+    if (status === "done") {
+      continue;
+    }
+    if (status === "in_progress") {
+      return todo;
+    }
+    if (isTodoReminderMutedToday(todo, dateKey)) {
+      continue;
+    }
+    return todo;
+  }
+
+  return null;
 }
 
 export function getTodoLabel(todo: TodoReminderEntry) {
@@ -114,12 +134,16 @@ export function pickDueScheduledTodos(input: {
   todos: TodoReminderEntry[];
   now: Date;
   scheduleWindowMs: number;
+  dateKey: string;
 }) {
   const sorted = [...input.todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const matches: Array<{ label: string; todoId: string; scheduledAtMs: number }> = [];
 
   for (const todo of sorted) {
     if (todo.done || todo.completedAt || !todo.scheduledStartAt) {
+      continue;
+    }
+    if (isTodoReminderMutedToday(todo, input.dateKey)) {
       continue;
     }
 

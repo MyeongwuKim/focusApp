@@ -24,6 +24,7 @@ export const dailyLogTypeDefs = gql`
     deviationSeconds: Int!
     resumeCount: Int!
     actualFocusSeconds: Int
+    muteReminderDateKey: String
   }
 
   type DailyLog {
@@ -116,6 +117,8 @@ export const dailyLogTypeDefs = gql`
     updateTodoActualFocus(input: UpdateTodoActualFocusInput!): DailyLog!
     updateTodoSchedule(input: UpdateTodoScheduleInput!): DailyLog!
     updateTodoTargetFocus(input: UpdateTodoTargetFocusInput!): DailyLog!
+    muteTodoReminderToday(input: TodoActionInput!): DailyLog!
+    unmuteTodoReminder(input: TodoActionInput!): DailyLog!
     startRestSession(input: RestSessionInput!): DailyLog!
     stopRestSession(input: RestSessionInput!): DailyLog!
   }
@@ -139,7 +142,7 @@ const dailyLogErrorMapping = {
   INVALID_TODO_ORDER_IDS: { message: "정렬할 할일 목록이 올바르지 않아요." },
   INVALID_ACTUAL_FOCUS_SECONDS: { message: "집중 시간이 올바르지 않아요." },
   INVALID_SCHEDULED_START_AT: { message: "시작 예정 시간이 올바르지 않아요." },
-  INVALID_TARGET_FOCUS_MINUTES: { message: "목표 집중 시간은 30분 이상으로 설정해 주세요." },
+  INVALID_TARGET_FOCUS_MINUTES: { message: "목표 집중 시간은 1분 이상으로 설정해 주세요." },
   SCHEDULE_MUST_BE_FUTURE_FOR_TODAY: { message: "오늘 일정은 현재 시각 이후로만 설정할 수 있어요." },
   TASK_NOT_FOUND: { message: "태스크를 찾을 수 없어요." },
 };
@@ -467,6 +470,52 @@ export const dailyLogResolvers = {
         rethrowMappedGraphQLError(error, dailyLogErrorMapping);
       }
     },
+    muteTodoReminderToday: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        const userId = getUserId(context);
+        const result = await service.muteTodoReminderToday({
+          userId,
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
+        });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
+    unmuteTodoReminder: async (
+      _parent: unknown,
+      args: { input: { dateKey: string; todoId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = buildService(context);
+        const userId = getUserId(context);
+        const result = await service.unmuteTodoReminder({
+          userId,
+          dateKey: args.input.dateKey,
+          todoId: args.input.todoId,
+        });
+        await refreshReminderScheduleForUser({
+          prisma: context.prisma,
+          userId,
+          timezone: env.NOTIFICATION_BATCH_TIMEZONE,
+        });
+        return result;
+      } catch (error) {
+        rethrowMappedGraphQLError(error, dailyLogErrorMapping);
+      }
+    },
     startRestSession: async (
       _parent: unknown,
       args: { input: { dateKey: string } },
@@ -502,6 +551,8 @@ export const dailyLogResolvers = {
       toISOStringOrNull(parent.scheduledStartAt),
     pausedAt: (parent: { pausedAt: Date | null }) => toISOStringOrNull(parent.pausedAt),
     completedAt: (parent: { completedAt: Date | null }) => toISOStringOrNull(parent.completedAt),
+    muteReminderDateKey: (parent: { muteReminderDateKey?: string | null }) =>
+      typeof parent.muteReminderDateKey === "string" ? parent.muteReminderDateKey : null,
   },
 };
 

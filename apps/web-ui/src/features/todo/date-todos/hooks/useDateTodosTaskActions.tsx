@@ -14,6 +14,7 @@ type DailyLogWithTodos = {
     startedAt: string | null;
     scheduledStartAt: string | null;
     targetFocusMinutes: number | null;
+    muteReminderDateKey: string | null;
     pausedAt: string | null;
     completedAt: string | null;
     deviationSeconds: number;
@@ -61,6 +62,8 @@ type UseDateTodosTaskActionsParams = {
     todoId: string;
     targetFocusMinutes: number | null;
   }) => Promise<DailyLogWithTodos>;
+  muteTodoReminderToday: (input: { dateKey: string; todoId: string }) => Promise<DailyLogWithTodos>;
+  unmuteTodoReminder: (input: { dateKey: string; todoId: string }) => Promise<DailyLogWithTodos>;
 };
 
 export function useDateTodosTaskActions({
@@ -86,6 +89,8 @@ export function useDateTodosTaskActions({
   updateTodoActualFocus,
   updateTodoSchedule,
   updateTodoTargetFocus,
+  muteTodoReminderToday,
+  unmuteTodoReminder,
 }: UseDateTodosTaskActionsParams) {
   const handleDateTaskAction = (taskId: string, action: DateTaskAction) => {
     if (!dateKey) {
@@ -306,7 +311,7 @@ export function useDateTodosTaskActions({
 
     setEditingTargetFocus({
       taskId,
-      initialMinutes: Math.max(target.targetFocusMinutes ?? 30, 30),
+      initialMinutes: Math.max(target.targetFocusMinutes ?? 1, 1),
     });
   };
 
@@ -316,11 +321,11 @@ export function useDateTodosTaskActions({
     }
 
     if (minutes !== null) {
-      if (!Number.isFinite(minutes) || minutes < 30) {
+      if (!Number.isFinite(minutes) || minutes < 1) {
         toast.show({
           type: "error",
           title: "설정 범위 오류",
-          message: "목표 집중시간은 최소 30분부터 설정할 수 있어요.",
+          message: "목표 집중시간은 최소 1분부터 설정할 수 있어요.",
           duration: 2200,
         });
         return;
@@ -385,6 +390,13 @@ export function useDateTodosTaskActions({
     if (!target) {
       return;
     }
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(
+      2,
+      "0"
+    )}`;
+    const isReminderMutedToday = target.muteReminderDateKey === todayKey;
+    const canToggleReminderMuteToday = dateKey === todayKey && target.status !== "done" && target.status !== "overdue";
 
     const canCompleteFromMenu = target.status === "overdue";
     const canReset = target.status === "in_progress" || target.status === "paused" || target.status === "done";
@@ -446,7 +458,7 @@ export function useDateTodosTaskActions({
                 value: "target_focus",
                 tone: "primary" as const,
                 icon: <FiTarget size={14} />,
-                description: "최소 30분부터 설정할 수 있어요.",
+                description: "최소 1분부터 설정할 수 있어요.",
               },
             ]
           : []),
@@ -458,6 +470,19 @@ export function useDateTodosTaskActions({
                 tone: "muted" as const,
                 icon: <FiTarget size={14} />,
                 description: "설정한 목표시간을 제거합니다.",
+              },
+            ]
+          : []),
+        ...(canToggleReminderMuteToday
+          ? [
+              {
+                label: isReminderMutedToday ? "오늘은 그만 해제" : "오늘은 그만",
+                value: isReminderMutedToday ? "unmute_today" : "mute_today",
+                tone: "muted" as const,
+                icon: <FiClock size={14} />,
+                description: isReminderMutedToday
+                  ? "오늘 리마인드 제외를 해제합니다."
+                  : "오늘 하루 이 할일 리마인드를 중지합니다.",
               },
             ]
           : []),
@@ -613,6 +638,52 @@ export function useDateTodosTaskActions({
         const message = getUserFacingErrorMessage(error, "할일 삭제 중 오류가 발생했어요.");
         toast.show({ type: "error", title: "삭제 실패", message, duration: 2200 });
       }
+    }
+
+    if (result === "mute_today") {
+      if (!dateKey) {
+        return;
+      }
+      try {
+        const nextLog = await muteTodoReminderToday({
+          dateKey,
+          todoId: taskId,
+        });
+        applyDailyLog(nextLog);
+        toast.show({
+          type: "positive",
+          title: "오늘 리마인드 중지",
+          message: "이 할일은 오늘 알림에서 제외됐어요.",
+          duration: 1800,
+        });
+      } catch (error) {
+        const message = getUserFacingErrorMessage(error, "오늘은 그만 처리 중 오류가 발생했어요.");
+        toast.show({ type: "error", title: "처리 실패", message, duration: 2200 });
+      }
+      return;
+    }
+
+    if (result === "unmute_today") {
+      if (!dateKey) {
+        return;
+      }
+      try {
+        const nextLog = await unmuteTodoReminder({
+          dateKey,
+          todoId: taskId,
+        });
+        applyDailyLog(nextLog);
+        toast.show({
+          type: "positive",
+          title: "리마인드 재개",
+          message: "이 할일 알림을 다시 받도록 설정했어요.",
+          duration: 1800,
+        });
+      } catch (error) {
+        const message = getUserFacingErrorMessage(error, "리마인드 해제 중 오류가 발생했어요.");
+        toast.show({ type: "error", title: "처리 실패", message, duration: 2200 });
+      }
+      return;
     }
   };
 

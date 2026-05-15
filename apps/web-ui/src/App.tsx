@@ -15,7 +15,7 @@ import { BackendConnectionBanner } from "./components/BackendConnectionBanner";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { GoPageOptions, NavigateOptions } from "./providers/AppNavigationProvider";
 import { MAIN_ROUTE } from "./routes/route-config";
-import { confirm, toast, useAuthStore, useWeatherStore } from "./stores";
+import { confirm, selectIsLoggedIn, toast, useAppStore, useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import {
   getNotificationPermissionStatus,
@@ -25,6 +25,7 @@ import {
   getNativeExpoPushToken,
   requestNativeWeatherSnapshot,
   syncNativeAuthState,
+  syncNativeTodoView,
   syncNativeWeatherSettings,
 } from "./utils/nativeBridge";
 import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
@@ -45,6 +46,7 @@ import {
 import { getApiOrigin } from "./api/graphqlEndpoint";
 import { useEdgeSwipeClose } from "./hooks/useEdgeSwipeClose";
 import { isNativeWebViewRuntime } from "./utils/runtimeEnvironment";
+import { formatDateKey } from "./utils/holidays";
 
 const BACKEND_RECHECK_MS = 3000;
 const LOGIN_ROUTE_PATH = "/login";
@@ -249,14 +251,52 @@ function parseAuthProvider(rawValue: string | null) {
   return null;
 }
 
+function resolveTodayTodoViewContext(input: {
+  pathname: string;
+  search: string;
+  activeRoute: RouteKey;
+  selectedDateKey: string | null;
+}) {
+  const todayKey = formatDateKey(new Date());
+  const searchParams = new URLSearchParams(input.search);
+  const routePath = `${input.pathname}${input.search}`;
+
+  if (input.activeRoute === "dateTasks") {
+    const dateKey = searchParams.get("date") ?? todayKey;
+    return {
+      isViewingTodayTodoSurface: dateKey === todayKey,
+      source: "date-tasks" as const,
+      dateKey,
+      routePath,
+    };
+  }
+
+  if (input.activeRoute === "calendar" && searchParams.get("sheet") === "1") {
+    const dateKey = searchParams.get("date") ?? input.selectedDateKey ?? todayKey;
+    return {
+      isViewingTodayTodoSurface: dateKey === todayKey,
+      source: "calendar-sheet" as const,
+      dateKey,
+      routePath,
+    };
+  }
+
+  return {
+    isViewingTodayTodoSurface: false,
+    source: "none" as const,
+    dateKey: null,
+    routePath,
+  };
+}
+
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const activeRoute = getRouteFromPath(location.pathname);
   const authToken = useAuthStore((state) => state.token);
+  const isLoggedIn = useAuthStore(selectIsLoggedIn);
   const setAuthToken = useAuthStore((state) => state.setAuthToken);
   const setAuthProvider = useAuthStore((state) => state.setAuthProvider);
-  const isLoggedIn = Boolean(authToken);
   const isLoginRoute = location.pathname === LOGIN_ROUTE_PATH;
   const isAuthCallbackRoute = location.pathname === AUTH_CALLBACK_ROUTE_PATH;
   const isAuthenticatedAppRoute = isLoggedIn && !isLoginRoute && !isAuthCallbackRoute;
@@ -297,6 +337,7 @@ function App() {
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
+  const selectedDateKey = useAppStore((state) => state.selectedDateKey);
 
   useEffect(() => {
     const previousToken = previousAuthTokenRef.current;
@@ -609,6 +650,22 @@ function App() {
   useEffect(() => {
     syncNativeAuthState({ loggedIn: isLoggedIn });
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    const context = resolveTodayTodoViewContext({
+      pathname: location.pathname,
+      search: location.search,
+      activeRoute,
+      selectedDateKey,
+    });
+
+    syncNativeTodoView({
+      isViewingTodayTodoSurface: context.isViewingTodayTodoSurface,
+      source: context.source,
+      dateKey: context.dateKey,
+      routePath: context.routePath,
+    });
+  }, [activeRoute, location.pathname, location.search, selectedDateKey]);
 
   useEffect(() => {
     syncNativeWeatherSettings({

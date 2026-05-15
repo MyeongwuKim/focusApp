@@ -41,7 +41,7 @@ import {
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
 import { routeWebViewBridgeMessage } from "../src/features/bridge/routeWebViewBridgeMessage";
-import type { TodoSessionSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
+import type { TodoSessionSyncPayload, TodoViewSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
 import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
 import {
   prepareWebUiBundleVersion,
@@ -94,6 +94,13 @@ type TodoSessionRecoveryPayload = {
   backgroundEnteredAtMs: number;
   resumedAtMs: number;
   elapsedSeconds: number;
+};
+
+type NativeTodoViewSnapshot = {
+  isViewingTodayTodoSurface: boolean;
+  source: "date-tasks" | "calendar-sheet" | "none";
+  dateKey: string | null;
+  routePath: string | null;
 };
 
 type NativeWeatherSnapshot = {
@@ -224,6 +231,41 @@ function resolveNativeErrorCode(error: unknown, fallbackCode: string) {
   return fallbackCode;
 }
 
+function resolveWebUiStartupErrorCode(error: unknown) {
+  const code = resolveNativeErrorCode(error, "WEB_UI_STARTUP_FAILED");
+  return code.trim().toUpperCase();
+}
+
+function resolveWebUiStartupErrorMessage(error: unknown) {
+  const code = resolveWebUiStartupErrorCode(error);
+
+  if (code.startsWith("WEB_UI_MANIFEST_")) {
+    return "버전 정보를 가져오는데 실패했습니다. 다시 실행해주세요.";
+  }
+
+  if (code === "WEB_UI_BUNDLE_EXTRACT_FAILED" || code === "WEB_UI_INDEX_MISSING_IN_ZIP") {
+    return "R2 번들 압축 해제에 실패했습니다. 다시 실행해주세요.";
+  }
+
+  if (code.startsWith("WEB_UI_BUNDLE_")) {
+    return "웹 번들 다운로드에 실패했습니다. 다시 실행해주세요.";
+  }
+
+  return "앱 시작에 실패했습니다. 다시 실행해주세요.";
+}
+
+function closeAppFromFatalStartupError() {
+  const nativeModulesRecord = readUnknownRecord(NativeModules);
+  const rnExitApp = readUnknownRecord(nativeModulesRecord?.RNExitApp);
+  const exitAppFn = rnExitApp?.exitApp;
+  if (typeof exitAppFn === "function") {
+    exitAppFn();
+    return;
+  }
+
+  BackHandler.exitApp();
+}
+
 function isNativeLoginCancelledError(error: unknown) {
   const signals = resolveNativeErrorSignals(error);
   return signals.some(
@@ -237,6 +279,13 @@ function isNativeLoginCancelledError(error: unknown) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function formatLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function isLoopbackHost(host: string) {
@@ -284,6 +333,44 @@ function buildWebUiUriWithHash(baseUri: string, callbackHash: string) {
   const normalizedHash = callbackHash.startsWith("#") ? callbackHash : `#${callbackHash}`;
   const sanitizedBase = baseUri.split("#")[0];
   return `${sanitizedBase}${normalizedHash}`;
+}
+
+function convertCalendarSheetPathToDateTasksPath(targetPath: string) {
+  if (!targetPath.startsWith("/calendar")) {
+    return targetPath;
+  }
+
+  const [pathname, rawSearch = ""] = targetPath.split("?", 2);
+  if (pathname !== "/calendar") {
+    return targetPath;
+  }
+
+  const params = new URLSearchParams(rawSearch);
+  if (params.get("sheet") !== "1") {
+    return targetPath;
+  }
+
+  const dateKey = params.get("date");
+  if (!dateKey) {
+    return targetPath;
+  }
+
+  const next = new URLSearchParams();
+  next.set("date", dateKey);
+  if (params.get("restFinished") === "1") {
+    next.set("restFinished", "1");
+  }
+  if (params.get("focusTargetElapsed") === "1") {
+    next.set("focusTargetElapsed", "1");
+  }
+  if (params.get("startTodoPrompt") === "1") {
+    next.set("startTodoPrompt", "1");
+  }
+  const todoId = params.get("todoId");
+  if (todoId) {
+    next.set("todoId", todoId);
+  }
+  return `/date-tasks?${next.toString()}`;
 }
 
 function resolveLaunchProgressPercent(statusMessage: WebUiVersionProgress) {
@@ -865,8 +952,15 @@ export default function WebViewScreen() {
   const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const nativeTodoSessionRef = useRef<NativeTodoSession | null>(null);
+  const nativeTodoViewRef = useRef<NativeTodoViewSnapshot>({
+    isViewingTodayTodoSurface: false,
+    source: "none",
+    dateKey: null,
+    routePath: null,
+  });
   const pendingTodoSessionRecoveryRef = useRef<TodoSessionRecoveryPayload | null>(null);
   const pendingWeatherSnapshotRef = useRef<NativeWeatherSnapshot | null>(null);
+  const hasShownFatalStartupAlertRef = useRef(false);
   const isDeviceLockedRef = useRef(false);
   const skipNextForegroundDeviationRef = useRef(false);
 
@@ -875,8 +969,12 @@ export default function WebViewScreen() {
       return;
     }
 
-    const hashPath = `#${targetPath}`;
-    pendingNotificationPathRef.current = targetPath;
+    const resolvedTargetPath =
+      nativeTodoViewRef.current.source === "date-tasks"
+        ? convertCalendarSheetPathToDateTasksPath(targetPath)
+        : targetPath;
+    const hashPath = `#${resolvedTargetPath}`;
+    pendingNotificationPathRef.current = resolvedTargetPath;
 
     if (!webViewRef.current || !isWebViewReadyRef.current) {
       return;
@@ -1016,6 +1114,43 @@ export default function WebViewScreen() {
     }
   }, [dispatchNativeBridgeEvent]);
 
+  const shouldInlineStartTodoPromptInForeground = useCallback((targetPath: string) => {
+    const appState = appStateRef.current;
+    if (appState !== "active") {
+      return false;
+    }
+
+    const view = nativeTodoViewRef.current;
+    if (!view.isViewingTodayTodoSurface) {
+      return false;
+    }
+
+    try {
+      const [_, rawSearch = ""] = targetPath.split("?", 2);
+      const params = new URLSearchParams(rawSearch);
+      if (params.get("startTodoPrompt") !== "1") {
+        return false;
+      }
+      const targetDateKey = params.get("date") ?? formatLocalDateKey(new Date());
+      return targetDateKey === formatLocalDateKey(new Date());
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleTodoViewSync = useCallback((payload: TodoViewSyncPayload) => {
+    const source =
+      payload.source === "date-tasks" || payload.source === "calendar-sheet" || payload.source === "none"
+        ? payload.source
+        : "none";
+    nativeTodoViewRef.current = {
+      isViewingTodayTodoSurface: Boolean(payload.isViewingTodayTodoSurface),
+      source,
+      dateKey: typeof payload.dateKey === "string" ? payload.dateKey : null,
+      routePath: typeof payload.routePath === "string" ? payload.routePath : null,
+    };
+  }, []);
+
   const {
     handleRestNotificationBridgeMessage,
     requestRestNotificationPermission,
@@ -1023,6 +1158,7 @@ export default function WebViewScreen() {
     getRestExpoPushTokenSnapshot,
   } = useRestNotificationBridge({
     onNavigate: navigateWebViewByTargetPath,
+    shouldInlineStartTodoPromptInForeground,
   });
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
@@ -1326,7 +1462,21 @@ export default function WebViewScreen() {
         setWebViewUri(prepared.entryUri);
       } catch (error) {
         console.log("Failed to prepare local web-ui file:", error);
-        Alert.alert("WebView Error", "Failed to prepare local web-ui file.");
+        if (!hasShownFatalStartupAlertRef.current) {
+          hasShownFatalStartupAlertRef.current = true;
+          const errorMessage = resolveWebUiStartupErrorMessage(error);
+          Alert.alert(
+            "앱 시작 오류",
+            errorMessage,
+            [
+              {
+                text: "확인",
+                onPress: closeAppFromFatalStartupError,
+              },
+            ],
+            { cancelable: false }
+          );
+        }
       } finally {
         setIsPreparingLocalFile(false);
       }
@@ -1494,11 +1644,15 @@ export default function WebViewScreen() {
       const isHandledBridgeMessage = await routeWebViewBridgeMessage(parsedData, {
         sync: {
           handleTodoSessionSync,
+          handleTodoViewSync,
           applyWeatherSettingsSync,
+          refreshNativeWeatherSnapshot,
         },
         notification: {
           sendBridgeResult,
-          requestRestNotificationPermission,
+          requestRestNotificationPermission: async () => {
+            await requestRestNotificationPermission();
+          },
           getRestNotificationPermissionSnapshot,
           getRestExpoPushTokenSnapshot,
           openAppSettings: async () => {

@@ -15,6 +15,7 @@ type DateTasksBottomSheetProps = {
   isExpanded: boolean;
   restFinishedRequested?: boolean;
   focusTargetElapsedRequested?: boolean;
+  startTodoPromptRequested?: boolean;
   focusTargetTodoId?: string | null;
   onExpandedChange: (isExpanded: boolean) => void;
 };
@@ -51,6 +52,7 @@ export function DateTasksBottomSheet({
   isExpanded,
   restFinishedRequested = false,
   focusTargetElapsedRequested = false,
+  startTodoPromptRequested = false,
   focusTargetTodoId = null,
   onExpandedChange,
 }: DateTasksBottomSheetProps) {
@@ -82,11 +84,14 @@ export function DateTasksBottomSheet({
     if (focusTargetElapsedRequested) {
       params.set("focusTargetElapsed", "1");
     }
+    if (startTodoPromptRequested) {
+      params.set("startTodoPrompt", "1");
+    }
     if (focusTargetTodoId) {
       params.set("todoId", focusTargetTodoId);
     }
     return `?${params.toString()}`;
-  }, [resolvedDateKey, restFinishedRequested, focusTargetElapsedRequested, focusTargetTodoId]);
+  }, [resolvedDateKey, restFinishedRequested, focusTargetElapsedRequested, startTodoPromptRequested, focusTargetTodoId]);
   const selectedDateLabel = formatSelectedDate(resolvedDateKey);
   const today = new Date();
   const todayDateKey = formatDateKey(today);

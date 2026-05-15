@@ -67,6 +67,7 @@ const DAILY_LOG_BY_DATE_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -94,6 +95,7 @@ const ADD_TODOS_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -121,6 +123,7 @@ const DELETE_TODO_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -148,6 +151,7 @@ const START_TODO_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -175,6 +179,7 @@ const PAUSE_TODO_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -202,6 +207,7 @@ const RESUME_TODO_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -229,6 +235,7 @@ const COMPLETE_TODO_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -256,6 +263,7 @@ const RESET_TODO_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -283,6 +291,7 @@ const REORDER_TODOS_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -310,6 +319,7 @@ const UPDATE_TODO_ACTUAL_FOCUS_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -337,6 +347,7 @@ const UPDATE_TODO_SCHEDULE_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -364,6 +375,63 @@ const UPDATE_TODO_TARGET_FOCUS_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
+      }
+    }
+  }
+`;
+
+const MUTE_TODO_REMINDER_TODAY_QUERY = /* GraphQL */ `
+  mutation MuteTodoReminderToday($input: TodoActionInput!) {
+    muteTodoReminderToday(input: $input) {
+      dateKey
+      memo
+      restAccumulatedSeconds
+      restStartedAt
+      todos {
+        id
+        taskId
+        titleSnapshot
+        content
+        done
+        order
+        startedAt
+        scheduledStartAt
+        targetFocusMinutes
+        pausedAt
+        completedAt
+        deviationSeconds
+        resumeCount
+        actualFocusSeconds
+        muteReminderDateKey
+      }
+    }
+  }
+`;
+
+const UNMUTE_TODO_REMINDER_QUERY = /* GraphQL */ `
+  mutation UnmuteTodoReminder($input: TodoActionInput!) {
+    unmuteTodoReminder(input: $input) {
+      dateKey
+      memo
+      restAccumulatedSeconds
+      restStartedAt
+      todos {
+        id
+        taskId
+        titleSnapshot
+        content
+        done
+        order
+        startedAt
+        scheduledStartAt
+        targetFocusMinutes
+        pausedAt
+        completedAt
+        deviationSeconds
+        resumeCount
+        actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -391,6 +459,7 @@ const START_REST_SESSION_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -418,6 +487,7 @@ const STOP_REST_SESSION_QUERY = /* GraphQL */ `
         deviationSeconds
         resumeCount
         actualFocusSeconds
+        muteReminderDateKey
       }
     }
   }
@@ -438,6 +508,7 @@ type DailyLogTodo = {
   deviationSeconds: number;
   resumeCount: number;
   actualFocusSeconds: number | null;
+  muteReminderDateKey: string | null;
 };
 
 type DailyLogPayload = {
@@ -529,6 +600,14 @@ type UpdateTodoScheduleMutation = {
 
 type UpdateTodoTargetFocusMutation = {
   updateTodoTargetFocus: DailyLogPayload;
+};
+
+type MuteTodoReminderTodayMutation = {
+  muteTodoReminderToday: DailyLogPayload;
+};
+
+type UnmuteTodoReminderMutation = {
+  unmuteTodoReminder: DailyLogPayload;
 };
 
 type StartRestSessionMutation = {
@@ -966,6 +1045,58 @@ export async function updateTodoTargetFocusFromDailyLog(input: {
   const next = result.data?.updateTodoTargetFocus;
   if (!next) {
     throw new Error("GraphQL updateTodoTargetFocus failed");
+  }
+  return next;
+}
+
+export async function muteTodoReminderTodayFromDailyLog(input: { dateKey: string; todoId: string }) {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: JSON.stringify({
+      query: MUTE_TODO_REMINDER_TODAY_QUERY,
+      variables: { input },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Mute todo reminder failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<MuteTodoReminderTodayMutation>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL muteTodoReminderToday failed");
+  }
+
+  const next = result.data?.muteTodoReminderToday;
+  if (!next) {
+    throw new Error("GraphQL muteTodoReminderToday failed");
+  }
+  return next;
+}
+
+export async function unmuteTodoReminderFromDailyLog(input: { dateKey: string; todoId: string }) {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: JSON.stringify({
+      query: UNMUTE_TODO_REMINDER_QUERY,
+      variables: { input },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unmute todo reminder failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<UnmuteTodoReminderMutation>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL unmuteTodoReminder failed");
+  }
+
+  const next = result.data?.unmuteTodoReminder;
+  if (!next) {
+    throw new Error("GraphQL unmuteTodoReminder failed");
   }
   return next;
 }

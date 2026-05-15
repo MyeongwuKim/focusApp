@@ -36,7 +36,7 @@ export function TodoTargetFocusModal({
   }
 
   const parsedMinutes = Number(minutes);
-  const disabled = !Number.isFinite(parsedMinutes) || parsedMinutes < 30;
+  const disabled = !Number.isFinite(parsedMinutes) || parsedMinutes < 1;
 
   return (
     <div
@@ -63,8 +63,8 @@ export function TodoTargetFocusModal({
         <div className="space-y-3">
           <InputField
             type="number"
-            min={30}
-            step={5}
+            min={1}
+            step={1}
             value={minutes}
             onChange={(event) => setMinutes(event.target.value)}
             onKeyDown={(event) => {
@@ -77,9 +77,9 @@ export function TodoTargetFocusModal({
               }
             }}
             className="w-full"
-            placeholder="목표 집중시간(최소 30분)"
+            placeholder="목표 집중시간(최소 1분)"
           />
-          <p className="m-0 text-xs text-base-content/60">최소 30분부터 설정할 수 있어요.</p>
+          <p className="m-0 text-xs text-base-content/60">최소 1분부터 설정할 수 있어요.</p>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => onSave(null)}>
               해제

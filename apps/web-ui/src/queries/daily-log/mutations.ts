@@ -9,9 +9,11 @@ import {
   reorderTodosFromDailyLog,
   resetTodoFromDailyLog,
   resumeTodoFromDailyLog,
+  muteTodoReminderTodayFromDailyLog,
   startRestSession,
   startTodoFromDailyLog,
   stopRestSession,
+  unmuteTodoReminderFromDailyLog,
   updateTodoActualFocusFromDailyLog,
   updateTodoTargetFocusFromDailyLog,
   updateTodoScheduleFromDailyLog,
@@ -234,6 +236,7 @@ function optimisticAddTodos(payload: DailyLogDetail, input: AddTodosToDailyLogIn
       deviationSeconds: 0,
       resumeCount: 0,
       actualFocusSeconds: null,
+      muteReminderDateKey: null,
     });
 
     if (taskId) {
@@ -393,6 +396,23 @@ function optimisticUpdateTargetFocus(
   return updateTodoById(payload, input.todoId, (todo) => ({
     ...todo,
     targetFocusMinutes: input.targetFocusMinutes,
+  }));
+}
+
+function optimisticMuteTodoReminderToday(
+  payload: DailyLogDetail,
+  input: { dateKey: string; todoId: string }
+): DailyLogDetail {
+  return updateTodoById(payload, input.todoId, (todo) => ({
+    ...todo,
+    muteReminderDateKey: input.dateKey,
+  }));
+}
+
+function optimisticUnmuteTodoReminder(payload: DailyLogDetail, input: { dateKey: string; todoId: string }): DailyLogDetail {
+  return updateTodoById(payload, input.todoId, (todo) => ({
+    ...todo,
+    muteReminderDateKey: null,
   }));
 }
 
@@ -704,6 +724,22 @@ export function useUpdateTodoTargetFocusMutation() {
   });
 }
 
+export function useMuteTodoReminderTodayMutation() {
+  return useOptimisticDailyLogMutation<{ dateKey: string; todoId: string }>({
+    mutationFn: (input) => muteTodoReminderTodayFromDailyLog(input),
+    syncMonthCache: true,
+    optimisticUpdater: optimisticMuteTodoReminderToday,
+  });
+}
+
+export function useUnmuteTodoReminderMutation() {
+  return useOptimisticDailyLogMutation<{ dateKey: string; todoId: string }>({
+    mutationFn: (input) => unmuteTodoReminderFromDailyLog(input),
+    syncMonthCache: true,
+    optimisticUpdater: optimisticUnmuteTodoReminder,
+  });
+}
+
 export function usePauseTodoFromDailyLogMutation() {
   return useOptimisticDailyLogMutation<{ dateKey: string; todoId: string }>({
     mutationFn: (input) => pauseTodoFromDailyLog(input),
@@ -746,6 +782,8 @@ export function useDailyLogMutation() {
   const updateTodoActualFocusMutation = useUpdateTodoActualFocusMutation();
   const updateTodoScheduleMutation = useUpdateTodoScheduleMutation();
   const updateTodoTargetFocusMutation = useUpdateTodoTargetFocusMutation();
+  const muteTodoReminderTodayMutation = useMuteTodoReminderTodayMutation();
+  const unmuteTodoReminderMutation = useUnmuteTodoReminderMutation();
   const startRestSessionMutation = useStartRestSessionMutation();
   const stopRestSessionMutation = useStopRestSessionMutation();
 
@@ -761,6 +799,8 @@ export function useDailyLogMutation() {
     updateTodoActualFocusMutation,
     updateTodoScheduleMutation,
     updateTodoTargetFocusMutation,
+    muteTodoReminderTodayMutation,
+    unmuteTodoReminderMutation,
     startRestSessionMutation,
     stopRestSessionMutation,
   };

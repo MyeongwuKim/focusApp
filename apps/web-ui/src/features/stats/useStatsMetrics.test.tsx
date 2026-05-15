@@ -77,6 +77,7 @@ function buildDailyDetail(done: boolean): NonNullable<DailyLogByDate> {
         startedAt: "2026-04-25T08:00:00.000Z",
         scheduledStartAt: null,
         targetFocusMinutes: null,
+        muteReminderDateKey: null,
         pausedAt: null,
         completedAt: done ? "2026-04-25T09:00:00.000Z" : null,
         deviationSeconds: 0,

@@ -61,3 +61,5 @@ export const useAuthStore = create<AuthStore>()(
     }
   )
 );
+
+export const selectIsLoggedIn = (state: Pick<AuthState, "token">) => Boolean(state.token);

@@ -205,3 +205,36 @@ export function cancelNativeRestNotification(dateKey?: string) {
     key: dateKey ? `rest-finished-${dateKey}` : undefined,
   });
 }
+
+function buildFocusTargetElapsedNotificationKey(dateKey: string, todoId: string) {
+  return `focus-target-elapsed-${dateKey}-${todoId}`;
+}
+
+export function scheduleNativeTargetFocusNotification(input: {
+  dateKey: string;
+  todoId: string;
+  seconds: number;
+  taskLabel?: string;
+  targetFocusMinutes?: number | null;
+}) {
+  const seconds = Number.isFinite(input.seconds) ? Math.max(1, Math.floor(input.seconds)) : 1;
+  const targetMinutes =
+    typeof input.targetFocusMinutes === "number" && Number.isFinite(input.targetFocusMinutes)
+      ? Math.max(Math.floor(input.targetFocusMinutes), 0)
+      : null;
+  const label = input.taskLabel?.trim() || "할일";
+  const bodyBase = targetMinutes ? `${label}, ${targetMinutes}분 목표` : label;
+  return postRestNotificationBridgeMessage("REST_NOTIFICATION_SCHEDULE", {
+    key: buildFocusTargetElapsedNotificationKey(input.dateKey, input.todoId),
+    title: "목표 집중시간 도달",
+    body: `${bodyBase}. 이어가기 또는 완료를 선택해 주세요.`,
+    targetPath: `/calendar?sheet=1&date=${input.dateKey}&focusTargetElapsed=1&todoId=${encodeURIComponent(input.todoId)}`,
+    seconds,
+  });
+}
+
+export function cancelNativeTargetFocusNotification(input: { dateKey: string; todoId: string }) {
+  return postRestNotificationBridgeMessage("REST_NOTIFICATION_CANCEL", {
+    key: buildFocusTargetElapsedNotificationKey(input.dateKey, input.todoId),
+  });
+}

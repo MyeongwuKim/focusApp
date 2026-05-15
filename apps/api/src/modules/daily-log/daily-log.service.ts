@@ -99,7 +99,8 @@ export class DailyLogService {
       completedAt: null,
       deviationSeconds: 0,
       resumeCount: 0,
-      actualFocusSeconds: null
+      actualFocusSeconds: null,
+      muteReminderDateKey: null,
     };
 
     const nextTodos = [...log.todos, todo];
@@ -178,7 +179,8 @@ export class DailyLogService {
         completedAt: null,
         deviationSeconds: 0,
         resumeCount: 0,
-        actualFocusSeconds: null
+        actualFocusSeconds: null,
+        muteReminderDateKey: null,
       });
 
       if (taskId) {
@@ -527,7 +529,7 @@ export class DailyLogService {
         throw new Error("INVALID_TARGET_FOCUS_MINUTES");
       }
       nextTargetFocusMinutes = Math.floor(input.targetFocusMinutes);
-      if (nextTargetFocusMinutes < 30) {
+      if (nextTargetFocusMinutes < 1) {
         throw new Error("INVALID_TARGET_FOCUS_MINUTES");
       }
     }
@@ -537,6 +539,53 @@ export class DailyLogService {
     nextTodos[targetIndex] = {
       ...targetTodo,
       targetFocusMinutes: nextTargetFocusMinutes,
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async muteTodoReminderToday(input: CompleteTodoInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    const todayDateKey = getTodayDateKey();
+    const nextTodos = [...log.todos];
+    const targetTodo = nextTodos[targetIndex];
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      muteReminderDateKey: todayDateKey,
+    };
+
+    return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);
+  }
+
+  async unmuteTodoReminder(input: CompleteTodoInput) {
+    const log = await this.repository.findByDate(input.userId, input.dateKey);
+    if (!log) {
+      throw new Error("DAILY_LOG_NOT_FOUND");
+    }
+
+    const targetIndex = log.todos.findIndex((todo) => todo.id === input.todoId);
+    if (targetIndex < 0) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    const targetTodo = log.todos[targetIndex];
+    if (!targetTodo.muteReminderDateKey) {
+      return log;
+    }
+
+    const nextTodos = [...log.todos];
+    nextTodos[targetIndex] = {
+      ...targetTodo,
+      muteReminderDateKey: null,
     };
 
     return this.repository.replaceTodos(input.userId, input.dateKey, nextTodos);

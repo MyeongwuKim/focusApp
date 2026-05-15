@@ -91,6 +91,7 @@ function buildDailyLogDetail(input?: {
     deviationSeconds: 0,
     resumeCount: 0,
     actualFocusSeconds: null,
+    muteReminderDateKey: null,
   };
   const mergedTodo: DailyLogDetail["todos"][number] = {
     ...baseTodo,
