@@ -45,6 +45,36 @@ function formatScheduledTime(epochMs: number) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function buildTargetFocusBadgeText(item: TaskItem) {
+  if (!item.targetFocusMinutes) {
+    return null;
+  }
+
+  if (item.status !== "in_progress" || !item.startedAt) {
+    return `${item.targetFocusMinutes}분`;
+  }
+
+  const deviationSeconds =
+    typeof item.deviationSeconds === "number" && Number.isFinite(item.deviationSeconds)
+      ? Math.max(Math.floor(item.deviationSeconds), 0)
+      : 0;
+  const baselineSeconds =
+    typeof item.targetFocusBaselineSeconds === "number" && Number.isFinite(item.targetFocusBaselineSeconds)
+      ? Math.max(Math.floor(item.targetFocusBaselineSeconds), 0)
+      : 0;
+  const actualFocusSeconds = Math.max(Math.floor((Date.now() - item.startedAt) / 1000) - deviationSeconds, 0);
+  const effectiveActualFocusSeconds = Math.max(actualFocusSeconds - baselineSeconds, 0);
+  const targetSeconds = item.targetFocusMinutes * 60;
+  const overflowSeconds = effectiveActualFocusSeconds - targetSeconds;
+
+  if (overflowSeconds <= 0) {
+    return `${item.targetFocusMinutes}분`;
+  }
+
+  const overflowMinutes = Math.max(Math.floor(overflowSeconds / 60), 1);
+  return `초과 +${overflowMinutes}분`;
+}
+
 function renderTaskActions(
   item: TaskItem,
   onTaskAction: TodoItemCardProps["onTaskAction"],
@@ -155,6 +185,8 @@ export function TodoItemCard({
   isDragging = false,
   isLongPressActive = false,
 }: TodoItemCardProps) {
+  const targetFocusBadgeText = buildTargetFocusBadgeText(item);
+
   return (
     <div
       className={[
@@ -185,10 +217,10 @@ export function TodoItemCard({
             {formatScheduledTime(item.scheduledStartAt)}
           </span>
         ) : null}
-        {item.targetFocusMinutes ? (
+        {targetFocusBadgeText ? (
           <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-warning/85">
             <FiTarget size={11} />
-            {item.targetFocusMinutes}분
+            {targetFocusBadgeText}
           </span>
         ) : null}
         <Button

@@ -335,6 +335,46 @@ function buildWebUiUriWithHash(baseUri: string, callbackHash: string) {
   return `${sanitizedBase}${normalizedHash}`;
 }
 
+function parseTodoViewSnapshotFromWebViewUrl(rawUrl: string): NativeTodoViewSnapshot {
+  try {
+    const parsed = new URL(rawUrl);
+    const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+    const normalizedHash = hash.startsWith("/") ? hash : `/${hash}`;
+    const [pathname, rawSearch = ""] = normalizedHash.split("?", 2);
+    const searchParams = new URLSearchParams(rawSearch);
+    const todayKey = formatLocalDateKey(new Date());
+
+    if (pathname === "/date-tasks") {
+      const dateKey = searchParams.get("date") ?? todayKey;
+      return {
+        isViewingTodayTodoSurface: dateKey === todayKey,
+        source: "date-tasks",
+        dateKey,
+        routePath: normalizedHash,
+      };
+    }
+
+    if (pathname === "/calendar" && searchParams.get("sheet") === "1") {
+      const dateKey = searchParams.get("date") ?? todayKey;
+      return {
+        isViewingTodayTodoSurface: dateKey === todayKey,
+        source: "calendar-sheet",
+        dateKey,
+        routePath: normalizedHash,
+      };
+    }
+  } catch {
+    // ignore invalid URL
+  }
+
+  return {
+    isViewingTodayTodoSurface: false,
+    source: "none",
+    dateKey: null,
+    routePath: null,
+  };
+}
+
 function convertCalendarSheetPathToDateTasksPath(targetPath: string) {
   if (!targetPath.startsWith("/calendar")) {
     return targetPath;
@@ -1805,6 +1845,7 @@ export default function WebViewScreen() {
               setCanGoBack(navState.canGoBack);
               const nextUrl = navState.url ?? "";
               setIsExternalNavigation(!nextUrl.startsWith("file://"));
+              nativeTodoViewRef.current = parseTodoViewSnapshotFromWebViewUrl(nextUrl);
             }}
             onMessage={handleMessage}
             onHttpError={(event) => {

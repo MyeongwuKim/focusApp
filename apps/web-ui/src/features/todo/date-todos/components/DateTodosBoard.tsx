@@ -39,6 +39,7 @@ type DailyLogPreview = {
     targetFocusMinutes: number | null;
     pausedAt: string | null;
     completedAt: string | null;
+    deviationSeconds?: number;
     actualFocusSeconds: number | null;
   }>;
 } | null;
@@ -112,6 +113,10 @@ function mapPreviewLogToTaskItems(dateKey: string, log: DailyLogPreview): TaskIt
         status,
         accumulatedMs: completedDurationMs ?? 0,
         startedAt: status === "in_progress" ? startedAt : null,
+        deviationSeconds:
+          typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
+            ? Math.max(Math.floor(todo.deviationSeconds), 0)
+            : 0,
         scheduledStartAt,
         targetFocusMinutes,
         completedAt: status === "done" ? completedAt : null,

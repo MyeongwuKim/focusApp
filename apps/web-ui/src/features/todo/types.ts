@@ -6,6 +6,8 @@ export type TaskItem = {
   status: TaskStatus;
   accumulatedMs: number;
   startedAt: number | null;
+  deviationSeconds?: number;
+  targetFocusBaselineSeconds?: number;
   scheduledStartAt: number | null;
   targetFocusMinutes: number | null;
   muteReminderDateKey?: string | null;

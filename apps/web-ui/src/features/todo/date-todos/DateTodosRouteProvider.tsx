@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TaskItem } from "../types";
 import type { RoutineTemplate } from "../../../api/routineTemplateApi";
 import { useDailyLogMutation, useDailyLogQuery, useRoutineTemplateMutation, useRoutineTemplateQuery } from "../../../queries";
@@ -27,6 +27,12 @@ type DateTodosSession = {
   restMinutes: number;
   active: "focus" | "rest" | null;
   restDurationPreviewMin: number | null;
+};
+
+type TargetFocusBaselineEntry = {
+  startedAtMs: number;
+  targetFocusMinutes: number;
+  baselineActualFocusSeconds: number;
 };
 
 type DailyLogWithTodos = {
@@ -121,6 +127,23 @@ function toEpochMillis(value: string | null) {
   return Number.isFinite(epoch) ? epoch : null;
 }
 
+function getTodoActualFocusSecondsNow(todo: {
+  startedAt: string | null;
+  pausedAt: string | null;
+  deviationSeconds: number;
+}) {
+  const startedAtMs = toEpochMillis(todo.startedAt);
+  if (!startedAtMs) {
+    return null;
+  }
+  const endMs = toEpochMillis(todo.pausedAt) ?? Date.now();
+  const deviationSeconds =
+    typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
+      ? Math.max(Math.floor(todo.deviationSeconds), 0)
+      : 0;
+  return Math.max(Math.floor((endMs - startedAtMs) / 1000) - deviationSeconds, 0);
+}
+
 function mapDailyLogTodosToTaskItems(
   dateKey: string,
   todayKey: string,
@@ -165,7 +188,11 @@ function mapDailyLogTodosToTaskItems(
         label: todo.content,
         status,
         accumulatedMs: completedDurationMs ?? 0,
-        startedAt: status === "in_progress" ? startedAt : null,
+        startedAt,
+        deviationSeconds:
+          typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
+            ? Math.max(Math.floor(todo.deviationSeconds), 0)
+            : 0,
         scheduledStartAt,
         targetFocusMinutes,
         muteReminderDateKey: todo.muteReminderDateKey ?? null,
@@ -189,6 +216,8 @@ function isSameTaskItems(a: TaskItem[], b: TaskItem[]) {
       current.status !== next.status ||
       current.accumulatedMs !== next.accumulatedMs ||
       current.startedAt !== next.startedAt ||
+      current.deviationSeconds !== next.deviationSeconds ||
+      current.targetFocusBaselineSeconds !== next.targetFocusBaselineSeconds ||
       current.scheduledStartAt !== next.scheduledStartAt ||
       current.targetFocusMinutes !== next.targetFocusMinutes ||
       current.muteReminderDateKey !== next.muteReminderDateKey ||
@@ -264,6 +293,7 @@ export function DateTodosRouteProvider({
   const startTodoPromptInFlightRef = useRef(false);
   const startTodoPromptKeyRef = useRef<string | null>(null);
   const scheduledTargetFocusNotificationKeyRef = useRef<{ dateKey: string; todoId: string } | null>(null);
+  const targetFocusBaselineByTodoRef = useRef<Map<string, TargetFocusBaselineEntry>>(new Map());
   const reorderPersistRequestIdRef = useRef(0);
 
   const { dailyLogByDateQuery: dailyLogQuery } = useDailyLogQuery({ dateKey });
@@ -320,6 +350,7 @@ export function DateTodosRouteProvider({
       pendingStartTodoPromptRef.current = false;
       startTodoPromptInFlightRef.current = false;
       startTodoPromptKeyRef.current = null;
+      targetFocusBaselineByTodoRef.current.clear();
       setHydratedDateKey(null);
       return;
     }
@@ -336,8 +367,92 @@ export function DateTodosRouteProvider({
     pendingStartTodoPromptRef.current = false;
     startTodoPromptInFlightRef.current = false;
     startTodoPromptKeyRef.current = null;
+    targetFocusBaselineByTodoRef.current.clear();
     setHydratedDateKey(null);
   }, [dateKey]);
+
+  const applyTargetFocusBaselines = useCallback((
+    nextItems: TaskItem[],
+    sourceTodos?: DailyLogWithTodos["todos"]
+  ): TaskItem[] => {
+    if (nextItems.length === 0) {
+      targetFocusBaselineByTodoRef.current.clear();
+      return nextItems;
+    }
+
+    const todoById = new Map((sourceTodos ?? []).map((todo) => [todo.id, todo] as const));
+    const activeIds = new Set(nextItems.map((item) => item.id));
+    const baselineMap = targetFocusBaselineByTodoRef.current;
+
+    for (const todoId of Array.from(baselineMap.keys())) {
+      if (!activeIds.has(todoId)) {
+        baselineMap.delete(todoId);
+        continue;
+      }
+      const sourceTodo = todoById.get(todoId);
+      if (!sourceTodo) {
+        baselineMap.delete(todoId);
+        continue;
+      }
+      const startedAtMs = toEpochMillis(sourceTodo.startedAt);
+      const targetMinutes =
+        typeof sourceTodo.targetFocusMinutes === "number" && Number.isFinite(sourceTodo.targetFocusMinutes)
+          ? Math.floor(sourceTodo.targetFocusMinutes)
+          : null;
+      const baseline = baselineMap.get(todoId);
+      if (!startedAtMs || !targetMinutes || !baseline) {
+        baselineMap.delete(todoId);
+        continue;
+      }
+      if (baseline.startedAtMs !== startedAtMs || baseline.targetFocusMinutes !== targetMinutes) {
+        baselineMap.delete(todoId);
+      }
+    }
+
+    return nextItems.map((item) => {
+      const sourceTodo = todoById.get(item.id);
+      if (!sourceTodo || !item.targetFocusMinutes || !item.startedAt) {
+        return { ...item, targetFocusBaselineSeconds: undefined };
+      }
+
+      const baseline = baselineMap.get(item.id);
+      if (!baseline) {
+        return { ...item, targetFocusBaselineSeconds: undefined };
+      }
+
+      if (
+        baseline.startedAtMs !== item.startedAt ||
+        baseline.targetFocusMinutes !== item.targetFocusMinutes
+      ) {
+        baselineMap.delete(item.id);
+        return { ...item, targetFocusBaselineSeconds: undefined };
+      }
+
+      return {
+        ...item,
+        targetFocusBaselineSeconds: baseline.baselineActualFocusSeconds,
+      };
+    });
+  }, []);
+
+  const updateTargetFocusBaseline = useCallback((input: {
+    todoId: string;
+    targetFocusMinutes: number | null;
+    startedAt: number | null;
+    baselineActualFocusSeconds: number;
+  }) => {
+    const baselineMap = targetFocusBaselineByTodoRef.current;
+    if (!input.targetFocusMinutes || !input.startedAt) {
+      baselineMap.delete(input.todoId);
+      return;
+    }
+
+    baselineMap.set(input.todoId, {
+      startedAtMs: input.startedAt,
+      targetFocusMinutes: input.targetFocusMinutes,
+      baselineActualFocusSeconds: Math.max(Math.floor(input.baselineActualFocusSeconds), 0),
+    });
+  }, []);
 
   useEffect(() => {
     const previous = scheduledTargetFocusNotificationKeyRef.current;
@@ -388,13 +503,17 @@ export function DateTodosRouteProvider({
       cancelNativeTargetFocusNotification(previous);
     }
 
-    const deviationSeconds =
-      typeof inProgressWithTarget.deviationSeconds === "number" && Number.isFinite(inProgressWithTarget.deviationSeconds)
-        ? Math.max(Math.floor(inProgressWithTarget.deviationSeconds), 0)
-        : 0;
     const targetSeconds = Math.max(Math.floor((inProgressWithTarget.targetFocusMinutes ?? 0) * 60), 0);
-    const actualFocusSeconds = Math.max(Math.floor((Date.now() - startedAtMs) / 1000) - deviationSeconds, 0);
-    const remainingSeconds = Math.max(targetSeconds - actualFocusSeconds, 0);
+    const actualFocusSeconds = getTodoActualFocusSecondsNow(inProgressWithTarget) ?? 0;
+    const baseline = targetFocusBaselineByTodoRef.current.get(inProgressWithTarget.id);
+    const baselineSeconds =
+      baseline &&
+      baseline.startedAtMs === startedAtMs &&
+      baseline.targetFocusMinutes === Math.floor(inProgressWithTarget.targetFocusMinutes ?? 0)
+        ? baseline.baselineActualFocusSeconds
+        : 0;
+    const effectiveActualFocusSeconds = Math.max(actualFocusSeconds - baselineSeconds, 0);
+    const remainingSeconds = Math.max(targetSeconds - effectiveActualFocusSeconds, 0);
 
     scheduleNativeTargetFocusNotification({
       dateKey,
@@ -447,10 +566,11 @@ export function DateTodosRouteProvider({
     }
 
     const todos = dailyLogQuery.data?.todos ?? [];
-    const nextItems = mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), todos);
+    const mappedItems = mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), todos);
+    const nextItems = applyTargetFocusBaselines(mappedItems, todos);
     setDateTasksRouteItems((previous) => (isSameTaskItems(previous, nextItems) ? previous : nextItems));
     setHydratedDateKey(dateKey);
-  }, [dateKey, dailyLogQuery.data, dailyLogQuery.isSuccess]);
+  }, [applyTargetFocusBaselines, dateKey, dailyLogQuery.data, dailyLogQuery.isSuccess]);
 
   const restStartedAtMs = useMemo(() => {
     const value = dailyLogQuery.data?.restStartedAt ?? null;
@@ -525,9 +645,9 @@ export function DateTodosRouteProvider({
     if (!dateKey) {
       return;
     }
-    setDateTasksRouteItems(
-      mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), nextLog?.todos ?? [])
-    );
+    const todos = nextLog?.todos ?? [];
+    const mappedItems = mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), todos);
+    setDateTasksRouteItems(applyTargetFocusBaselines(mappedItems, todos));
     setHydratedDateKey(dateKey);
   };
 
@@ -746,7 +866,6 @@ export function DateTodosRouteProvider({
       return;
     }
 
-    const nowMs = Date.now();
     const todos = dailyLogQuery.data?.todos ?? [];
     const targetTodo = todos.find((todo) => {
       if (todo.done || todo.completedAt || !todo.startedAt || todo.pausedAt) {
@@ -763,12 +882,17 @@ export function DateTodosRouteProvider({
       if (!startedAtMs) {
         return false;
       }
-      const deviationSeconds =
-        typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
-          ? Math.max(Math.floor(todo.deviationSeconds), 0)
+      const actualFocusSeconds = getTodoActualFocusSecondsNow(todo);
+      if (actualFocusSeconds === null) {
+        return false;
+      }
+      const baseline = targetFocusBaselineByTodoRef.current.get(todo.id);
+      const baselineSeconds =
+        baseline && baseline.startedAtMs === startedAtMs && baseline.targetFocusMinutes === targetMinutes
+          ? baseline.baselineActualFocusSeconds
           : 0;
-      const actualFocusSeconds = Math.max(Math.floor((nowMs - startedAtMs) / 1000) - deviationSeconds, 0);
-      const remainingSeconds = targetMinutes * 60 - actualFocusSeconds;
+      const effectiveActualFocusSeconds = Math.max(actualFocusSeconds - baselineSeconds, 0);
+      const remainingSeconds = targetMinutes * 60 - effectiveActualFocusSeconds;
       return remainingSeconds <= 0;
     });
 
@@ -933,6 +1057,7 @@ export function DateTodosRouteProvider({
     updateTodoActualFocus: updateTodoActualFocusMutation.mutateAsync,
     updateTodoSchedule: updateTodoScheduleMutation.mutateAsync,
     updateTodoTargetFocus: updateTodoTargetFocusMutation.mutateAsync,
+    updateTargetFocusBaseline,
     muteTodoReminderToday: muteTodoReminderTodayMutation.mutateAsync,
     unmuteTodoReminder: unmuteTodoReminderMutation.mutateAsync,
   });

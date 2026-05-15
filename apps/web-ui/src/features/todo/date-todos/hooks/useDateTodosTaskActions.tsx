@@ -62,6 +62,12 @@ type UseDateTodosTaskActionsParams = {
     todoId: string;
     targetFocusMinutes: number | null;
   }) => Promise<DailyLogWithTodos>;
+  updateTargetFocusBaseline: (input: {
+    todoId: string;
+    targetFocusMinutes: number | null;
+    startedAt: number | null;
+    baselineActualFocusSeconds: number;
+  }) => void;
   muteTodoReminderToday: (input: { dateKey: string; todoId: string }) => Promise<DailyLogWithTodos>;
   unmuteTodoReminder: (input: { dateKey: string; todoId: string }) => Promise<DailyLogWithTodos>;
 };
@@ -89,6 +95,7 @@ export function useDateTodosTaskActions({
   updateTodoActualFocus,
   updateTodoSchedule,
   updateTodoTargetFocus,
+  updateTargetFocusBaseline,
   muteTodoReminderToday,
   unmuteTodoReminder,
 }: UseDateTodosTaskActionsParams) {
@@ -221,7 +228,7 @@ export function useDateTodosTaskActions({
       toast.show({
         type: "positive",
         title: "집중 시간 수정됨",
-        message: "집중 시간이 업데이트되었습니다.",
+        message: "집중 시간을 업데이트했어요.",
         duration: 1800,
       });
     } catch (error) {
@@ -333,12 +340,27 @@ export function useDateTodosTaskActions({
     }
 
     try {
+      const baselineTarget = items.find((item) => item.id === editingTargetFocus.taskId);
+      const baselineActualFocusSeconds =
+        baselineTarget && baselineTarget.startedAt
+          ? Math.max(
+              Math.floor((Date.now() - baselineTarget.startedAt) / 1000) -
+                Math.max(Math.floor(baselineTarget.deviationSeconds ?? 0), 0),
+              0
+            )
+          : 0;
       const nextLog = await updateTodoTargetFocus({
         dateKey,
         todoId: editingTargetFocus.taskId,
         targetFocusMinutes: minutes === null ? null : Math.floor(minutes),
       });
       applyDailyLog(nextLog);
+      updateTargetFocusBaseline({
+        todoId: editingTargetFocus.taskId,
+        targetFocusMinutes: minutes === null ? null : Math.floor(minutes),
+        startedAt: baselineTarget?.startedAt ?? null,
+        baselineActualFocusSeconds,
+      });
       setEditingTargetFocus(null);
       toast.show({
         type: "positive",
@@ -405,7 +427,7 @@ export function useDateTodosTaskActions({
     const canClearTargetFocus = canSetTargetFocus && Boolean(target.targetFocusMinutes);
     const resetLabel = "초기화";
     const resetDescription =
-      target.status === "done" ? "시작 전 상태로 되돌립니다." : "진행 기록을 초기화하고 시작 전 상태로 되돌립니다.";
+      target.status === "done" ? "시작 전 상태로 되돌려요." : "진행 기록을 초기화하고 시작 전 상태로 되돌려요.";
 
     const result = await actionSheet({
       title: target.label,
@@ -418,7 +440,7 @@ export function useDateTodosTaskActions({
                 value: "mark_done",
                 tone: "primary" as const,
                 icon: <FiCheckCircle size={14} />,
-                description: "완료 상태로 변경합니다.",
+                description: "완료 상태로 바꿔요.",
               },
             ]
           : []),
@@ -438,7 +460,7 @@ export function useDateTodosTaskActions({
           value: "schedule",
           tone: "primary",
           icon: <FiClock size={14} />,
-          description: "알림 예정 시간을 설정합니다.",
+          description: "알림 예정 시간을 설정해요.",
         },
         ...(canClearSchedule
           ? [
@@ -447,7 +469,7 @@ export function useDateTodosTaskActions({
                 value: "clear_schedule",
                 tone: "muted" as const,
                 icon: <FiClock size={14} />,
-                description: "설정한 시작시간을 제거합니다.",
+                description: "설정한 시작시간을 지워요.",
               },
             ]
           : []),
@@ -469,7 +491,7 @@ export function useDateTodosTaskActions({
                 value: "clear_target_focus",
                 tone: "muted" as const,
                 icon: <FiTarget size={14} />,
-                description: "설정한 목표시간을 제거합니다.",
+                description: "설정한 목표시간을 지워요.",
               },
             ]
           : []),
@@ -481,8 +503,8 @@ export function useDateTodosTaskActions({
                 tone: "muted" as const,
                 icon: <FiClock size={14} />,
                 description: isReminderMutedToday
-                  ? "오늘 리마인드 제외를 해제합니다."
-                  : "오늘 하루 이 할일 리마인드를 중지합니다.",
+                  ? "오늘 리마인드 제외를 해제해요."
+                  : `오늘 하루 '${target.label}'의 리마인드 알림을 받지 않아요.`,
               },
             ]
           : []),
@@ -491,7 +513,7 @@ export function useDateTodosTaskActions({
           value: "delete",
           tone: "danger",
           icon: <FiTrash2 size={14} />,
-          description: "이 할일을 목록에서 제거합니다.",
+          description: "이 할일을 목록에서 지워요.",
         },
       ],
     });
@@ -587,6 +609,12 @@ export function useDateTodosTaskActions({
           targetFocusMinutes: null,
         });
         applyDailyLog(nextLog);
+        updateTargetFocusBaseline({
+          todoId: taskId,
+          targetFocusMinutes: null,
+          startedAt: null,
+          baselineActualFocusSeconds: 0,
+        });
         toast.show({
           type: "positive",
           title: "목표시간 해제됨",
@@ -631,7 +659,7 @@ export function useDateTodosTaskActions({
         toast.show({
           type: "positive",
           title: "삭제됨",
-          message: "할일이 삭제되었습니다.",
+          message: "할일을 삭제했어요.",
           duration: 1800,
         });
       } catch (error) {
