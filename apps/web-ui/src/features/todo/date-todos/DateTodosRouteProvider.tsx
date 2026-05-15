@@ -373,7 +373,7 @@ export function DateTodosRouteProvider({
 
   const applyTargetFocusBaselines = useCallback((
     nextItems: TaskItem[],
-    sourceTodos?: DailyLogWithTodos["todos"]
+    sourceTodos?: NonNullable<DailyLogWithTodos>["todos"]
   ): TaskItem[] => {
     if (nextItems.length === 0) {
       targetFocusBaselineByTodoRef.current.clear();
