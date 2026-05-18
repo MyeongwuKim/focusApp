@@ -13,15 +13,13 @@ import {
   isWithinWindow,
   normalizeTone,
   parseHHmmToMinutes,
-  pickDueScheduledTodos,
   pickFirstOpenTodo,
   type ReminderTone,
 } from "./notification-batch.utils.js";
 
 type ReminderKind =
   | "empty_todo_start"
-  | "incomplete_todo"
-  | "scheduled_todo_start";
+  | "incomplete_todo";
 
 type RunNotificationBatchInput = {
   prisma: PrismaClient;
@@ -65,14 +63,6 @@ const INCOMPLETE_COPY_BY_TONE: Record<ReminderTone, string> = {
   firm: "아직 시작하지 않았거나 멈춘 작업이 남아 있습니다. 지금 바로 시작해 주세요.",
 };
 
-const SCHEDULED_START_COPY_BY_TONE: Record<ReminderTone, string> = {
-  soft: "설정해둔 시작 시간이 됐어요. 가볍게 시작해볼까요?",
-  balanced: "설정해둔 시작 시간이 됐어요. 지금 시작해볼까요?",
-  firm: "설정해둔 시작 시간이 됐습니다. 지금 바로 시작해 주세요.",
-};
-
-const sentScheduledReminderMap = new Map<string, number>();
-const SCHEDULED_REMINDER_DEDUPE_TTL_MS = 10 * 60 * 1000;
 const REMINDER_LOCK_TTL_MS = 90 * 1000;
 
 export async function runNotificationBatch(input: RunNotificationBatchInput): Promise<NotificationBatchResult> {
@@ -267,83 +257,6 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         data: updateData,
       });
     };
-    const scheduleWindowMs = Math.max(env.NOTIFICATION_BATCH_INTERVAL_SECONDS * 2 * 1000 + 10000, 130 * 1000);
-    const scheduledTargets = pickDueScheduledTodos({
-      todos,
-      now,
-      scheduleWindowMs,
-      dateKey: nowInTimezone.dateKey,
-    });
-
-    if (scheduledTargets.length > 0 && settings.typeFocusStart) {
-      const dedupeTargets = scheduledTargets.filter((target) => {
-        const scheduledBucket = Math.floor(target.scheduledAtMs / 60000);
-        const dedupeKey = `${settings.userId}:${target.todoId}:${scheduledBucket}`;
-        const sentAt = sentScheduledReminderMap.get(dedupeKey);
-        return !(sentAt && now.getTime() - sentAt <= SCHEDULED_REMINDER_DEDUPE_TTL_MS);
-      });
-
-      if (dedupeTargets.length === 0) {
-        await scheduleNextReminder();
-        continue;
-      }
-
-      const scheduledLabel = dedupeTargets[0].label;
-      const scheduledCountSuffix =
-        dedupeTargets.length > 1 ? ` 외 ${dedupeTargets.length - 1}개 할일` : "";
-      const scheduledBody = `${scheduledLabel}, ${SCHEDULED_START_COPY_BY_TONE[tone]}`;
-      const scheduledBodyWithCount =
-        dedupeTargets.length > 1
-          ? `${scheduledLabel}${scheduledCountSuffix}, ${SCHEDULED_START_COPY_BY_TONE[tone]}`
-          : scheduledBody;
-
-      deliveries.push({
-        userId: settings.userId,
-        kind: "scheduled_todo_start",
-        title: "할일 시작 시간",
-        body: scheduledBodyWithCount,
-        tone,
-      });
-
-      if (!dryRun) {
-        const topScheduledTodoId = dedupeTargets[0]?.todoId;
-        const targetPath = topScheduledTodoId
-          ? `/date-tasks?date=${nowInTimezone.dateKey}&startTodoPrompt=1&todoId=${encodeURIComponent(topScheduledTodoId)}`
-          : `/date-tasks?date=${nowInTimezone.dateKey}`;
-        const tokens = await input.prisma.pushDeviceToken.findMany({
-          where: { userId: settings.userId, isActive: true },
-          select: { pushToken: true },
-        });
-        attemptedTokenCount += tokens.length;
-        if (tokens.length > 0) {
-          await sendExpoPushMessages({
-            entries: tokens.map((token) => ({
-              pushToken: token.pushToken,
-              title: "할일 시작 시간",
-              body: scheduledBodyWithCount,
-              data: {
-                kind: "scheduled_todo_start",
-                taskLabel: scheduledLabel,
-                taskCount: dedupeTargets.length,
-                todoId: topScheduledTodoId ?? null,
-                dateKey: nowInTimezone.dateKey,
-                targetPath,
-              },
-            })),
-            prisma: input.prisma,
-          });
-          dedupeTargets.forEach((target) => {
-            const scheduledBucket = Math.floor(target.scheduledAtMs / 60000);
-            const dedupeKey = `${settings.userId}:${target.todoId}:${scheduledBucket}`;
-            sentScheduledReminderMap.set(dedupeKey, now.getTime());
-          });
-        }
-      }
-
-      await scheduleNextReminder();
-      continue;
-    }
-
     if (todoCount === 0) {
       if (!settings.typeFocusStart) {
         await scheduleNextReminder();
@@ -409,7 +322,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       if (!dryRun) {
         const todoIdForPrompt = firstOpenTodo.id ?? null;
         const targetPath = todoIdForPrompt
-          ? `/date-tasks?date=${nowInTimezone.dateKey}&startTodoPrompt=1&todoId=${encodeURIComponent(todoIdForPrompt)}`
+          ? `/date-tasks?date=${nowInTimezone.dateKey}&startTodoPrompt=1&startTodoPromptSource=incomplete&todoId=${encodeURIComponent(todoIdForPrompt)}`
           : `/date-tasks?date=${nowInTimezone.dateKey}`;
         const tokens = await input.prisma.pushDeviceToken.findMany({
           where: { userId: settings.userId, isActive: true },

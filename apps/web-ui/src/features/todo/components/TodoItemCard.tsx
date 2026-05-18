@@ -50,6 +50,10 @@ function buildTargetFocusBadgeText(item: TaskItem) {
     return null;
   }
 
+  if (item.status === "done" || item.status === "overdue") {
+    return null;
+  }
+
   if (item.status !== "in_progress" || !item.startedAt) {
     return `${item.targetFocusMinutes}분`;
   }

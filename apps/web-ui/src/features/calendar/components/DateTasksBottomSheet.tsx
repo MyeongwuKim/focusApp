@@ -17,6 +17,8 @@ type DateTasksBottomSheetProps = {
   focusTargetElapsedRequested?: boolean;
   startTodoPromptRequested?: boolean;
   focusTargetTodoId?: string | null;
+  startTodoPromptAt?: string | null;
+  startTodoPromptSource?: string | null;
   onExpandedChange: (isExpanded: boolean) => void;
 };
 
@@ -54,6 +56,8 @@ export function DateTasksBottomSheet({
   focusTargetElapsedRequested = false,
   startTodoPromptRequested = false,
   focusTargetTodoId = null,
+  startTodoPromptAt = null,
+  startTodoPromptSource = null,
   onExpandedChange,
 }: DateTasksBottomSheetProps) {
   type LocalOverlayLayer = "routine-import" | "routine-create" | "task-picker" | "memo" | null;
@@ -90,8 +94,22 @@ export function DateTasksBottomSheet({
     if (focusTargetTodoId) {
       params.set("todoId", focusTargetTodoId);
     }
+    if (startTodoPromptAt) {
+      params.set("promptAt", startTodoPromptAt);
+    }
+    if (startTodoPromptSource) {
+      params.set("startTodoPromptSource", startTodoPromptSource);
+    }
     return `?${params.toString()}`;
-  }, [resolvedDateKey, restFinishedRequested, focusTargetElapsedRequested, startTodoPromptRequested, focusTargetTodoId]);
+  }, [
+    resolvedDateKey,
+    restFinishedRequested,
+    focusTargetElapsedRequested,
+    startTodoPromptRequested,
+    focusTargetTodoId,
+    startTodoPromptAt,
+    startTodoPromptSource,
+  ]);
   const selectedDateLabel = formatSelectedDate(resolvedDateKey);
   const today = new Date();
   const todayDateKey = formatDateKey(today);

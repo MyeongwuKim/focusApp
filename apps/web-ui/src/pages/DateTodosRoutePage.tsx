@@ -43,6 +43,8 @@ export function DateTodosRoutePage({
   const focusTargetElapsedRequested = searchParams.get("focusTargetElapsed") === "1";
   const startTodoPromptRequested = searchParams.get("startTodoPrompt") === "1";
   const focusTargetTodoId = searchParams.get("todoId");
+  const startTodoPromptAt = searchParams.get("promptAt");
+  const startTodoPromptSource = searchParams.get("startTodoPromptSource");
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
   const isRoutineImportRoute = normalizedPathname === "/date-tasks/routines";
   const isRoutineCreateRoute = normalizedPathname === "/date-tasks/routines/new";
@@ -61,6 +63,8 @@ export function DateTodosRoutePage({
         ...(focusTargetElapsedRequested ? { focusTargetElapsed: "1" } : {}),
         ...(startTodoPromptRequested ? { startTodoPrompt: "1" } : {}),
         ...(focusTargetTodoId ? { todoId: focusTargetTodoId } : {}),
+        ...(startTodoPromptAt ? { promptAt: startTodoPromptAt } : {}),
+        ...(startTodoPromptSource ? { startTodoPromptSource } : {}),
       },
       replace: true,
     });
@@ -68,6 +72,8 @@ export function DateTodosRoutePage({
     dateKey,
     focusTargetElapsedRequested,
     focusTargetTodoId,
+    startTodoPromptAt,
+    startTodoPromptSource,
     goPage,
     isActive,
     pathname,
@@ -168,6 +174,8 @@ export function DateTodosRoutePage({
       focusTargetElapsedRequested={focusTargetElapsedRequested}
       startTodoPromptRequested={startTodoPromptRequested}
       focusTargetTodoId={focusTargetTodoId}
+      startTodoPromptAt={startTodoPromptAt}
+      startTodoPromptSource={startTodoPromptSource}
       onOpenMemo={openMemoRoute}
       onOpenTaskPicker={openTaskPickerRoute}
       onOpenRoutineImport={openRoutineImportRoute}

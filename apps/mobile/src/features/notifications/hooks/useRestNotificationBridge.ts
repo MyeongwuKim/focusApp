@@ -88,6 +88,10 @@ function normalizeTargetPath(path: string) {
   if (params.get("startTodoPrompt") === "1") {
     next.set("startTodoPrompt", "1");
   }
+  const startTodoPromptSource = params.get("startTodoPromptSource");
+  if (startTodoPromptSource) {
+    next.set("startTodoPromptSource", startTodoPromptSource);
+  }
   const todoId = params.get("todoId");
   if (todoId) {
     next.set("todoId", todoId);
@@ -105,10 +109,14 @@ function getNotificationTargetPath(notification: Notifications.Notification) {
   return normalizeTargetPath(rawTargetPath);
 }
 
-function isStartTodoPromptTargetPath(targetPath: string) {
-  const [_, rawSearch = ""] = targetPath.split("?", 2);
+function withPromptNonce(targetPath: string, promptType: "start_todo" | "focus_target_elapsed") {
+  if (promptType !== "start_todo") {
+    return targetPath;
+  }
+  const [pathname, rawSearch = ""] = targetPath.split("?", 2);
   const params = new URLSearchParams(rawSearch);
-  return params.get("startTodoPrompt") === "1";
+  params.set("promptAt", String(Date.now()));
+  return `${pathname}?${params.toString()}`;
 }
 
 async function ensureNotificationPermission() {
@@ -141,7 +149,10 @@ async function ensureNotificationChannelIfNeeded() {
 
 type UseRestNotificationBridgeInput = {
   onNavigate: (path: string) => void;
-  shouldInlineStartTodoPromptInForeground?: (targetPath: string) => boolean;
+  shouldInlineTodoPromptInForeground?: (
+    targetPath: string,
+    promptType: "start_todo" | "focus_target_elapsed"
+  ) => boolean;
 };
 
 type RestNotificationPermissionSnapshot = {
@@ -163,23 +174,63 @@ type RestNotificationSchedulePayload = {
   seconds?: number;
 };
 
+function buildNotificationEventKey(notification: Notifications.Notification) {
+  const identifier = notification.request.identifier;
+  const rawDate = (notification as unknown as { date?: unknown }).date;
+  const occurredAtMs =
+    rawDate instanceof Date
+      ? rawDate.getTime()
+      : typeof rawDate === "number" && Number.isFinite(rawDate)
+        ? rawDate
+        : Date.now();
+  const targetPath = getNotificationTargetPath(notification) ?? "";
+  return `${identifier}:${occurredAtMs}:${targetPath}`;
+}
+
 export function useRestNotificationBridge({
   onNavigate,
-  shouldInlineStartTodoPromptInForeground,
+  shouldInlineTodoPromptInForeground,
 }: UseRestNotificationBridgeInput) {
   const notificationIdByKeyRef = useRef<Map<string, string>>(new Map());
-  const handledResponseIdRef = useRef<string | null>(null);
-  const handledReceivedIdRef = useRef<string | null>(null);
+  const handledResponseEventKeySetRef = useRef<Set<string>>(new Set());
+  const handledReceivedEventKeySetRef = useRef<Set<string>>(new Set());
+
+  const resolveForegroundTodoPromptType = useCallback((notification: Notifications.Notification) => {
+    const data = asRecord(notification.request.content.data);
+    const kind = asString(data?.kind);
+    if (kind === "scheduled_todo_start" || kind === "incomplete_todo") {
+      return "start_todo" as const;
+    }
+
+    const targetPath = getNotificationTargetPath(notification);
+    if (!targetPath) {
+      return null;
+    }
+
+    const [_, rawSearch = ""] = targetPath.split("?", 2);
+    const params = new URLSearchParams(rawSearch);
+    if (params.get("startTodoPrompt") === "1") {
+      return "start_todo" as const;
+    }
+    if (params.get("focusTargetElapsed") === "1") {
+      return "focus_target_elapsed" as const;
+    }
+    return null;
+  }, []);
 
   const shouldInlineForegroundNotification = useCallback(
     (notification: Notifications.Notification) => {
-      const targetPath = getNotificationTargetPath(notification);
-      if (!targetPath || !isStartTodoPromptTargetPath(targetPath)) {
+      const promptType = resolveForegroundTodoPromptType(notification);
+      if (!promptType) {
         return false;
       }
-      return shouldInlineStartTodoPromptInForeground?.(targetPath) ?? false;
+      const targetPath = getNotificationTargetPath(notification);
+      if (!targetPath) {
+        return false;
+      }
+      return shouldInlineTodoPromptInForeground?.(targetPath, promptType) ?? false;
     },
-    [shouldInlineStartTodoPromptInForeground]
+    [resolveForegroundTodoPromptType, shouldInlineTodoPromptInForeground]
   );
 
   useEffect(() => {
@@ -192,26 +243,31 @@ export function useRestNotificationBridge({
 
   useEffect(() => {
     const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-      if (!shouldInlineForegroundNotification(notification)) {
+      const promptType = resolveForegroundTodoPromptType(notification);
+      if (!promptType || !shouldInlineForegroundNotification(notification)) {
         return;
       }
 
-      const receivedId = notification.request.identifier;
-      if (handledReceivedIdRef.current === receivedId) {
+      const receivedEventKey = buildNotificationEventKey(notification);
+      if (handledReceivedEventKeySetRef.current.has(receivedEventKey)) {
         return;
       }
-      handledReceivedIdRef.current = receivedId;
+      handledReceivedEventKeySetRef.current.add(receivedEventKey);
+
+      // 포그라운드 인앱 분기 시 시스템 배너/리스트가 남지 않도록 즉시 정리
+      const receivedId = notification.request.identifier;
+      void Notifications.dismissNotificationAsync(receivedId).catch(() => null);
 
       const targetPath = getNotificationTargetPath(notification);
-      if (targetPath) {
-        onNavigate(targetPath);
+      if (targetPath && promptType === "start_todo") {
+        onNavigate(withPromptNonce(targetPath, promptType));
       }
     });
 
     return () => {
       receivedSubscription.remove();
     };
-  }, [onNavigate, shouldInlineForegroundNotification]);
+  }, [onNavigate, resolveForegroundTodoPromptType, shouldInlineForegroundNotification]);
 
   const handleNotificationResponseNavigation = useCallback(
     (response: Notifications.NotificationResponse | null) => {
@@ -219,18 +275,19 @@ export function useRestNotificationBridge({
         return;
       }
 
-      const responseId = response.notification.request.identifier;
-      if (handledResponseIdRef.current === responseId) {
+      const responseEventKey = buildNotificationEventKey(response.notification);
+      if (handledResponseEventKeySetRef.current.has(responseEventKey)) {
         return;
       }
-      handledResponseIdRef.current = responseId;
+      handledResponseEventKeySetRef.current.add(responseEventKey);
 
       const targetPath = getNotificationTargetPath(response.notification);
       if (targetPath) {
-        onNavigate(targetPath);
+        const promptType = resolveForegroundTodoPromptType(response.notification);
+        onNavigate(promptType ? withPromptNonce(targetPath, promptType) : targetPath);
       }
     },
-    [onNavigate]
+    [onNavigate, resolveForegroundTodoPromptType]
   );
 
   useEffect(() => {

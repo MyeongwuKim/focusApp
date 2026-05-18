@@ -78,10 +78,17 @@ export async function prepareWebUiBundleVersion(input: {
   input.onProgress?.("초기 번들 준비중...");
   await FileSystem.makeDirectoryAsync(WEB_UI_ROOT_DIR, { intermediates: true });
 
+  const shouldRefreshFromEmbedded = input.releaseChannel === "none";
   const activeIndexUri = `${WEB_UI_ACTIVE_DIR}index.html`;
   const activeIndexInfo = await FileSystem.getInfoAsync(activeIndexUri);
-  if (!activeIndexInfo.exists) {
+  if (!activeIndexInfo.exists || shouldRefreshFromEmbedded) {
     await writeEmbeddedWebUiToDirectory(input.embeddedFiles, WEB_UI_ACTIVE_DIR);
+    if (shouldRefreshFromEmbedded) {
+      await writeStoredWebUiReleaseState({
+        version: input.fallbackCurrentVersion,
+        channel: input.releaseChannel,
+      });
+    }
   }
 
   const verifiedActiveIndexInfo = await FileSystem.getInfoAsync(activeIndexUri);

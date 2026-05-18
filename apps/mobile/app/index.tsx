@@ -406,6 +406,14 @@ function convertCalendarSheetPathToDateTasksPath(targetPath: string) {
   if (params.get("startTodoPrompt") === "1") {
     next.set("startTodoPrompt", "1");
   }
+  const startTodoPromptSource = params.get("startTodoPromptSource");
+  if (startTodoPromptSource) {
+    next.set("startTodoPromptSource", startTodoPromptSource);
+  }
+  const promptAt = params.get("promptAt");
+  if (promptAt) {
+    next.set("promptAt", promptAt);
+  }
   const todoId = params.get("todoId");
   if (todoId) {
     next.set("todoId", todoId);
@@ -1154,12 +1162,8 @@ export default function WebViewScreen() {
     }
   }, [dispatchNativeBridgeEvent]);
 
-  const shouldInlineStartTodoPromptInForeground = useCallback((targetPath: string) => {
-    const appState = appStateRef.current;
-    if (appState !== "active") {
-      return false;
-    }
-
+  const shouldInlineTodoPromptInForeground = useCallback(
+    (targetPath: string, promptType: "start_todo" | "focus_target_elapsed") => {
     const view = nativeTodoViewRef.current;
     if (!view.isViewingTodayTodoSurface) {
       return false;
@@ -1168,11 +1172,16 @@ export default function WebViewScreen() {
     try {
       const [_, rawSearch = ""] = targetPath.split("?", 2);
       const params = new URLSearchParams(rawSearch);
-      if (params.get("startTodoPrompt") !== "1") {
+      const targetDateKey = params.get("date") ?? formatLocalDateKey(new Date());
+      if (targetDateKey !== formatLocalDateKey(new Date())) {
         return false;
       }
-      const targetDateKey = params.get("date") ?? formatLocalDateKey(new Date());
-      return targetDateKey === formatLocalDateKey(new Date());
+
+      if (promptType === "start_todo") {
+        return params.get("startTodoPrompt") === "1";
+      }
+
+      return params.get("focusTargetElapsed") === "1";
     } catch {
       return false;
     }
@@ -1198,7 +1207,7 @@ export default function WebViewScreen() {
     getRestExpoPushTokenSnapshot,
   } = useRestNotificationBridge({
     onNavigate: navigateWebViewByTargetPath,
-    shouldInlineStartTodoPromptInForeground,
+    shouldInlineTodoPromptInForeground,
   });
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);

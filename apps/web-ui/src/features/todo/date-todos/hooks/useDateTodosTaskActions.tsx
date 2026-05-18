@@ -387,6 +387,8 @@ export function useDateTodosTaskActions({
     }
 
     try {
+      const beforeCount = items.length;
+      const requestedCount = nextItems.filter((item) => item.label.trim().length > 0).length;
       const nextLog = await addTodos({
         dateKey,
         items: nextItems.map((item) => ({
@@ -396,6 +398,29 @@ export function useDateTodosTaskActions({
         })),
       });
       applyDailyLog(nextLog);
+
+      const afterCount = nextLog?.todos?.length ?? beforeCount;
+      const addedCount = Math.max(afterCount - beforeCount, 0);
+      const skippedCount = Math.max(requestedCount - addedCount, 0);
+
+      if (requestedCount > 0 && addedCount === 0) {
+        toast.show({
+          type: "error",
+          title: "중복 할일",
+          message: "같은 할일은 하루에 한 번만 추가할 수 있어요.",
+          duration: 2200,
+        });
+        return;
+      }
+
+      if (skippedCount > 0) {
+        toast.show({
+          type: "positive",
+          title: "일부만 추가됨",
+          message: `중복된 ${skippedCount}개 항목을 제외하고 추가했어요.`,
+          duration: 1800,
+        });
+      }
     } catch (error) {
       console.error(error);
       toast.show({

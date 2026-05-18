@@ -365,6 +365,7 @@ export class DailyLogService {
       !targetTodo.startedAt &&
       !targetTodo.pausedAt &&
       !targetTodo.completedAt &&
+      targetTodo.targetFocusMinutes === null &&
       targetTodo.deviationSeconds === 0 &&
       (targetTodo.resumeCount ?? 0) === 0 &&
       targetTodo.actualFocusSeconds === null
@@ -377,6 +378,7 @@ export class DailyLogService {
       ...targetTodo,
       done: false,
       startedAt: null,
+      targetFocusMinutes: null,
       pausedAt: null,
       completedAt: null,
       deviationSeconds: 0,

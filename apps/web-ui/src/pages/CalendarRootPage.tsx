@@ -40,6 +40,8 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   const focusTargetElapsedRequestedFromUrl = routeSearchParams.get("focusTargetElapsed") === "1";
   const startTodoPromptRequestedFromUrl = routeSearchParams.get("startTodoPrompt") === "1";
   const focusTargetTodoIdFromUrl = routeSearchParams.get("todoId");
+  const startTodoPromptAtFromUrl = routeSearchParams.get("promptAt");
+  const startTodoPromptSourceFromUrl = routeSearchParams.get("startTodoPromptSource");
   const lastAppliedSearchRef = useRef<string | null>(null);
 
   const monthKeys = useMemo(
@@ -143,6 +145,12 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
           startTodoPromptRequestedFromUrl ? "&startTodoPrompt=1" : ""
         }${
           focusTargetTodoIdFromUrl ? `&todoId=${encodeURIComponent(focusTargetTodoIdFromUrl)}` : ""
+        }${
+          startTodoPromptAtFromUrl ? `&promptAt=${encodeURIComponent(startTodoPromptAtFromUrl)}` : ""
+        }${
+          startTodoPromptSourceFromUrl
+            ? `&startTodoPromptSource=${encodeURIComponent(startTodoPromptSourceFromUrl)}`
+            : ""
         }`
       : "/calendar";
     const currentHashPath = window.location.hash.startsWith("#")
@@ -162,6 +170,8 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
     focusTargetElapsedRequestedFromUrl,
     startTodoPromptRequestedFromUrl,
     focusTargetTodoIdFromUrl,
+    startTodoPromptAtFromUrl,
+    startTodoPromptSourceFromUrl,
     selectedDateKey,
   ]);
 
@@ -181,6 +191,8 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         focusTargetElapsedRequested={focusTargetElapsedRequestedFromUrl}
         startTodoPromptRequested={startTodoPromptRequestedFromUrl}
         focusTargetTodoId={focusTargetTodoIdFromUrl}
+        startTodoPromptAt={startTodoPromptAtFromUrl}
+        startTodoPromptSource={startTodoPromptSourceFromUrl}
         onExpandedChange={setIsDateSheetExpanded}
       />
     </div>

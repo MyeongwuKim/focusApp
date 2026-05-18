@@ -238,3 +238,30 @@ export function cancelNativeTargetFocusNotification(input: { dateKey: string; to
     key: buildFocusTargetElapsedNotificationKey(input.dateKey, input.todoId),
   });
 }
+
+function buildTodoStartNotificationKey(dateKey: string, todoId: string) {
+  return `todo-start-${dateKey}-${todoId}`;
+}
+
+export function scheduleNativeTodoStartNotification(input: {
+  dateKey: string;
+  todoId: string;
+  seconds: number;
+  taskLabel?: string;
+}) {
+  const seconds = Number.isFinite(input.seconds) ? Math.max(1, Math.floor(input.seconds)) : 1;
+  const label = input.taskLabel?.trim() || "할일";
+  return postRestNotificationBridgeMessage("REST_NOTIFICATION_SCHEDULE", {
+    key: buildTodoStartNotificationKey(input.dateKey, input.todoId),
+    title: "할일 시작 시간",
+    body: `${label}, 설정한 시작 시간이 됐어요.`,
+    targetPath: `/calendar?sheet=1&date=${input.dateKey}&startTodoPrompt=1&startTodoPromptSource=scheduled&todoId=${encodeURIComponent(input.todoId)}`,
+    seconds,
+  });
+}
+
+export function cancelNativeTodoStartNotification(input: { dateKey: string; todoId: string }) {
+  return postRestNotificationBridgeMessage("REST_NOTIFICATION_CANCEL", {
+    key: buildTodoStartNotificationKey(input.dateKey, input.todoId),
+  });
+}
