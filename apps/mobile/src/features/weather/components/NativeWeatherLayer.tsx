@@ -189,6 +189,33 @@ function weatherCodeToEffect(code: number): WeatherEffect {
   return null;
 }
 
+function loadExpoLocationModule() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const loadedModule = require('expo-location') as {
+      getForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
+    };
+    return loadedModule;
+  } catch {
+    return null;
+  }
+}
+
+async function hasLocationPermissionGranted(): Promise<boolean> {
+  const expoLocation = loadExpoLocationModule();
+  if (!expoLocation?.getForegroundPermissionsAsync) {
+    return false;
+  }
+
+  try {
+    const result = await expoLocation.getForegroundPermissionsAsync();
+    return Boolean(result.granted || result.status === 'granted');
+  } catch (error) {
+    console.log('Failed to check location permission for native weather:', error);
+    return false;
+  }
+}
+
 async function fetchWeatherSnapshot(): Promise<{
   effect: WeatherEffect;
 }> {
@@ -1213,6 +1240,21 @@ export function NativeWeatherLayer() {
     let cancelled = false;
 
     const loadWeather = async () => {
+      if (!weatherEnabled || !isAppActive) {
+        if (!cancelled) {
+          setWeatherEffect(null);
+        }
+        return;
+      }
+
+      const hasLocationPermission = await hasLocationPermissionGranted();
+      if (!hasLocationPermission) {
+        if (!cancelled) {
+          setWeatherEffect(null);
+        }
+        return;
+      }
+
       try {
         const snapshot = await fetchWeatherSnapshot();
         if (!cancelled) {
@@ -1223,14 +1265,16 @@ export function NativeWeatherLayer() {
       }
     };
 
-    loadWeather();
-    const interval = setInterval(loadWeather, WEATHER_REFRESH_MS);
+    void loadWeather();
+    const interval = setInterval(() => {
+      void loadWeather();
+    }, WEATHER_REFRESH_MS);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [isAppActive, weatherEnabled]);
 
   useEffect(() => {
     updateWeatherLiveState({
