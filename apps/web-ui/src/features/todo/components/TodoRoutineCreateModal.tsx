@@ -33,6 +33,10 @@ type TodoRoutineCreateModalProps = {
     name: string;
     items: RoutineDraftItem[];
   }) => Promise<void>;
+  initialDraft?: {
+    name: string;
+    items: RoutineDraftItem[];
+  } | null;
 };
 
 type SortableSelectedTaskRowProps = {
@@ -115,14 +119,34 @@ function SortableSelectedTaskRow({
   );
 }
 
-export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateModalProps) {
+function buildInitialTaskTimes(items: RoutineDraftItem[]) {
+  return items.reduce<Record<string, string | null>>((acc, item) => {
+    if (!item.taskId) {
+      return acc;
+    }
+    acc[item.taskId] = item.scheduledTimeHHmm ?? null;
+    return acc;
+  }, {});
+}
+
+export function TodoRoutineCreateModal({ onClose, onCreate, initialDraft = null }: TodoRoutineCreateModalProps) {
   const { taskCollectionsQuery } = useTaskCollectionQuery();
   const { data: collections = [], isLoading: isTaskLoading } = taskCollectionsQuery;
   const { createTaskCollectionMutation, addTaskMutation } = useTaskCollectionMutation();
 
-  const [name, setName] = useState("");
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [selectedTaskTimes, setSelectedTaskTimes] = useState<Record<string, string | null>>({});
+  const [name, setName] = useState(initialDraft?.name ?? "");
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>(
+    Array.from(
+      new Set(
+        (initialDraft?.items ?? [])
+          .map((item) => item.taskId ?? null)
+          .filter((taskId): taskId is string => Boolean(taskId))
+      )
+    )
+  );
+  const [selectedTaskTimes, setSelectedTaskTimes] = useState<Record<string, string | null>>(
+    buildInitialTaskTimes(initialDraft?.items ?? [])
+  );
   const [editingTimeTaskId, setEditingTimeTaskId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("all");
   const [quickCreateMode, setQuickCreateMode] = useState<"collection" | "task" | null>(null);
@@ -147,6 +171,7 @@ export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateM
       ),
     [collections]
   );
+  const allTaskIdSet = useMemo(() => new Set(allTasks.map((task) => task.id)), [allTasks]);
 
   const visibleTasks = useMemo(() => {
     if (selectedCollectionId === "all") {
@@ -186,6 +211,35 @@ export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateM
       setEditingTimeTaskId(null);
     }
   }, [editingTimeTaskId, selectedTaskIds]);
+
+  useEffect(() => {
+    if (!initialDraft) {
+      return;
+    }
+    setName(initialDraft.name);
+    setSelectedTaskIds(
+      Array.from(
+        new Set(
+          initialDraft.items
+            .map((item) => item.taskId ?? null)
+            .filter((taskId): taskId is string => Boolean(taskId))
+        )
+      )
+    );
+    setSelectedTaskTimes(buildInitialTaskTimes(initialDraft.items));
+  }, [initialDraft]);
+
+  useEffect(() => {
+    setSelectedTaskIds((prev) => prev.filter((taskId) => allTaskIdSet.has(taskId)));
+    setSelectedTaskTimes((prev) =>
+      Object.entries(prev).reduce<Record<string, string | null>>((acc, [taskId, value]) => {
+        if (allTaskIdSet.has(taskId)) {
+          acc[taskId] = value;
+        }
+        return acc;
+      }, {})
+    );
+  }, [allTaskIdSet]);
 
   const handleSelectedTaskDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -345,7 +399,7 @@ export function TodoRoutineCreateModal({ onClose, onCreate }: TodoRoutineCreateM
   const canSave = hasValidName && hasValidItems && !isSaving;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-base-100">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-base-100/75">
       <div className="min-h-0 flex flex-1 flex-col gap-2 overflow-hidden p-2">
         <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
           <label className="mb-1 block text-xs font-semibold text-base-content/75">루틴 이름</label>

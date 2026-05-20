@@ -22,6 +22,29 @@ interface UpdateRoutineTemplateInput {
   items?: RoutineTemplateItemRecord[];
 }
 
+export interface RoutineTemplateWeekdayAssignmentRecord {
+  id: string;
+  userId: string;
+  weekday: number;
+  routineTemplateId: string | null;
+  routineTemplate: {
+    id: string;
+    userId: string;
+    name: string;
+    items: RoutineTemplateItemRecord[];
+    createdAt: Date;
+    updatedAt: Date;
+  } | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface UpsertRoutineTemplateWeekdayAssignmentInput {
+  userId: string;
+  weekday: number;
+  routineTemplateId: string | null;
+}
+
 export class RoutineTemplateRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -41,6 +64,20 @@ export class RoutineTemplateRepository {
         userId,
       },
     });
+  }
+
+  findRoutineTemplateWeekdayAssignments(userId: string): Promise<RoutineTemplateWeekdayAssignmentRecord[]> {
+    return this.prisma.routineTemplateWeekdayAssignment.findMany({
+      where: {
+        userId,
+      },
+      orderBy: {
+        weekday: "asc",
+      },
+      include: {
+        routineTemplate: true,
+      },
+    }) as Promise<RoutineTemplateWeekdayAssignmentRecord[]>;
   }
 
   createRoutineTemplate(input: CreateRoutineTemplateInput) {
@@ -69,13 +106,47 @@ export class RoutineTemplateRepository {
   }
 
   async deleteRoutineTemplate(userId: string, routineTemplateId: string) {
-    const result = await this.prisma.routineTemplate.deleteMany({
-      where: {
-        id: routineTemplateId,
-        userId,
-      },
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.routineTemplateWeekdayAssignment.updateMany({
+        where: {
+          userId,
+          routineTemplateId,
+        },
+        data: {
+          routineTemplateId: null,
+        },
+      });
+
+      return tx.routineTemplate.deleteMany({
+        where: {
+          id: routineTemplateId,
+          userId,
+        },
+      });
     });
 
     return result.count > 0;
+  }
+
+  upsertRoutineTemplateWeekdayAssignment(input: UpsertRoutineTemplateWeekdayAssignmentInput) {
+    return this.prisma.routineTemplateWeekdayAssignment.upsert({
+      where: {
+        userId_weekday: {
+          userId: input.userId,
+          weekday: input.weekday,
+        },
+      },
+      create: {
+        userId: input.userId,
+        weekday: input.weekday,
+        routineTemplateId: input.routineTemplateId,
+      },
+      update: {
+        routineTemplateId: input.routineTemplateId,
+      },
+      include: {
+        routineTemplate: true,
+      },
+    }) as Promise<RoutineTemplateWeekdayAssignmentRecord>;
   }
 }

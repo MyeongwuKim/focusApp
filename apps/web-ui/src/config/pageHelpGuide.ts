@@ -118,6 +118,33 @@ const guideByPath: Record<string, PageHelpGuide> = {
       "현재 기기 상태와 동기화 여부 확인 가능",
     ],
   },
+  "/routine": {
+    title: "요일별 루틴 안내",
+    description: "요일마다 자동 적용할 루틴을 미리 할당할 수 있어요.",
+    highlights: [
+      "요일별로 서로 다른 루틴 템플릿 할당 가능",
+      "할당 안 함 선택으로 특정 요일 제외 가능",
+      "저장 후 자동 적용 대상 요일 사전 확인 가능",
+    ],
+  },
+  "/routine/create": {
+    title: "루틴 만들기 안내",
+    description: "기존 할일을 선택해 루틴 템플릿을 만들 수 있어요.",
+    highlights: [
+      "컬렉션 필터로 원하는 할일 빠르게 선택 가능",
+      "선택 항목 드래그로 루틴 순서 조정 가능",
+      "시작시간 지정 후 템플릿으로 저장 가능",
+    ],
+  },
+  "/routine/edit": {
+    title: "루틴 수정 안내",
+    description: "기존 루틴 구성과 이름을 현재 흐름에 맞게 조정할 수 있어요.",
+    highlights: [
+      "선택된 루틴 항목 유지 상태에서 수정 시작 가능",
+      "항목 추가/제외 및 순서 재배치 가능",
+      "시간 설정 변경 후 템플릿에 즉시 반영 가능",
+    ],
+  },
   "/settings/notifications": {
     title: "알림 설정 안내",
     description: "알림 권한과 발송 동작을 점검하고 관리할 수 있어요.",
@@ -140,5 +167,8 @@ const guideByPath: Record<string, PageHelpGuide> = {
 
 export function getPageHelpGuide(pathname: string): PageHelpGuide | null {
   const normalizedPath = normalizePathname(pathname);
+  if (normalizedPath.startsWith("/routine/edit/")) {
+    return guideByPath["/routine/edit"] ?? null;
+  }
   return guideByPath[normalizedPath] ?? null;
 }

@@ -3,13 +3,25 @@ import {
   createRoutineTemplate,
   deleteRoutineTemplate,
   updateRoutineTemplate,
+  updateRoutineTemplateWeekdayAssignments,
   type RoutineTemplateItemInput,
 } from "../../api/routineTemplateApi";
-import { routineTemplatesQueryKey } from "./queries";
+import {
+  routineTemplateWeekdayAssignmentsQueryKey,
+  routineTemplatesQueryKey,
+} from "./queries";
 
 const invalidateRoutineTemplates = async (queryClient: ReturnType<typeof useQueryClient>) => {
   await queryClient.invalidateQueries({
     queryKey: routineTemplatesQueryKey,
+  });
+};
+
+const invalidateRoutineTemplateWeekdayAssignments = async (
+  queryClient: ReturnType<typeof useQueryClient>
+) => {
+  await queryClient.invalidateQueries({
+    queryKey: routineTemplateWeekdayAssignmentsQueryKey,
   });
 };
 
@@ -21,6 +33,7 @@ export function useRoutineTemplateMutation() {
       createRoutineTemplate(input),
     onSuccess: async () => {
       await invalidateRoutineTemplates(queryClient);
+      await invalidateRoutineTemplateWeekdayAssignments(queryClient);
     },
   });
 
@@ -32,6 +45,7 @@ export function useRoutineTemplateMutation() {
     }) => updateRoutineTemplate(input),
     onSuccess: async () => {
       await invalidateRoutineTemplates(queryClient);
+      await invalidateRoutineTemplateWeekdayAssignments(queryClient);
     },
   });
 
@@ -39,6 +53,19 @@ export function useRoutineTemplateMutation() {
     mutationFn: (input: { routineTemplateId: string }) => deleteRoutineTemplate(input),
     onSuccess: async () => {
       await invalidateRoutineTemplates(queryClient);
+      await invalidateRoutineTemplateWeekdayAssignments(queryClient);
+    },
+  });
+
+  const updateRoutineTemplateWeekdayAssignmentsMutation = useMutation({
+    mutationFn: (input: {
+      assignments: Array<{
+        weekday: number;
+        routineTemplateId?: string | null;
+      }>;
+    }) => updateRoutineTemplateWeekdayAssignments(input),
+    onSuccess: async () => {
+      await invalidateRoutineTemplateWeekdayAssignments(queryClient);
     },
   });
 
@@ -46,5 +73,6 @@ export function useRoutineTemplateMutation() {
     createRoutineTemplateMutation,
     updateRoutineTemplateMutation,
     deleteRoutineTemplateMutation,
+    updateRoutineTemplateWeekdayAssignmentsMutation,
   };
 }

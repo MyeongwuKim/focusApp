@@ -42,6 +42,12 @@ export const Weather: Story = {
   },
 };
 
+export const Routine: Story = {
+  args: {
+    forcedPathname: "/routine",
+  },
+};
+
 export const Notifications: Story = {
   args: {
     forcedPathname: "/settings/notifications",

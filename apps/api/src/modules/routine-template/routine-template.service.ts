@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   RoutineTemplateRepository,
+  type RoutineTemplateWeekdayAssignmentRecord,
   type RoutineTemplateItemRecord,
 } from "./routine-template.repository.js";
 
@@ -31,7 +32,19 @@ interface DeleteRoutineTemplateInput {
   routineTemplateId: string;
 }
 
+interface RoutineTemplateWeekdayAssignmentInput {
+  weekday: number;
+  routineTemplateId?: string | null;
+}
+
+interface UpdateRoutineTemplateWeekdayAssignmentsInput {
+  userId: string;
+  assignments: RoutineTemplateWeekdayAssignmentInput[];
+}
+
 const HHMM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const MIN_WEEKDAY = 0;
+const MAX_WEEKDAY = 6;
 
 export class RoutineTemplateService {
   constructor(private readonly repository: RoutineTemplateRepository) {}
@@ -90,6 +103,44 @@ export class RoutineTemplateService {
 
     await this.repository.deleteRoutineTemplate(input.userId, input.routineTemplateId);
     return true;
+  }
+
+  async getRoutineTemplateWeekdayAssignments(userId: string) {
+    const assignments = await this.repository.findRoutineTemplateWeekdayAssignments(userId);
+    return fillMissingWeekdayAssignments(userId, assignments);
+  }
+
+  async updateRoutineTemplateWeekdayAssignments(input: UpdateRoutineTemplateWeekdayAssignmentsInput) {
+    const normalizedAssignments = normalizeWeekdayAssignments(input.assignments);
+    const routineTemplateIds = Array.from(
+      new Set(
+        normalizedAssignments
+          .map((assignment) => assignment.routineTemplateId)
+          .filter((value): value is string => typeof value === "string")
+      )
+    );
+    if (routineTemplateIds.length > 0) {
+      const templates = await this.repository.findRoutineTemplates(input.userId);
+      const templateIdSet = new Set(templates.map((template) => template.id));
+      for (const routineTemplateId of routineTemplateIds) {
+        if (!templateIdSet.has(routineTemplateId)) {
+          throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
+        }
+      }
+    }
+
+    await Promise.all(
+      normalizedAssignments.map((assignment) =>
+        this.repository.upsertRoutineTemplateWeekdayAssignment({
+          userId: input.userId,
+          weekday: assignment.weekday,
+          routineTemplateId: assignment.routineTemplateId,
+        })
+      )
+    );
+
+    const updatedAssignments = await this.repository.findRoutineTemplateWeekdayAssignments(input.userId);
+    return fillMissingWeekdayAssignments(input.userId, updatedAssignments);
   }
 }
 
@@ -162,4 +213,60 @@ function normalizeScheduledTime(value: string | null | undefined) {
   }
 
   return trimmed;
+}
+
+function normalizeWeekdayAssignments(assignments: RoutineTemplateWeekdayAssignmentInput[]) {
+  if (assignments.length === 0) {
+    throw new Error("ROUTINE_WEEKDAY_ASSIGNMENTS_REQUIRED");
+  }
+
+  const weekdaySet = new Set<number>();
+  return assignments.map((assignment) => {
+    if (!Number.isInteger(assignment.weekday) || assignment.weekday < MIN_WEEKDAY || assignment.weekday > MAX_WEEKDAY) {
+      throw new Error("ROUTINE_WEEKDAY_INVALID");
+    }
+    if (weekdaySet.has(assignment.weekday)) {
+      throw new Error("ROUTINE_WEEKDAY_DUPLICATED");
+    }
+    weekdaySet.add(assignment.weekday);
+
+    const routineTemplateId =
+      typeof assignment.routineTemplateId === "string" && assignment.routineTemplateId.trim().length > 0
+        ? assignment.routineTemplateId.trim()
+        : null;
+
+    return {
+      weekday: assignment.weekday,
+      routineTemplateId,
+    };
+  });
+}
+
+function fillMissingWeekdayAssignments(
+  userId: string,
+  assignments: RoutineTemplateWeekdayAssignmentRecord[]
+) {
+  const assignmentByWeekday = new Map(assignments.map((assignment) => [assignment.weekday, assignment]));
+
+  const result: RoutineTemplateWeekdayAssignmentRecord[] = [];
+  for (let weekday = MIN_WEEKDAY; weekday <= MAX_WEEKDAY; weekday += 1) {
+    const existing = assignmentByWeekday.get(weekday);
+    if (existing) {
+      result.push(existing);
+      continue;
+    }
+
+    const now = new Date();
+    result.push({
+      id: `virtual-${userId}-${weekday}`,
+      userId,
+      weekday,
+      routineTemplateId: null,
+      routineTemplate: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return result;
 }

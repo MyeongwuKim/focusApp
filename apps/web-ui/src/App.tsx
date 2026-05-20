@@ -14,7 +14,7 @@ import { ActionSheet } from "./components/ActionSheet";
 import { BackendConnectionBanner } from "./components/BackendConnectionBanner";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import type { GoPageOptions, NavigateOptions } from "./providers/AppNavigationProvider";
-import { MAIN_ROUTE } from "./routes/route-config";
+import { MAIN_ROUTE, ROUTINE_MANAGE_PATH } from "./routes/route-config";
 import { confirm, selectIsLoggedIn, toast, useAppStore, useAuthStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
 import {
@@ -70,6 +70,7 @@ const ROUTE_PATH: Record<RouteKey, string> = {
   dateTasks: "/date-tasks",
   stats: "/stats",
   settings: "/settings",
+  routine: ROUTINE_MANAGE_PATH,
 };
 
 function getRouteFromPath(pathname: string): RouteKey {
@@ -604,20 +605,9 @@ function App() {
   }, [backendBootState, isAuthenticatedAppRoute, setAuthToken]);
 
   useEffect(() => {
-    if (!weatherEnabled) {
-      useWeatherStore.getState().setWeather(null);
-    }
-  }, [weatherEnabled]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const syncWeatherVisibilityByLocationPermission = async () => {
-      if (!weatherEnabled) {
-        useWeatherStore.getState().setWeather(null);
-        return;
-      }
-
       try {
         const status = await getLocationPermissionStatus();
         if (cancelled) {
@@ -645,7 +635,7 @@ function App() {
       cancelled = true;
       window.removeEventListener("focus", handleFocus);
     };
-  }, [weatherEnabled]);
+  }, []);
 
   useEffect(() => {
     syncNativeAuthState({ loggedIn: isLoggedIn });
@@ -686,11 +676,6 @@ function App() {
         return;
       }
 
-      if (!weatherEnabled) {
-        useWeatherStore.getState().setWeather(null);
-        return;
-      }
-
       const payload = detail.payload;
       if (
         !payload ||
@@ -714,7 +699,7 @@ function App() {
     return () => {
       window.removeEventListener("focus-hybrid-native-bridge", handleNativeWeatherSnapshot as EventListener);
     };
-  }, [weatherEnabled]);
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn || !authToken) {
@@ -958,6 +943,8 @@ function App() {
   ) => {
     switch (route) {
       case "settings":
+        return <SettingsPage forcedPathname={options?.forcedPathname} />;
+      case "routine":
         return <SettingsPage forcedPathname={options?.forcedPathname} />;
       case "dateTasks":
         return (

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { DRAWER_ROUTES } from "../routes/route-config";
-import type { RouteKey } from "../routes/types";
-import { FiArchive, FiBarChart2, FiLogOut, FiSettings } from "react-icons/fi";
+import { useLocation } from "react-router-dom";
+import { DRAWER_ROUTES, type DrawerRouteConfig } from "../routes/route-config";
+import { FiArchive, FiBarChart2, FiLogOut, FiRefreshCw, FiSettings } from "react-icons/fi";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 import { logout } from "../api/authApi";
 import { fetchMe } from "../api/userApi";
@@ -14,14 +14,16 @@ type DrawerMenuProps = {
   isOpen: boolean;
 };
 
-const ROUTE_ICON: Partial<Record<RouteKey, ReactNode>> = {
+const ROUTE_ICON: Record<DrawerRouteConfig["iconKey"], ReactNode> = {
   tasks: <FiArchive size={15} />,
   stats: <FiBarChart2 size={15} />,
   settings: <FiSettings size={15} />,
+  routine: <FiRefreshCw size={15} />,
 };
 
 export function DrawerMenu({ isOpen }: DrawerMenuProps) {
   const { activeRoute, closeMenu, navigateTo, goPage } = useAppNavigation();
+  const location = useLocation();
   const token = useAuthStore((state) => state.token);
   const authUser = useAuthStore((state) => state.user);
   const authProvider = useAuthStore((state) => state.provider);
@@ -48,8 +50,14 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
     }
   }, [hasToken, meQuery.data, meQuery.isSuccess, setAuthUser]);
 
-  const handleNavigateFromDrawer = (route: RouteKey) => {
-    navigateTo(route);
+  const handleNavigateFromDrawer = (route: DrawerRouteConfig) => {
+    if (route.path) {
+      goPage(route.path);
+      return;
+    }
+    if (route.routeKey) {
+      navigateTo(route.routeKey);
+    }
   };
 
   const accountEmail = meQuery.data?.email ?? authUser?.email ?? "guest";
@@ -79,6 +87,13 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
         : versionInfo?.webUiChannel === "none"
           ? "none"
           : "unknown";
+  const isDrawerRouteActive = (route: DrawerRouteConfig) => {
+    const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+    if (route.activePathPrefixes?.some((prefix) => normalizedPath.startsWith(prefix))) {
+      return true;
+    }
+    return route.routeKey ? activeRoute === route.routeKey : false;
+  };
 
   return (
     <div
@@ -115,16 +130,16 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
           <nav className="menu flex-1 gap-1 p-0 text-sm">
             {DRAWER_ROUTES.map((route) => (
               <Button
-                key={route.key}
-                variant={activeRoute === route.key ? "default" : "ghost"}
+                key={route.id}
+                variant={isDrawerRouteActive(route) ? "default" : "ghost"}
                 className={[
                   "justify-start gap-2.5 rounded-lg border border-transparent px-2.5",
-                  activeRoute === route.key ? "bg-base-200 text-primary" : "text-base-content/80",
+                  isDrawerRouteActive(route) ? "bg-base-200 text-primary" : "text-base-content/80",
                 ].join(" ")}
-                onClick={() => handleNavigateFromDrawer(route.key)}
+                onClick={() => handleNavigateFromDrawer(route)}
               >
                 <span className="inline-flex h-4 w-4 items-center justify-center text-base-content/75">
-                  {ROUTE_ICON[route.key]}
+                  {ROUTE_ICON[route.iconKey]}
                 </span>
                 {route.label}
               </Button>

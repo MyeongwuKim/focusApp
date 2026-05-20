@@ -10,7 +10,6 @@ import {
   BackHandler,
   Easing,
   Linking,
-  NativeEventEmitter,
   NativeModules,
   PermissionsAndroid,
   Platform,
@@ -32,16 +31,11 @@ import {
   PermissionIntroModal,
 } from "../src/features/permissions/components/PermissionIntroModal";
 import {
-  readNativeTodoSession,
-  type NativeTodoSession,
-  writeNativeTodoSession,
-} from "../src/features/todo/nativeTodoSessionStorage";
-import {
   applyNativeWeatherSettings,
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
 import { routeWebViewBridgeMessage } from "../src/features/bridge/routeWebViewBridgeMessage";
-import type { TodoSessionSyncPayload, TodoViewSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
+import type { TodoViewSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
 import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
 import {
   prepareWebUiBundleVersion,
@@ -86,16 +80,6 @@ type GeolocationLike = {
   ) => void;
 };
 
-type TodoSessionRecoveryPayload = {
-  dateKey: string;
-  todoId: string;
-  startedAt: string;
-  sessionId: string;
-  backgroundEnteredAtMs: number;
-  resumedAtMs: number;
-  elapsedSeconds: number;
-};
-
 type NativeTodoViewSnapshot = {
   isViewingTodayTodoSurface: boolean;
   source: "date-tasks" | "calendar-sheet" | "none";
@@ -119,21 +103,6 @@ type NativeKakaoAuthResult = {
 type NativeNaverAuthResult = {
   token: string;
   userId: string;
-};
-type DeviceLockStatePayload = {
-  isLocked?: boolean;
-};
-type DeviceLockStateSnapshot = {
-  isLocked?: boolean;
-};
-type DeviceLockEventNativeModule = {
-  getCurrentLockState?: () => Promise<DeviceLockStateSnapshot>;
-  addListener?: (eventName: string) => void;
-  removeListeners?: (count: number) => void;
-};
-type NativeEventEmitterModuleShape = {
-  addListener: (eventType: string) => void;
-  removeListeners: (count: number) => void;
 };
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
@@ -999,18 +968,14 @@ export default function WebViewScreen() {
   const [isPermissionIntroVisible, setIsPermissionIntroVisible] = useState(false);
   const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const nativeTodoSessionRef = useRef<NativeTodoSession | null>(null);
   const nativeTodoViewRef = useRef<NativeTodoViewSnapshot>({
     isViewingTodayTodoSurface: false,
     source: "none",
     dateKey: null,
     routePath: null,
   });
-  const pendingTodoSessionRecoveryRef = useRef<TodoSessionRecoveryPayload | null>(null);
   const pendingWeatherSnapshotRef = useRef<NativeWeatherSnapshot | null>(null);
   const hasShownFatalStartupAlertRef = useRef(false);
-  const isDeviceLockedRef = useRef(false);
-  const skipNextForegroundDeviationRef = useRef(false);
 
   const navigateWebViewByTargetPath = (targetPath: string) => {
     if (!targetPath.startsWith("/")) {
@@ -1061,91 +1026,6 @@ export default function WebViewScreen() {
     },
     []
   );
-
-  const persistNativeTodoSession = useCallback(async (session: NativeTodoSession | null) => {
-    nativeTodoSessionRef.current = session;
-    await writeNativeTodoSession(session);
-  }, []);
-
-  const dispatchPendingTodoSessionRecovery = useCallback(async () => {
-    const pending = pendingTodoSessionRecoveryRef.current;
-    if (!pending || !isWebViewReadyRef.current) {
-      return;
-    }
-
-    // RN -> WebView 복구 이벤트: 백그라운드 체류 시간(elapsedSeconds) 반영 요청
-    dispatchNativeBridgeEvent({
-      type: "RN_TODO_SESSION_RECOVERY",
-      payload: pending,
-    });
-    pendingTodoSessionRecoveryRef.current = null;
-
-    const current = nativeTodoSessionRef.current;
-    if (current && current.sessionId === pending.sessionId && current.backgroundEnteredAtMs !== null) {
-      await persistNativeTodoSession({
-        ...current,
-        backgroundEnteredAtMs: null,
-      });
-    }
-  }, [dispatchNativeBridgeEvent, persistNativeTodoSession]);
-
-  useEffect(() => {
-    if (Platform.OS !== "ios") {
-      return;
-    }
-
-    const nativeModule = NativeModules.DeviceLockEventEmitter as DeviceLockEventNativeModule | undefined;
-    if (!nativeModule) {
-      return;
-    }
-    if (
-      typeof nativeModule.addListener !== "function" ||
-      typeof nativeModule.removeListeners !== "function"
-    ) {
-      return;
-    }
-
-    const applyLockState = (isLocked: boolean) => {
-      console.log("[DeviceLock] RN applyLockState", { isLocked });
-      isDeviceLockedRef.current = isLocked;
-      if (isLocked) {
-        skipNextForegroundDeviationRef.current = true;
-      }
-
-      dispatchNativeBridgeEvent({
-        type: "RN_DEVICE_LOCK_STATE_CHANGED",
-        payload: {
-          isLocked,
-          source: "ios-protected-data",
-        },
-      });
-    };
-
-    const eventEmitter = new NativeEventEmitter(nativeModule as NativeEventEmitterModuleShape);
-    const subscription = eventEmitter.addListener(
-      "DEVICE_LOCK_STATE_CHANGED",
-      (payload: DeviceLockStatePayload | null | undefined) => {
-        console.log("[DeviceLock] RN native event received", payload);
-        applyLockState(Boolean(payload?.isLocked));
-      }
-    );
-
-    void (async () => {
-      try {
-        const currentState = await nativeModule.getCurrentLockState?.();
-        if (typeof currentState?.isLocked === "boolean") {
-          console.log("[DeviceLock] RN initial native lock state", currentState);
-          applyLockState(currentState.isLocked);
-        }
-      } catch (error) {
-        console.log("Failed to read current iOS device lock state:", error);
-      }
-    })();
-
-    return () => {
-      subscription.remove();
-    };
-  }, [dispatchNativeBridgeEvent]);
 
   const dispatchPendingWeatherSnapshot = useCallback(() => {
     const pendingSnapshot = pendingWeatherSnapshotRef.current;
@@ -1388,42 +1268,6 @@ export default function WebViewScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    const hydrateNativeTodoSession = async () => {
-      const stored = await readNativeTodoSession();
-      if (cancelled || !stored) {
-        return;
-      }
-
-      nativeTodoSessionRef.current = stored;
-      if (stored.backgroundEnteredAtMs === null) {
-        return;
-      }
-
-      // 앱 재실행(콜드 스타트) 복구 경로:
-      // 이전 실행에서 backgroundEnteredAtMs가 남아 있으면 비정상 종료/중단으로 보고 이탈시간 복구 payload 생성
-      const resumedAtMs = Date.now();
-      pendingTodoSessionRecoveryRef.current = {
-        dateKey: stored.dateKey,
-        todoId: stored.todoId,
-        startedAt: stored.startedAt,
-        sessionId: stored.sessionId,
-        backgroundEnteredAtMs: stored.backgroundEnteredAtMs,
-        resumedAtMs,
-        elapsedSeconds: Math.max(Math.floor((resumedAtMs - stored.backgroundEnteredAtMs) / 1000), 0),
-      };
-      await dispatchPendingTodoSessionRecovery();
-    };
-
-    void hydrateNativeTodoSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dispatchPendingTodoSessionRecovery]);
-
-  useEffect(() => {
-    let cancelled = false;
-
     const loadNativeWeather = async () => {
       await refreshNativeWeatherSnapshot();
       if (cancelled) {
@@ -1566,65 +1410,12 @@ export default function WebViewScreen() {
         },
       });
 
-      const currentSession = nativeTodoSessionRef.current;
-      if (!currentSession) {
-        return;
-      }
-
-      if (nextState === "inactive" || nextState === "background") {
-        if (isDeviceLockedRef.current) {
-          console.log("[DeviceLock] RN skip background timestamp because locked");
-          void persistNativeTodoSession({
-            ...currentSession,
-            backgroundEnteredAtMs: null,
-          });
-          return;
-        }
-        if (currentSession.backgroundEnteredAtMs !== null) {
-          return;
-        }
-        // 실행 중 세션에서 앱이 백그라운드로 내려가면 진입 시각 저장
-        // 이후 복귀(active) 또는 재실행 시 elapsedSeconds 계산 기준으로 사용
-        void persistNativeTodoSession({
-          ...currentSession,
-          backgroundEnteredAtMs: Date.now(),
-        });
-        return;
-      }
-
-      if (nextState !== "active" || currentSession.backgroundEnteredAtMs === null) {
-        return;
-      }
-
-      if (skipNextForegroundDeviationRef.current) {
-        console.log("[DeviceLock] RN skip foreground deviation recovery because locked");
-        skipNextForegroundDeviationRef.current = false;
-        void persistNativeTodoSession({
-          ...currentSession,
-          backgroundEnteredAtMs: null,
-        });
-        return;
-      }
-
-      // 정상 복귀(active) 경로:
-      // backgroundEnteredAtMs 기준으로 경과시간을 계산해 WebView에 복구 이벤트 전달
-      const resumedAtMs = Date.now();
-      pendingTodoSessionRecoveryRef.current = {
-        dateKey: currentSession.dateKey,
-        todoId: currentSession.todoId,
-        startedAt: currentSession.startedAt,
-        sessionId: currentSession.sessionId,
-        backgroundEnteredAtMs: currentSession.backgroundEnteredAtMs,
-        resumedAtMs,
-        elapsedSeconds: Math.max(Math.floor((resumedAtMs - currentSession.backgroundEnteredAtMs) / 1000), 0),
-      };
-      void dispatchPendingTodoSessionRecovery();
     });
 
     return () => {
       subscription.remove();
     };
-  }, [dispatchNativeBridgeEvent, dispatchPendingTodoSessionRecovery, persistNativeTodoSession]);
+  }, [dispatchNativeBridgeEvent]);
 
   useEffect(() => {
     if (!webUiEntryUri || !webViewRef.current) {
@@ -1639,37 +1430,6 @@ export default function WebViewScreen() {
   }, [webUiEntryUri, webViewUri, applyScaleScript]);
 
   const source = webViewUri ? { uri: webViewUri } : null;
-  const handleTodoSessionSync = useCallback(
-    async (payload: TodoSessionSyncPayload) => {
-      if (!payload.active) {
-        pendingTodoSessionRecoveryRef.current = null;
-        await persistNativeTodoSession(null);
-        return;
-      }
-
-      if (
-        typeof payload.dateKey !== "string" ||
-        typeof payload.todoId !== "string" ||
-        typeof payload.startedAt !== "string" ||
-        typeof payload.sessionId !== "string"
-      ) {
-        return;
-      }
-
-      const previous = nativeTodoSessionRef.current;
-      const shouldKeepBackgroundEnteredAt =
-        previous?.sessionId === payload.sessionId ? previous.backgroundEnteredAtMs : null;
-      await persistNativeTodoSession({
-        dateKey: payload.dateKey,
-        todoId: payload.todoId,
-        startedAt: payload.startedAt,
-        sessionId: payload.sessionId,
-        syncedAtMs: typeof payload.syncedAtMs === "number" ? payload.syncedAtMs : Date.now(),
-        backgroundEnteredAtMs: shouldKeepBackgroundEnteredAt,
-      });
-    },
-    [persistNativeTodoSession]
-  );
   const applyWeatherSettingsSync = useCallback(
     (payload: { enabled?: unknown; mood?: unknown; particleClarity?: unknown }) => {
       applyNativeWeatherSettings({
@@ -1692,7 +1452,6 @@ export default function WebViewScreen() {
       }
       const isHandledBridgeMessage = await routeWebViewBridgeMessage(parsedData, {
         sync: {
-          handleTodoSessionSync,
           handleTodoViewSync,
           applyWeatherSettingsSync,
           refreshNativeWeatherSnapshot,
@@ -1837,7 +1596,6 @@ export default function WebViewScreen() {
                 webViewRef.current.injectJavaScript(applyScaleScript);
               }
               dispatchPendingWeatherSnapshot();
-              void dispatchPendingTodoSessionRecovery();
               const pendingTargetPath = pendingNotificationPathRef.current;
               if (pendingTargetPath) {
                 const hashPath = `#${pendingTargetPath}`;

@@ -21,6 +21,16 @@ export type RoutineTemplate = {
   updatedAt: string;
 };
 
+export type RoutineTemplateWeekdayAssignment = {
+  id: string;
+  userId: string;
+  weekday: number;
+  routineTemplateId: string | null;
+  routineTemplate: RoutineTemplate | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RoutineTemplateItemInput = {
   id?: string;
   taskId?: string | null;
@@ -43,6 +53,34 @@ const ROUTINE_TEMPLATES_QUERY = /* GraphQL */ `
         content
         order
         scheduledTimeHHmm
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_QUERY = /* GraphQL */ `
+  query RoutineTemplateWeekdayAssignments {
+    routineTemplateWeekdayAssignments {
+      id
+      userId
+      weekday
+      routineTemplateId
+      routineTemplate {
+        id
+        userId
+        name
+        items {
+          id
+          taskId
+          titleSnapshot
+          content
+          order
+          scheduledTimeHHmm
+        }
+        createdAt
+        updatedAt
       }
       createdAt
       updatedAt
@@ -96,8 +134,40 @@ const DELETE_ROUTINE_TEMPLATE_MUTATION = /* GraphQL */ `
   }
 `;
 
+const UPDATE_ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_MUTATION = /* GraphQL */ `
+  mutation UpdateRoutineTemplateWeekdayAssignments($input: UpdateRoutineTemplateWeekdayAssignmentsInput!) {
+    updateRoutineTemplateWeekdayAssignments(input: $input) {
+      id
+      userId
+      weekday
+      routineTemplateId
+      routineTemplate {
+        id
+        userId
+        name
+        items {
+          id
+          taskId
+          titleSnapshot
+          content
+          order
+          scheduledTimeHHmm
+        }
+        createdAt
+        updatedAt
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
 type RoutineTemplatesQueryResponse = {
   routineTemplates: RoutineTemplate[];
+};
+
+type RoutineTemplateWeekdayAssignmentsQueryResponse = {
+  routineTemplateWeekdayAssignments: RoutineTemplateWeekdayAssignment[];
 };
 
 type CreateRoutineTemplateMutationResponse = {
@@ -110,6 +180,10 @@ type UpdateRoutineTemplateMutationResponse = {
 
 type DeleteRoutineTemplateMutationResponse = {
   deleteRoutineTemplate: boolean;
+};
+
+type UpdateRoutineTemplateWeekdayAssignmentsMutationResponse = {
+  updateRoutineTemplateWeekdayAssignments: RoutineTemplateWeekdayAssignment[];
 };
 
 async function postGraphql<T>(query: string, variables?: Record<string, unknown>) {
@@ -134,6 +208,13 @@ async function postGraphql<T>(query: string, variables?: Record<string, unknown>
 export async function fetchRoutineTemplates() {
   const data = await postGraphql<RoutineTemplatesQueryResponse>(ROUTINE_TEMPLATES_QUERY);
   return data?.routineTemplates ?? [];
+}
+
+export async function fetchRoutineTemplateWeekdayAssignments() {
+  const data = await postGraphql<RoutineTemplateWeekdayAssignmentsQueryResponse>(
+    ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_QUERY
+  );
+  return data?.routineTemplateWeekdayAssignments ?? [];
 }
 
 export async function createRoutineTemplate(input: {
@@ -171,4 +252,17 @@ export async function deleteRoutineTemplate(input: { routineTemplateId: string }
     { input }
   );
   return data?.deleteRoutineTemplate ?? false;
+}
+
+export async function updateRoutineTemplateWeekdayAssignments(input: {
+  assignments: Array<{
+    weekday: number;
+    routineTemplateId?: string | null;
+  }>;
+}) {
+  const data = await postGraphql<UpdateRoutineTemplateWeekdayAssignmentsMutationResponse>(
+    UPDATE_ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_MUTATION,
+    { input }
+  );
+  return data?.updateRoutineTemplateWeekdayAssignments ?? [];
 }

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { MAIN_ROUTE, ROUTE_LABEL } from "../routes/route-config";
+import {
+  MAIN_ROUTE,
+  ROUTE_LABEL,
+  ROUTINE_CREATE_PATH,
+  ROUTINE_EDIT_PATH_PREFIX,
+  ROUTINE_MANAGE_PATH,
+} from "../routes/route-config";
 import type { RouteKey } from "../routes/types";
 import { useLocation } from "react-router-dom";
 import { MonthDropdown } from "./MonthDropdown";
@@ -68,7 +74,7 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
   const { openMenu, goBack, goPage } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
-  const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
+  const temperatureEnabled = useWeatherStore((state) => state.temperatureEnabled);
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weather = useWeatherStore((state) => state.weather);
   const pathname = forcedPathname ?? location.pathname;
@@ -103,13 +109,32 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
       }
     }
 
-    if (route === "settings") {
+    if (route === "settings" || route === "routine") {
+      const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+      if (normalizedPath === ROUTINE_CREATE_PATH) {
+        return "루틴 만들기";
+      }
+      if (normalizedPath.startsWith(ROUTINE_EDIT_PATH_PREFIX)) {
+        return "루틴 수정";
+      }
+      if (normalizedPath === ROUTINE_MANAGE_PATH) {
+        return "루틴 관리";
+      }
+      if (normalizedPath.startsWith(`${ROUTINE_MANAGE_PATH}/`)) {
+        return "루틴 관리";
+      }
+      if (route === "routine") {
+        return ROUTE_LABEL.routine;
+      }
       const subPath = pathname.replace(/^\/settings\/?/, "").split("/")[0];
       if (subPath === "theme") {
         return "테마";
       }
       if (subPath === "weather") {
         return "날씨";
+      }
+      if (subPath === "routine") {
+        return "루틴 관리";
       }
       if (subPath === "notifications") {
         return "알림";
@@ -144,7 +169,7 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
           <div className="flex justify-center">
             <MonthDropdown month={viewMonth} onChange={setViewMonth} />
           </div>
-          {weatherEnabled && weather ? (
+          {temperatureEnabled && weather ? (
             <div className="pointer-events-none absolute top-1/2 right-[5.25rem] -translate-y-1/2">
               <div
                 className={[

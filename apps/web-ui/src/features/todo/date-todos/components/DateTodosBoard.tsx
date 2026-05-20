@@ -9,12 +9,12 @@ import {
 } from "@dnd-kit/sortable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FiClipboard, FiDownload, FiPlus } from "react-icons/fi";
+import { FiClipboard } from "react-icons/fi";
 import { fetchDailyLogByDate } from "../../../../api/dailyLogApi";
-import { Button } from "../../../../components/ui/Button";
 import { useHorizontalSwipeGesture } from "../../../../hooks/useHorizontalSwipeGesture";
 import { useSortableItem } from "../../../../hooks/useSortableItem";
 import { useSortableSensors } from "../../../../hooks/useSortableSensors";
+import { useRoutineTemplateWeekdayAssignmentsQuery } from "../../../../queries";
 import { dailyLogByDateQueryKey } from "../../../../queries/daily-log/queries";
 import { reorderStringIdsByDrag } from "../../../../utils/dnd";
 import { formatDateKey } from "../../../../utils/holidays";
@@ -22,6 +22,8 @@ import { shiftDateKey } from "../../../calendar/utils/date";
 import { TodoItemCard } from "../../components/TodoItemCard";
 import type { TaskItem } from "../../types";
 import { useDateTodosRouteContext } from "../DateTodosRouteProvider";
+import { DateTodosEmptyState } from "./DateTodosEmptyState";
+import type { WeekdayRoutinePreviewItem } from "./WeekdayRoutinePreviewCard";
 
 type DateTodosBoardProps = {
   dateKey: string;
@@ -230,8 +232,11 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     handleEditActualFocus,
     handleDateTaskMenuAction,
     openRoutineImport,
-    openRoutineCreate,
+    routineTemplates,
+    isRoutineTemplatesLoading,
+    handleApplyRoutineTemplate,
   } = useDateTodosRouteContext();
+  const { routineTemplateWeekdayAssignmentsQuery } = useRoutineTemplateWeekdayAssignmentsQuery();
   const queryClient = useQueryClient();
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -240,6 +245,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   const [settleDirection, setSettleDirection] = useState<-1 | 0 | 1>(0);
   const [pendingShiftDays, setPendingShiftDays] = useState<-1 | 0 | 1>(0);
   const [isSettling, setIsSettling] = useState(false);
+  const [isApplyingWeekdayRoutine, setIsApplyingWeekdayRoutine] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const todayDateKey = formatDateKey(new Date());
   const isPastDate = dateKey < todayDateKey;
@@ -252,6 +258,38 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     }
     return Math.round((todayDate.getTime() - selectedDate.getTime()) / DAY_IN_MS);
   }, [dateKey, todayDateKey]);
+  const selectedDateWeekday = useMemo(() => {
+    const localDate = parseDateKeyToLocalDate(dateKey);
+    return localDate ? localDate.getDay() : null;
+  }, [dateKey]);
+  const assignedWeekdayRoutineTemplate = useMemo(() => {
+    if (selectedDateWeekday === null) {
+      return null;
+    }
+    const assignment = (routineTemplateWeekdayAssignmentsQuery.data ?? []).find(
+      (item) => item.weekday === selectedDateWeekday && item.routineTemplateId
+    );
+    if (!assignment?.routineTemplateId) {
+      return null;
+    }
+    return (
+      routineTemplates.find((template) => template.id === assignment.routineTemplateId) ??
+      assignment.routineTemplate ??
+      null
+    );
+  }, [routineTemplateWeekdayAssignmentsQuery.data, routineTemplates, selectedDateWeekday]);
+  const weekdayRoutinePreviewItems: WeekdayRoutinePreviewItem[] = useMemo(
+    () =>
+      (assignedWeekdayRoutineTemplate?.items ?? [])
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .slice(0, 4)
+        .map((item) => ({
+          id: item.id,
+          content: item.content,
+        })),
+    [assignedWeekdayRoutineTemplate]
+  );
   const {
     handleTouchStart: handleBoardSwipeTouchStart,
     handleTouchMove: handleBoardSwipeTouchMove,
@@ -419,6 +457,16 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     return () => window.clearTimeout(timer);
   }, [draggingId]);
 
+  const handleApplyWeekdayRoutine = () => {
+    if (!assignedWeekdayRoutineTemplate?.id) {
+      return;
+    }
+    setIsApplyingWeekdayRoutine(true);
+    void handleApplyRoutineTemplate(assignedWeekdayRoutineTemplate.id).finally(() => {
+      setIsApplyingWeekdayRoutine(false);
+    });
+  };
+
   return (
     <div className="min-h-0 flex-1 rounded-xl border border-base-300/80 bg-base-100/65 p-2.5">
       <div
@@ -465,57 +513,25 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
                   <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
                 </div>
               ) : items.length === 0 ? (
-                <div className="flex min-h-full flex-col items-center justify-center gap-4 px-3 py-6 text-center">
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-base-200 text-base-content/60">
-                    <FiClipboard size={20} />
-                  </span>
-                  {isPastDate ? (
-                    <>
-                      <div className="space-y-1">
-                        <p className="m-0 text-base font-semibold tracking-tight text-base-content/85">
-                          지난 날짜에 등록된 할일이 없어요
-                        </p>
-                        <p className="m-0 text-xs text-base-content/60">
-                          이 날짜는 기록 확인용으로 두고, 오늘 계획을 먼저 잡아보는 게 좋아요.
-                        </p>
-                      </div>
-                      <div className="flex w-full max-w-xs gap-2" data-disable-date-sheet-swipe="true">
-                        <Button
-                          variant="primary"
-                          className="flex-1 rounded-lg"
-                          onClick={() => {
-                            if (daysToToday !== 0) {
-                              onShiftDate(daysToToday);
-                            }
-                          }}
-                        >
-                          오늘로 이동
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="space-y-1">
-                        <p className="m-0 text-base font-semibold tracking-tight text-base-content/85">
-                          {isFutureDate ? "이 날짜에 예정된 할일이 없어요" : "오늘 할 일이 비어 있어요"}
-                        </p>
-                        <p className="m-0 text-xs text-base-content/60">
-                          루틴을 불러오거나 새 루틴을 만들어 빠르게 시작해보세요.
-                        </p>
-                      </div>
-                      <div className="flex w-full max-w-xs gap-2" data-disable-date-sheet-swipe="true">
-                        <Button variant="primary" className="flex-1 rounded-lg" onClick={openRoutineImport}>
-                          <FiDownload size={13} />
-                          루틴 불러오기
-                        </Button>
-                        <Button variant="outline" className="flex-1 rounded-lg" onClick={openRoutineCreate}>
-                          <FiPlus size={13} />
-                          루틴 만들기
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <DateTodosEmptyState
+                  isPastDate={isPastDate}
+                  isFutureDate={isFutureDate}
+                  daysToToday={daysToToday}
+                  onShiftDate={onShiftDate}
+                  assignedWeekdayRoutineTemplate={
+                    assignedWeekdayRoutineTemplate?.id
+                      ? {
+                          id: assignedWeekdayRoutineTemplate.id,
+                          name: assignedWeekdayRoutineTemplate.name,
+                        }
+                      : null
+                  }
+                  weekdayRoutinePreviewItems={weekdayRoutinePreviewItems}
+                  isApplyingWeekdayRoutine={isApplyingWeekdayRoutine}
+                  isRoutineTemplatesLoading={isRoutineTemplatesLoading}
+                  onApplyWeekdayRoutine={handleApplyWeekdayRoutine}
+                  onOpenRoutineImport={openRoutineImport}
+                />
               ) : (
                 <DndContext
                   sensors={sensors}

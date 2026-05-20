@@ -96,10 +96,25 @@ model RoutineTemplate {
   userId    String
   name      String
   items     RoutineTemplateEntry[]
+  weekdayAssignments RoutineTemplateWeekdayAssignment[]
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
 
   @@index([userId, name])
+}
+
+model RoutineTemplateWeekdayAssignment {
+  id               String          @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String
+  weekday          Int
+  routineTemplateId String?        @db.ObjectId
+  routineTemplate  RoutineTemplate? @relation(fields: [routineTemplateId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([userId, weekday])
+  @@index([userId])
+  @@index([routineTemplateId])
 }
 
 model NotificationSettings {

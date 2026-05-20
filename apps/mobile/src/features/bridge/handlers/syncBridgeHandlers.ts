@@ -4,15 +4,6 @@ import {
   type ParsedBridgeMessage,
 } from "../types";
 
-export type TodoSessionSyncPayload = {
-  active?: boolean;
-  dateKey?: string | null;
-  todoId?: string | null;
-  startedAt?: string | null;
-  sessionId?: string | null;
-  syncedAtMs?: number;
-};
-
 export type TodoViewSyncPayload = {
   isViewingTodayTodoSurface?: boolean;
   source?: "date-tasks" | "calendar-sheet" | "none";
@@ -27,7 +18,6 @@ type WeatherSettingsRawPayload = {
 };
 
 export type SyncBridgeHandlerDeps = {
-  handleTodoSessionSync: (payload: TodoSessionSyncPayload) => Promise<void>;
   handleTodoViewSync: (payload: TodoViewSyncPayload) => void;
   applyWeatherSettingsSync: (payload: WeatherSettingsRawPayload) => void;
   refreshNativeWeatherSnapshot: () => Promise<void>;
@@ -40,12 +30,6 @@ export async function handleSyncBridgeMessage(
   const messageType = readBridgeType(parsedData);
   if (!messageType) {
     return false;
-  }
-
-  if (messageType === "REST_TODO_SESSION_SYNC") {
-    const payload = (readBridgePayloadRecord(parsedData) ?? {}) as TodoSessionSyncPayload;
-    await deps.handleTodoSessionSync(payload);
-    return true;
   }
 
   if (messageType === "REST_WEATHER_SETTINGS_SYNC") {

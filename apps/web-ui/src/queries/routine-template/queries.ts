@@ -1,7 +1,11 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { fetchRoutineTemplates } from "../../api/routineTemplateApi";
+import {
+  fetchRoutineTemplateWeekdayAssignments,
+  fetchRoutineTemplates,
+} from "../../api/routineTemplateApi";
 
 export const routineTemplatesQueryKey = ["routineTemplates"] as const;
+export const routineTemplateWeekdayAssignmentsQueryKey = ["routineTemplateWeekdayAssignments"] as const;
 
 export function routineTemplatesQuery() {
   return useQuery({
@@ -20,5 +24,25 @@ export function useRoutineTemplateQuery() {
 
   return {
     routineTemplatesQuery: routineTemplates,
+  };
+}
+
+export function routineTemplateWeekdayAssignmentsQuery() {
+  return useQuery({
+    queryKey: routineTemplateWeekdayAssignmentsQueryKey,
+    queryFn: () => fetchRoutineTemplateWeekdayAssignments(),
+    staleTime: 1000 * 60 * 3,
+    gcTime: 1000 * 60 * 20,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+}
+
+export function useRoutineTemplateWeekdayAssignmentsQuery() {
+  const routineTemplateWeekdayAssignments = routineTemplateWeekdayAssignmentsQuery();
+
+  return {
+    routineTemplateWeekdayAssignmentsQuery: routineTemplateWeekdayAssignments,
   };
 }

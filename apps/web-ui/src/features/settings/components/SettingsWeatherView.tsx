@@ -13,9 +13,11 @@ import {
 
 export function SettingsWeatherView() {
   const weatherEnabled = useWeatherStore((state) => state.weatherEnabled);
+  const temperatureEnabled = useWeatherStore((state) => state.temperatureEnabled);
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
   const setWeatherEnabled = useWeatherStore((state) => state.setWeatherEnabled);
+  const setTemperatureEnabled = useWeatherStore((state) => state.setTemperatureEnabled);
   const setWeatherMood = useWeatherStore((state) => state.setWeatherMood);
   const setWeatherParticleClarity = useWeatherStore((state) => state.setWeatherParticleClarity);
   const setWeather = useWeatherStore((state) => state.setWeather);
@@ -116,7 +118,7 @@ export function SettingsWeatherView() {
       </div>
 
       <div className={`space-y-2 rounded-xl border border-base-300/80 bg-base-100/75 p-3 ${disabledClassName}`}>
-        <p className="m-0 text-sm font-medium text-base-content">사용</p>
+        <p className="m-0 text-sm font-medium text-base-content">배경 효과</p>
         <div className="mt-3">
           <SegmentedToggle
             value={weatherEnabled ? "on" : "off"}
@@ -125,6 +127,20 @@ export function SettingsWeatherView() {
               { value: "off", label: "OFF" },
             ]}
             onChange={(nextValue) => setWeatherEnabled(nextValue === "on")}
+          />
+        </div>
+      </div>
+
+      <div className={`space-y-2 rounded-xl border border-base-300/80 bg-base-100/75 p-3 ${disabledClassName}`}>
+        <p className="m-0 text-sm font-medium text-base-content">상단 온도</p>
+        <div className="mt-3">
+          <SegmentedToggle
+            value={temperatureEnabled ? "on" : "off"}
+            options={[
+              { value: "on", label: "ON" },
+              { value: "off", label: "OFF" },
+            ]}
+            onChange={(nextValue) => setTemperatureEnabled(nextValue === "on")}
           />
         </div>
       </div>

@@ -15,6 +15,8 @@ export const THEME_STYLES = [
 ] as const;
 export type ThemeStyle = (typeof THEME_STYLES)[number];
 export type ThemeMode = "system" | "light" | "dark";
+export const THEME_FONTS = ["system", "default", "rounded", "clean", "classic", "mono"] as const;
+export type ThemeFont = (typeof THEME_FONTS)[number];
 
 export const THEME_STYLE_LABEL: Record<ThemeStyle, string> = {
   dreamy: "Dreamy",
@@ -27,6 +29,15 @@ export const THEME_STYLE_LABEL: Record<ThemeStyle, string> = {
   mono: "Mono",
   frost: "Frost",
   ink: "Ink",
+};
+
+export const THEME_FONT_LABEL: Record<ThemeFont, string> = {
+  system: "기본",
+  default: "로봇 A",
+  rounded: "로봇 B",
+  clean: "팝",
+  classic: "판타지 세리프",
+  mono: "판타지 손글씨",
 };
 
 const themeNameMap: Record<ThemeStyle, { light: string; dark: string }> = {
@@ -45,11 +56,13 @@ const themeNameMap: Record<ThemeStyle, { light: string; dark: string }> = {
 type ThemeStoreState = {
   themeStyle: ThemeStyle;
   themeMode: ThemeMode;
+  themeFont: ThemeFont;
 };
 
 type ThemeStoreActions = {
   setThemeStyle: (style: ThemeStyle) => void;
   setThemeMode: (mode: ThemeMode) => void;
+  setThemeFont: (font: ThemeFont) => void;
 };
 
 type ThemeStore = ThemeStoreState & ThemeStoreActions;
@@ -64,11 +77,15 @@ export const useThemeStore = create<ThemeStore>()(
     (set) => ({
       themeStyle: "dreamy",
       themeMode: "system",
+      themeFont: "system",
       setThemeStyle: (style) => {
         set((prev) => (prev.themeStyle === style ? prev : { themeStyle: style }));
       },
       setThemeMode: (mode) => {
         set((prev) => (prev.themeMode === mode ? prev : { themeMode: mode }));
+      },
+      setThemeFont: (font) => {
+        set((prev) => (prev.themeFont === font ? prev : { themeFont: font }));
       },
     }),
     {
@@ -76,6 +93,7 @@ export const useThemeStore = create<ThemeStore>()(
       partialize: (state) => ({
         themeStyle: state.themeStyle,
         themeMode: state.themeMode,
+        themeFont: state.themeFont,
       }),
     }
   )

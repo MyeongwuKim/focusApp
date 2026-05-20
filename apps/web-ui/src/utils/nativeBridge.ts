@@ -27,15 +27,6 @@ export type NativeAppVersionInfo = {
   platform: "ios" | "android" | "web" | "unknown";
 };
 
-export type NativeTodoSessionSyncPayload = {
-  active: boolean;
-  dateKey?: string | null;
-  todoId?: string | null;
-  startedAt?: string | null;
-  sessionId?: string | null;
-  syncedAtMs?: number;
-};
-
 export type NativeWeatherSettingsSyncPayload = {
   enabled: boolean;
   mood: "dreamy" | "cinematic";
@@ -74,10 +65,6 @@ export function postNativeBridgeMessage(type: string, payload?: Record<string, u
 
   bridge.postMessage(JSON.stringify({ type, ...payload }));
   return true;
-}
-
-export function syncNativeTodoSession(payload: NativeTodoSessionSyncPayload) {
-  return postNativeBridgeMessage("REST_TODO_SESSION_SYNC", { payload });
 }
 
 export function syncNativeWeatherSettings(payload: NativeWeatherSettingsSyncPayload) {

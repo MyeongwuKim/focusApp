@@ -23,6 +23,16 @@ export const routineTemplateTypeDefs = gql`
     updatedAt: String!
   }
 
+  type RoutineTemplateWeekdayAssignment {
+    id: ID!
+    userId: ID!
+    weekday: Int!
+    routineTemplateId: ID
+    routineTemplate: RoutineTemplate
+    createdAt: String!
+    updatedAt: String!
+  }
+
   input RoutineTemplateItemInput {
     id: ID
     taskId: ID
@@ -47,14 +57,27 @@ export const routineTemplateTypeDefs = gql`
     routineTemplateId: ID!
   }
 
+  input RoutineTemplateWeekdayAssignmentInput {
+    weekday: Int!
+    routineTemplateId: ID
+  }
+
+  input UpdateRoutineTemplateWeekdayAssignmentsInput {
+    assignments: [RoutineTemplateWeekdayAssignmentInput!]!
+  }
+
   extend type Query {
     routineTemplates: [RoutineTemplate!]!
+    routineTemplateWeekdayAssignments: [RoutineTemplateWeekdayAssignment!]!
   }
 
   extend type Mutation {
     createRoutineTemplate(input: CreateRoutineTemplateInput!): RoutineTemplate!
     updateRoutineTemplate(input: UpdateRoutineTemplateInput!): RoutineTemplate!
     deleteRoutineTemplate(input: DeleteRoutineTemplateInput!): Boolean!
+    updateRoutineTemplateWeekdayAssignments(
+      input: UpdateRoutineTemplateWeekdayAssignmentsInput!
+    ): [RoutineTemplateWeekdayAssignment!]!
   }
 `;
 
@@ -65,6 +88,9 @@ const routineTemplateErrorMapping = {
   ROUTINE_TEMPLATE_ITEMS_REQUIRED: { message: "루틴 항목을 1개 이상 추가해 주세요." },
   ROUTINE_TEMPLATE_ITEM_CONTENT_REQUIRED: { message: "루틴 항목 내용을 입력해 주세요." },
   ROUTINE_TEMPLATE_ITEM_TIME_INVALID: { message: "시작 시간은 HH:mm 형식으로 입력해 주세요." },
+  ROUTINE_WEEKDAY_ASSIGNMENTS_REQUIRED: { message: "요일 할당 정보를 1개 이상 전달해 주세요." },
+  ROUTINE_WEEKDAY_INVALID: { message: "요일 값이 올바르지 않아요. 0(일)~6(토) 범위를 사용해 주세요." },
+  ROUTINE_WEEKDAY_DUPLICATED: { message: "중복된 요일이 포함되어 있어요." },
 };
 
 export const routineTemplateResolvers = {
@@ -72,6 +98,10 @@ export const routineTemplateResolvers = {
     routineTemplates: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
       const service = createRoutineTemplateService(context);
       return service.getRoutineTemplates(getUserId(context));
+    },
+    routineTemplateWeekdayAssignments: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      const service = createRoutineTemplateService(context);
+      return service.getRoutineTemplateWeekdayAssignments(getUserId(context));
     },
   },
   Mutation: {
@@ -148,8 +178,34 @@ export const routineTemplateResolvers = {
         rethrowMappedGraphQLError(error, routineTemplateErrorMapping);
       }
     },
+    updateRoutineTemplateWeekdayAssignments: async (
+      _parent: unknown,
+      args: {
+        input: {
+          assignments: Array<{
+            weekday: number;
+            routineTemplateId?: string | null;
+          }>;
+        };
+      },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createRoutineTemplateService(context);
+        return await service.updateRoutineTemplateWeekdayAssignments({
+          userId: getUserId(context),
+          assignments: args.input.assignments,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, routineTemplateErrorMapping);
+      }
+    },
   },
   RoutineTemplate: {
+    createdAt: (parent: { createdAt: Date }) => parent.createdAt.toISOString(),
+    updatedAt: (parent: { updatedAt: Date }) => parent.updatedAt.toISOString(),
+  },
+  RoutineTemplateWeekdayAssignment: {
     createdAt: (parent: { createdAt: Date }) => parent.createdAt.toISOString(),
     updatedAt: (parent: { updatedAt: Date }) => parent.updatedAt.toISOString(),
   },

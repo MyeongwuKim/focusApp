@@ -4,6 +4,7 @@ import { resolveThemeName, useThemeStore } from "../stores";
 export function ThemeController() {
   const themeStyle = useThemeStore((state) => state.themeStyle);
   const themeMode = useThemeStore((state) => state.themeMode);
+  const themeFont = useThemeStore((state) => state.themeFont);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -17,6 +18,10 @@ export function ThemeController() {
     media.addEventListener("change", handleChange);
     return () => media.removeEventListener("change", handleChange);
   }, [themeStyle, themeMode]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-app-font", themeFont);
+  }, [themeFont]);
 
   return null;
 }
