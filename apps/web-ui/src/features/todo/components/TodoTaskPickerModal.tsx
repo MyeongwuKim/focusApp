@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronLeft, FiPlus } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import { InputField } from "../../../components/ui/InputField";
@@ -18,6 +18,8 @@ type PickerTask = {
 };
 
 const UNCATEGORIZED_COLLECTION_NAME = "미분류";
+type CustomAddMode = "today_only" | "save_uncategorized";
+const normalizeLabel = (value: string) => value.trim().toLowerCase();
 
 type TodoTaskPickerModalProps = {
   isOpen: boolean;
@@ -46,6 +48,12 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
   >([]);
   const [customLabel, setCustomLabel] = useState("");
   const [isCreatingCustomTask, setIsCreatingCustomTask] = useState(false);
+  const [customAddMode, setCustomAddMode] = useState<CustomAddMode>("today_only");
+  const customAddLockRef = useRef(false);
+  const isComposingRef = useRef(false);
+  const lastCustomSubmitRef = useRef<{ value: string; at: number } | null>(null);
+  const selectedItemsScrollRef = useRef<HTMLDivElement | null>(null);
+  const prevSelectedItemsLengthRef = useRef(0);
 
   useEffect(() => {
     let rafId: number | null = null;
@@ -53,6 +61,7 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
 
     if (isOpen) {
       setShouldRender(true);
+      setCustomAddMode("today_only");
       rafId = window.requestAnimationFrame(() => {
         setIsVisible(true);
       });
@@ -72,6 +81,24 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
       }
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    const prevLength = prevSelectedItemsLengthRef.current;
+    prevSelectedItemsLengthRef.current = selectedItems.length;
+    if (selectedItems.length <= prevLength) {
+      return;
+    }
+
+    const viewport = selectedItemsScrollRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [selectedItems]);
 
   const categoryItems = useMemo(
     () => [
@@ -117,6 +144,8 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
       return aFavorite ? -1 : 1;
     });
   }, [selectedCategory, taskLibrary]);
+  const findTaskByLabel = (label: string) =>
+    taskLibrary.find((task) => normalizeLabel(task.label) === normalizeLabel(label));
 
   const collectionCountMap = useMemo(() => {
     const counts = new Map<string, number>();
@@ -141,6 +170,52 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     });
   };
 
+  const addSelectedItem = (item: { key: string; label: string; taskId?: string | null }) => {
+    const normalizedLabel = normalizeLabel(item.label);
+    setSelectedItems((prev) => {
+      const exists = prev.some(
+        (candidate) =>
+          candidate.key === item.key || normalizeLabel(candidate.label) === normalizedLabel
+      );
+      if (exists) {
+        return prev;
+      }
+      return [...prev, item];
+    });
+  };
+  const hasSelectedLabel = (label: string) =>
+    selectedItems.some((candidate) => normalizeLabel(candidate.label) === normalizeLabel(label));
+  const tryAddExistingTaskFromLibrary = (label: string) => {
+    const existingTask = findTaskByLabel(label);
+    if (!existingTask) {
+      return false;
+    }
+
+    if (hasSelectedLabel(existingTask.label)) {
+      toast.show({
+        type: "error",
+        title: "중복 항목",
+        message: "이미 추가된 항목이에요.",
+        duration: 1800,
+      });
+      return true;
+    }
+
+    addSelectedItem({
+      key: `task:${existingTask.id}`,
+      label: existingTask.label,
+      taskId: existingTask.id,
+    });
+    setCustomLabel("");
+    toast.show({
+      type: "positive",
+      title: "기존 할일 사용",
+      message: "이미 만든 할일을 선택 목록에 추가했어요.",
+      duration: 1800,
+    });
+    return true;
+  };
+
   const ensureUncategorizedCollectionId = async () => {
     const existing = collections.find(
       (collection) => collection.name.trim() === UNCATEGORIZED_COLLECTION_NAME
@@ -155,12 +230,64 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     return created.id;
   };
 
-  const addCustomTask = async () => {
+  const addCustomTaskTodayOnly = async () => {
     const nextLabel = customLabel.trim();
-    if (!nextLabel || isCreatingCustomTask) {
+    if (!nextLabel || isCreatingCustomTask || customAddLockRef.current) {
+      return;
+    }
+    if (tryAddExistingTaskFromLibrary(nextLabel)) {
+      return;
+    }
+    if (hasSelectedLabel(nextLabel)) {
+      toast.show({
+        type: "error",
+        title: "중복 항목",
+        message: "이미 추가된 항목이에요.",
+        duration: 1800,
+      });
       return;
     }
 
+    customAddLockRef.current = true;
+    setIsCreatingCustomTask(true);
+    try {
+      addSelectedItem({
+        key: `custom:${nextLabel.toLowerCase()}`,
+        label: nextLabel,
+        taskId: null,
+      });
+      setCustomLabel("");
+      toast.show({
+        type: "positive",
+        title: "오늘만 추가됨",
+        message: "오늘 할일 목록에만 추가했어요.",
+        duration: 1800,
+      });
+    } finally {
+      setIsCreatingCustomTask(false);
+      customAddLockRef.current = false;
+    }
+  };
+
+  const addCustomTaskToUncategorized = async () => {
+    const nextLabel = customLabel.trim();
+    if (!nextLabel || isCreatingCustomTask || customAddLockRef.current) {
+      return;
+    }
+    if (tryAddExistingTaskFromLibrary(nextLabel)) {
+      return;
+    }
+    if (hasSelectedLabel(nextLabel)) {
+      toast.show({
+        type: "error",
+        title: "중복 항목",
+        message: "이미 추가된 항목이에요.",
+        duration: 1800,
+      });
+      return;
+    }
+
+    customAddLockRef.current = true;
     setIsCreatingCustomTask(true);
     try {
       const uncategorizedCollectionId = await ensureUncategorizedCollectionId();
@@ -180,13 +307,10 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
         throw new Error("할일을 추가하지 못했어요.");
       }
 
-      setSelectedItems((prev) => {
-        const key = `task:${nextTaskId}`;
-        const exists = prev.some((item) => item.key === key);
-        if (exists) {
-          return prev;
-        }
-        return [...prev, { key, label: nextTaskLabel, taskId: nextTaskId }];
+      addSelectedItem({
+        key: `task:${nextTaskId}`,
+        label: nextTaskLabel,
+        taskId: nextTaskId,
       });
       setSelectedCategory(uncategorizedCollectionId);
       setCustomLabel("");
@@ -208,7 +332,28 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
       });
     } finally {
       setIsCreatingCustomTask(false);
+      customAddLockRef.current = false;
     }
+  };
+
+  const addCustomTaskFromInput = async () => {
+    const value = customLabel.trim();
+    if (!value) {
+      return;
+    }
+
+    const now = Date.now();
+    const lastSubmit = lastCustomSubmitRef.current;
+    if (lastSubmit && lastSubmit.value === value && now - lastSubmit.at < 700) {
+      return;
+    }
+    lastCustomSubmitRef.current = { value, at: now };
+
+    if (customAddMode === "save_uncategorized") {
+      await addCustomTaskToUncategorized();
+      return;
+    }
+    await addCustomTaskTodayOnly();
   };
 
   const toggleFavoriteTask = (task: PickerTask) => {
@@ -237,6 +382,7 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
     onApply(selectedItems.map((item) => ({ label: item.label, taskId: item.taskId ?? null })));
     setSelectedItems([]);
     setCustomLabel("");
+    setCustomAddMode("today_only");
     setSelectedCategory("all");
     onClose();
   };
@@ -328,7 +474,7 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
         <div className="shrink-0 border-t border-base-300/80 bg-base-100 p-2">
         <div className="rounded-lg border border-base-300/75 bg-base-200/30 px-2 py-1.5">
           <div className="mb-1.5 flex items-center justify-between">
-            <p className="m-0 text-xs font-semibold text-base-content/75">추가한 항목</p>
+            <p className="m-0 text-xs font-semibold text-base-content/75">추가된 항목</p>
             <button
               type="button"
               className="text-xs text-base-content/55"
@@ -338,24 +484,13 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
               비우기
             </button>
           </div>
-          <div className="no-scrollbar flex max-h-16 flex-wrap gap-1 overflow-y-auto">
+          <div ref={selectedItemsScrollRef} className="no-scrollbar flex max-h-16 flex-wrap gap-1 overflow-y-auto">
             {selectedItems.length > 0 ? (
               selectedItems.map((item) => (
                 <Button
                   key={item.key}
                   className="rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 text-xs text-primary"
-                  onClick={() =>
-                    (() => {
-                      const task =
-                        taskLibrary.find((candidate) => candidate.id === item.taskId) ?? {
-                          id: String(item.taskId),
-                          label: item.label,
-                          collectionId: "all",
-                          isFavorite: false,
-                        };
-                      toggleTaskSelection(task);
-                    })()
-                  }
+                  onClick={() => setSelectedItems((prev) => prev.filter((candidate) => candidate.key !== item.key))}
                 >
                   {item.label}
                 </Button>
@@ -366,41 +501,68 @@ export function TodoTaskPickerModal({ isOpen, onClose, onApply }: TodoTaskPicker
           </div>
         </div>
 
-        <div className="mt-2 grid grid-cols-[1fr_96px] gap-2">
-          <div className="flex items-center gap-1.5 rounded-full border border-base-300/75 bg-base-100/90 px-3">
-            <InputField
-              value={customLabel}
-              onChange={(event) => setCustomLabel(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void addCustomTask();
-                }
-              }}
-              variant="plain"
-              className="h-9 w-full bg-transparent text-sm"
-              placeholder="리스트에 없는 할일 직접 추가"
-            />
+        <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+          <div className="flex items-center gap-1.5 rounded-full border border-base-300/75 bg-base-100/90 px-2">
+            <div className="flex shrink-0 items-center rounded-full bg-base-200/80 p-0.5">
+              <Button
+                variant={customAddMode === "today_only" ? "primary" : "ghost"}
+                className="h-6 min-h-6 rounded-full px-2 text-[11px]"
+                onClick={() => setCustomAddMode("today_only")}
+              >
+                오늘만
+              </Button>
+              <Button
+                variant={customAddMode === "save_uncategorized" ? "primary" : "ghost"}
+                className="h-6 min-h-6 rounded-full px-2 text-[11px]"
+                onClick={() => setCustomAddMode("save_uncategorized")}
+              >
+                미분류
+              </Button>
+            </div>
+            <div className="min-w-0 flex-1">
+              <InputField
+                value={customLabel}
+                onChange={(event) => setCustomLabel(event.target.value)}
+                onCompositionStart={() => {
+                  isComposingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  isComposingRef.current = false;
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    if (isComposingRef.current || event.nativeEvent.isComposing) {
+                      return;
+                    }
+                    event.preventDefault();
+                    void addCustomTaskFromInput();
+                  }
+                }}
+                variant="plain"
+                className="h-8 w-full bg-transparent px-1 text-sm"
+                placeholder="할일 직접 입력"
+              />
+            </div>
             <Button
               variant="ghost"
               size="xs"
               circle
-              disabled={isCreatingCustomTask}
+              disabled={isCreatingCustomTask || customLabel.trim().length === 0}
               onClick={() => {
-                void addCustomTask();
+                void addCustomTaskFromInput();
               }}
-              aria-label="직접 할일 추가"
+              aria-label="입력 할일 추가"
             >
               <FiPlus size={14} />
             </Button>
           </div>
           <Button
             variant="primary"
-            className="h-9 min-h-9 rounded-full text-xs"
+            className="h-8 min-h-8 rounded-full px-3 text-xs"
             disabled={selectedItems.length === 0}
             onClick={handleApply}
           >
-            {selectedItems.length}개 추가
+            추가
           </Button>
         </div>
         </div>

@@ -10,6 +10,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiClipboard } from "react-icons/fi";
+import { RobotCharacter } from "../../../../components/RobotCharacter";
 import { fetchDailyLogByDate } from "../../../../api/dailyLogApi";
 import { useHorizontalSwipeGesture } from "../../../../hooks/useHorizontalSwipeGesture";
 import { useSortableItem } from "../../../../hooks/useSortableItem";
@@ -223,6 +224,24 @@ function PreviewTaskList({ items, isLoading }: { items: TaskItem[]; isLoading: b
   );
 }
 
+function RestCoffeeScene({ restMinutes }: { restMinutes: number }) {
+  return (
+    <div className="rest-coffee-scene">
+      <div className="rest-coffee-scene__robot" aria-hidden="true">
+        <RobotCharacter className="rest-coffee-scene__robot-svg" showAlertBadge={false} />
+        <div className="rest-coffee-scene__cup">
+          <span className="rest-coffee-scene__steam rest-coffee-scene__steam--1" />
+          <span className="rest-coffee-scene__steam rest-coffee-scene__steam--2" />
+          <span className="rest-coffee-scene__steam rest-coffee-scene__steam--3" />
+        </div>
+      </div>
+      <p className="m-0 text-sm font-semibold text-base-content/85">휴식 중이에요</p>
+      <p className="m-0 text-xs text-base-content/65">집중 잘했어요. 커피 한 잔 하고 다시 가요.</p>
+      <p className="m-0 text-[11px] text-base-content/55">누적 휴식 {restMinutes}분</p>
+    </div>
+  );
+}
+
 export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   const {
     items,
@@ -231,10 +250,12 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     handleDateTaskAction,
     handleEditActualFocus,
     handleDateTaskMenuAction,
+    handleDateAddTasks,
     openRoutineImport,
     routineTemplates,
     isRoutineTemplatesLoading,
     handleApplyRoutineTemplate,
+    session,
   } = useDateTodosRouteContext();
   const { routineTemplateWeekdayAssignmentsQuery } = useRoutineTemplateWeekdayAssignmentsQuery();
   const queryClient = useQueryClient();
@@ -246,6 +267,8 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   const [pendingShiftDays, setPendingShiftDays] = useState<-1 | 0 | 1>(0);
   const [isSettling, setIsSettling] = useState(false);
   const [isApplyingWeekdayRoutine, setIsApplyingWeekdayRoutine] = useState(false);
+  const [isApplyingCarryOver, setIsApplyingCarryOver] = useState(false);
+  const [isApplyingRoutineAndCarryOver, setIsApplyingRoutineAndCarryOver] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const todayDateKey = formatDateKey(new Date());
   const isPastDate = dateKey < todayDateKey;
@@ -283,7 +306,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
       (assignedWeekdayRoutineTemplate?.items ?? [])
         .slice()
         .sort((a, b) => a.order - b.order)
-        .slice(0, 4)
+        .slice(0, 3)
         .map((item) => ({
           id: item.id,
           content: item.content,
@@ -370,6 +393,17 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     () => mapPreviewLogToTaskItems(previousDateKey, previousQuery.data ?? null),
     [previousDateKey, previousQuery.data]
   );
+  const yesterdayIncompleteItems = useMemo(
+    () =>
+      (previousQuery.data?.todos ?? [])
+        .filter((todo) => !todo.done)
+        .map((todo) => ({
+          label: todo.content,
+          taskId: todo.taskId ?? null,
+        })),
+    [previousQuery.data?.todos]
+  );
+  const yesterdayIncompleteCount = yesterdayIncompleteItems.length;
   const nextItems = useMemo(
     () => mapPreviewLogToTaskItems(nextDateKey, nextQuery.data ?? null),
     [nextDateKey, nextQuery.data]
@@ -467,6 +501,37 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     });
   };
 
+  const handleApplyCarryOver = () => {
+    if (dateKey !== todayDateKey || yesterdayIncompleteItems.length === 0 || isApplyingCarryOver || isApplyingRoutineAndCarryOver) {
+      return;
+    }
+    setIsApplyingCarryOver(true);
+    void handleDateAddTasks(yesterdayIncompleteItems).finally(() => {
+      setIsApplyingCarryOver(false);
+    });
+  };
+
+  const handleApplyRoutineAndCarryOver = () => {
+    if (
+      !assignedWeekdayRoutineTemplate?.id ||
+      dateKey !== todayDateKey ||
+      yesterdayIncompleteItems.length === 0 ||
+      isApplyingCarryOver ||
+      isApplyingRoutineAndCarryOver ||
+      isApplyingWeekdayRoutine
+    ) {
+      return;
+    }
+
+    setIsApplyingRoutineAndCarryOver(true);
+    void (async () => {
+      await handleApplyRoutineTemplate(assignedWeekdayRoutineTemplate.id);
+      await handleDateAddTasks(yesterdayIncompleteItems);
+    })().finally(() => {
+      setIsApplyingRoutineAndCarryOver(false);
+    });
+  };
+
   return (
     <div className="min-h-0 flex-1 rounded-xl border border-base-300/80 bg-base-100/65 p-2.5">
       <div
@@ -512,6 +577,8 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
                   <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
                   <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
                 </div>
+              ) : session.active === "rest" ? (
+                <RestCoffeeScene restMinutes={session.restMinutes} />
               ) : items.length === 0 ? (
                 <DateTodosEmptyState
                   isPastDate={isPastDate}
@@ -530,6 +597,12 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
                   isApplyingWeekdayRoutine={isApplyingWeekdayRoutine}
                   isRoutineTemplatesLoading={isRoutineTemplatesLoading}
                   onApplyWeekdayRoutine={handleApplyWeekdayRoutine}
+                  isToday={dateKey === todayDateKey}
+                  yesterdayIncompleteCount={yesterdayIncompleteCount}
+                  isApplyingCarryOver={isApplyingCarryOver}
+                  isApplyingRoutineAndCarryOver={isApplyingRoutineAndCarryOver}
+                  onApplyCarryOver={handleApplyCarryOver}
+                  onApplyRoutineAndCarryOver={handleApplyRoutineAndCarryOver}
                   onOpenRoutineImport={openRoutineImport}
                 />
               ) : (

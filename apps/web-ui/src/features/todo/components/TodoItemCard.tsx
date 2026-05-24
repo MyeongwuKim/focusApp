@@ -1,5 +1,6 @@
 import {
   FiAlertCircle,
+  FiBellOff,
   FiCheck,
   FiCheckCircle,
   FiCircle,
@@ -43,6 +44,11 @@ function renderStatusIcon(status: TaskItem["status"]) {
 function formatScheduledTime(epochMs: number) {
   const date = new Date(epochMs);
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatTodayDateKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 function buildTargetFocusBadgeText(item: TaskItem) {
@@ -190,6 +196,11 @@ export function TodoItemCard({
   isLongPressActive = false,
 }: TodoItemCardProps) {
   const targetFocusBadgeText = buildTargetFocusBadgeText(item);
+  const isMutedToday =
+    typeof item.muteReminderDateKey === "string" &&
+    item.muteReminderDateKey.length > 0 &&
+    item.muteReminderDateKey === formatTodayDateKey() &&
+    item.status !== "done";
 
   return (
     <div
@@ -225,6 +236,15 @@ export function TodoItemCard({
           <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-warning/85">
             <FiTarget size={11} />
             {targetFocusBadgeText}
+          </span>
+        ) : null}
+        {isMutedToday ? (
+          <span
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-base-300/80 bg-base-200/65 text-base-content/70"
+            aria-label="오늘은 그만"
+            title="오늘은 그만"
+          >
+            <FiBellOff size={10} />
           </span>
         ) : null}
         <Button

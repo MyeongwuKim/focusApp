@@ -11,13 +11,16 @@ import { initWebSentry, Sentry } from "./sentry";
 
 const sentryEnabled = initWebSentry();
 const rootElement = document.getElementById("root")!;
-const root = createRoot(rootElement, sentryEnabled
-  ? {
-      onUncaughtError: Sentry.reactErrorHandler(),
-      onCaughtError: Sentry.reactErrorHandler(),
-      onRecoverableError: Sentry.reactErrorHandler(),
-    }
-  : undefined);
+const root = createRoot(
+  rootElement,
+  sentryEnabled
+    ? {
+        onUncaughtError: Sentry.reactErrorHandler(),
+        onCaughtError: Sentry.reactErrorHandler(),
+        onRecoverableError: Sentry.reactErrorHandler(),
+      }
+    : undefined
+);
 
 root.render(
   <QueryClientProvider client={queryClient}>
@@ -27,6 +30,6 @@ root.render(
         <App />
       </HashRouter>
     </Sentry.ErrorBoundary>
-    <ReactQueryDevtools initialIsOpen={false} />
+    {/* <ReactQueryDevtools initialIsOpen={false} /> */}
   </QueryClientProvider>
 );

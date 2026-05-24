@@ -33,77 +33,24 @@ function AiCommentaryResult({ text }: { text: string }) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-
-  const resolveStyle = (title: string) => {
-    if (title.startsWith("1) 한줄요약") || title.startsWith("한줄요약:")) {
-      return "border-primary/45 bg-primary/8";
-    }
-    if (title.startsWith("2) 잘한점") || title.startsWith("잘한점:")) {
-      return "border-success/45 bg-success/8";
-    }
-    if (title.startsWith("3) 미완료패턴") || title.startsWith("미완료패턴:")) {
-      return "border-warning/45 bg-warning/8";
-    }
-    if (title.startsWith("4) 개선포인트") || title.startsWith("개선포인트:")) {
-      return "border-error/45 bg-error/7";
-    }
-    if (title.startsWith("5) 다음한걸음") || title.startsWith("다음한걸음:")) {
-      return "border-info/45 bg-info/8";
-    }
-    return "border-base-300/80 bg-base-100/60";
-  };
-
-  const sections: Array<{ title: string; body: string }> = [];
-  let current: { title: string; body: string } | null = null;
-
-  lines.forEach((line) => {
-    const isHeading = /^(\d+\)\s*)?[^:]+:\s*$/.test(line);
-    const inlineMatch = line.match(/^(\d+\)\s*[^:]+:)\s*(.+)$/);
-
+  const labels = ["요약", "잘한점", "아쉬운점", "플래너조언"] as const;
+  const sections = lines.map((line, index) => {
+    const inlineMatch = line.match(/^([^:]+):\s*(.+)$/);
     if (inlineMatch) {
-      if (current) {
-        sections.push(current);
-      }
-      current = { title: inlineMatch[1], body: inlineMatch[2] };
-      return;
+      return { title: inlineMatch[1].trim(), body: inlineMatch[2].trim() };
     }
-
-    if (isHeading) {
-      if (current) {
-        sections.push(current);
-      }
-      current = { title: line, body: "" };
-      return;
-    }
-
-    if (!current) {
-      current = { title: "요약", body: line };
-      return;
-    }
-
-    current.body = current.body ? `${current.body} ${line}` : line;
+    return { title: labels[index] ?? "요약", body: line };
   });
 
-  if (current) {
-    sections.push(current);
-  }
-
   return (
-    <div className="mt-2 space-y-1.5">
+    <div className="mt-2 rounded-lg border border-info/30 bg-base-100/75 px-3 py-2.5">
       {sections.map((section, index) => (
-        <article
-          key={`${section.title}-${index}`}
-          className={`rounded-md border-l-[3px] px-2.5 py-1.5 ${resolveStyle(section.title)}`}
-        >
-          <p className="m-0 text-sm font-semibold leading-6 text-base-content/85 break-words">
+        <div key={`${section.title}-${index}`} className={index === 0 ? "" : "mt-1.5"}>
+          <p className="m-0 text-sm font-semibold leading-6 text-base-content/88 break-words">
             {section.title}
           </p>
-          {section.body ? (
-            <p className="m-0 mt-0.5 text-sm leading-6 text-base-content/82 break-words">
-              {section.body}
-            </p>
-          ) : null}
-        </article>
+          <p className="m-0 mt-0.5 text-sm leading-6 text-base-content/80 break-words">{section.body}</p>
+        </div>
       ))}
     </div>
   );
@@ -144,7 +91,7 @@ export function StatsAiCommentaryCard({
   }, [isVisible]);
 
   const commentaryQuery = useQuery({
-    queryKey: ["stats-commentary", payload],
+    queryKey: ["stats-commentary-v5", payload],
     queryFn: () => fetchStatsCommentary(payload),
     enabled: canUseCommentary && !isDataFetching && isVisible,
     meta: { skipGlobalErrorToast: true },

@@ -1112,9 +1112,7 @@ export default function WebViewScreen() {
     () =>
       resolveWebUiManifestUrl({
         channel: webUiReleaseChannel,
-        manifestUrlDev: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL_DEV,
-        manifestUrlProd: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL_PROD,
-        manifestUrlFallback: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL,
+        manifestUrl: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL,
       }),
     [webUiReleaseChannel]
   );

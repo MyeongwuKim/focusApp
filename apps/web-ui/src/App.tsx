@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SettingsPage } from "./pages/SettingsPage";
+import { RoutineRoutePage } from "./pages/RoutineRoutePage";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
 import { CalendarRootPage } from "./pages/CalendarRootPage";
 import { TaskManagementRoutePage } from "./pages/TaskManagementRoutePage";
@@ -945,7 +946,7 @@ function App() {
       case "settings":
         return <SettingsPage forcedPathname={options?.forcedPathname} />;
       case "routine":
-        return <SettingsPage forcedPathname={options?.forcedPathname} />;
+        return <RoutineRoutePage forcedPathname={options?.forcedPathname} />;
       case "dateTasks":
         return (
           <DateTodosRoutePage

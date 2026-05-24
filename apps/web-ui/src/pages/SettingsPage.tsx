@@ -6,12 +6,10 @@ import { SettingsMenuItem } from "../features/settings/components/SettingsMenuIt
 import { SettingsThemeView } from "../features/settings/components/SettingsThemeView";
 import { SettingsWeatherView } from "../features/settings/components/SettingsWeatherView";
 import { SettingsAccountView } from "../features/settings/components/SettingsAccountView";
-import { SettingsRoutineView } from "../features/settings/components/SettingsRoutineView";
 import type { IconType } from "react-icons";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
-import { ROUTINE_EDIT_PATH_PREFIX, ROUTINE_MANAGE_PATH } from "../routes/route-config";
 
-type SettingsSection = "home" | "theme" | "weather" | "routine" | "notifications" | "account";
+type SettingsSection = "home" | "theme" | "weather" | "notifications" | "account";
 
 type SettingsMenu = {
   key: Exclude<SettingsSection, "home">;
@@ -48,14 +46,6 @@ const SETTINGS_MENUS: SettingsMenu[] = [
 ];
 
 function resolveSettingsSection(pathname: string): SettingsSection {
-  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
-  if (normalizedPath === ROUTINE_MANAGE_PATH || normalizedPath.startsWith(`${ROUTINE_MANAGE_PATH}/`)) {
-    return "routine";
-  }
-  if (normalizedPath.startsWith(ROUTINE_EDIT_PATH_PREFIX)) {
-    return "routine";
-  }
-
   if (!pathname.startsWith("/settings")) {
     return "home";
   }
@@ -64,7 +54,6 @@ function resolveSettingsSection(pathname: string): SettingsSection {
   if (
     subPath === "theme" ||
     subPath === "weather" ||
-    subPath === "routine" ||
     subPath === "notifications" ||
     subPath === "account"
   ) {
@@ -82,7 +71,6 @@ export function SettingsPage({ forcedPathname }: SettingsPageProps) {
   const { goPage } = useAppNavigation();
   const pathname = forcedPathname ?? location.pathname;
   const section = useMemo(() => resolveSettingsSection(pathname), [pathname]);
-  const isRoutineSection = section === "routine";
 
   const goSection = (nextSection: SettingsSection) => {
     if (nextSection === "home") {
@@ -93,13 +81,7 @@ export function SettingsPage({ forcedPathname }: SettingsPageProps) {
   };
 
   return (
-    <div
-      className={
-        isRoutineSection
-          ? "min-h-0 h-full overflow-hidden px-0.5 pt-1 pb-0"
-          : "min-h-0 h-full overflow-y-auto px-0.5 pt-1 pb-2"
-      }
-    >
+    <div className="min-h-0 h-full overflow-y-auto px-0.5 pt-1 pb-2">
       {section === "home" ? (
         <section className="space-y-5 rounded-2xl border border-base-300 bg-base-200/50 p-4">
           <div className="space-y-2.5">
@@ -117,7 +99,6 @@ export function SettingsPage({ forcedPathname }: SettingsPageProps) {
       ) : null}
       {section === "theme" ? <SettingsThemeView /> : null}
       {section === "weather" ? <SettingsWeatherView /> : null}
-      {section === "routine" ? <SettingsRoutineView forcedPathname={pathname} /> : null}
       {section === "notifications" ? <SettingsNotificationsView /> : null}
       {section === "account" ? <SettingsAccountView /> : null}
     </div>

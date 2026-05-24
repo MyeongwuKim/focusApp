@@ -5,10 +5,11 @@
   },
   "build": {
     "development": {
-      "developmentClient": true,
-      "distribution": "internal",
+      "distribution": "store",
       "environment": "development",
+      "autoIncrement": true,
       "env": {
+        "APP_VARIANT": "test",
         "EAS_NO_FROZEN_LOCKFILE": "1"
       }
     },
@@ -16,6 +17,7 @@
       "distribution": "internal",
       "environment": "preview",
       "env": {
+        "APP_VARIANT": "test",
         "EAS_NO_FROZEN_LOCKFILE": "1"
       }
     },
@@ -23,6 +25,7 @@
       "autoIncrement": true,
       "environment": "production",
       "env": {
+        "APP_VARIANT": "prod",
         "EAS_NO_FROZEN_LOCKFILE": "1"
       }
     }

@@ -5,6 +5,12 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const KAKAO_MAVEN_REPO = "https://devrepo.kakao.com/nexus/content/groups/public/";
 const APP_ROOT = process.cwd();
+const PROD_APP_NAME = "타임스택";
+const TEST_APP_NAME = "타임스택 (T)";
+const PROD_BUNDLE_ID = "com.myeongwu.focushybrid";
+const TEST_BUNDLE_ID = "com.myeongwu.focushybrid.t";
+const PROD_ANDROID_PACKAGE = "com.myeongwu.focushybrid";
+const TEST_ANDROID_PACKAGE = "com.myeongwu.focushybrid.t";
 
 function loadMobileEnvFiles() {
   const candidates = [join(APP_ROOT, ".env"), join(APP_ROOT, ".env.local")];
@@ -38,11 +44,16 @@ function hasPlugin(
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
+  const appVariant = process.env.APP_VARIANT?.trim().toLowerCase() ?? "prod";
+  const isTestVariant = appVariant === "test";
   const kakaoAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY?.trim();
   const naverConsumerKey = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim();
   const naverConsumerSecret = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim();
   const naverUrlScheme = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim();
   const plugins = [...(config.plugins ?? [])];
+  const appName = isTestVariant ? TEST_APP_NAME : PROD_APP_NAME;
+  const iosBundleIdentifier = isTestVariant ? TEST_BUNDLE_ID : PROD_BUNDLE_ID;
+  const androidPackage = isTestVariant ? TEST_ANDROID_PACKAGE : PROD_ANDROID_PACKAGE;
 
   if (!kakaoAppKey) {
     throw new Error(
@@ -115,6 +126,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
+    name: appName,
+    ios: {
+      ...(config.ios ?? {}),
+      bundleIdentifier: iosBundleIdentifier,
+    },
+    android: {
+      ...(config.android ?? {}),
+      package: androidPackage,
+    },
     plugins,
   } as ExpoConfig;
 };

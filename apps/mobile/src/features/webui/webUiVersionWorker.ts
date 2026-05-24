@@ -51,21 +51,12 @@ export function resolveWebUiReleaseChannel(input: {
 
 export function resolveWebUiManifestUrl(input: {
   channel: WebUiReleaseChannel;
-  manifestUrlDev?: string;
-  manifestUrlProd?: string;
-  manifestUrlFallback?: string;
+  manifestUrl?: string;
 }) {
   if (input.channel === "none") {
     return null;
   }
-
-  const channelUrl =
-    input.channel === "dev" ? input.manifestUrlDev : input.manifestUrlProd;
-  const normalizedChannelUrl = normalizeOptionalUrl(channelUrl);
-  if (normalizedChannelUrl) {
-    return normalizedChannelUrl;
-  }
-  return normalizeOptionalUrl(input.manifestUrlFallback);
+  return normalizeOptionalUrl(input.manifestUrl);
 }
 
 export async function prepareWebUiBundleVersion(input: {

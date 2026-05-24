@@ -4,22 +4,20 @@ import {
   closestCenter,
   pointerWithin,
   rectIntersection,
-  useDraggable,
   useDroppable,
   type DragEndEvent,
   type CollisionDetection,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FiEdit2, FiPlus, FiTag, FiTrash2 } from "react-icons/fi";
+import { FiEdit2, FiPlus, FiTrash2 } from "react-icons/fi";
 import { useLocation } from "react-router-dom";
 import { type RoutineTemplate, type RoutineTemplateItemInput } from "../../../api/routineTemplateApi";
 import { TimePickerBottomSheet } from "../../../components/TimePickerBottomSheet";
 import { Button } from "../../../components/ui/Button";
 import { InputField } from "../../../components/ui/InputField";
-import { useSortableItem } from "../../../hooks/useSortableItem";
 import { useSortableSensors } from "../../../hooks/useSortableSensors";
 import {
   useRoutineTemplateMutation,
@@ -32,6 +30,17 @@ import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 import { TodoRoutineCreateModal } from "../../todo/components/TodoRoutineCreateModal";
 import { useAppNavigation } from "../../../providers/AppNavigationProvider";
 import { ROUTINE_CREATE_PATH, ROUTINE_EDIT_PATH_PREFIX, ROUTINE_MANAGE_PATH } from "../../../routes/route-config";
+import {
+  RoutineTemplateDraggableCard,
+  type RoutineTemplateAssignedDayChip,
+} from "./RoutineTemplateDraggableCard";
+import { RoutinePreviewDetailPanel } from "./RoutinePreviewDetailPanel";
+import { RoutineTemplateListPanel } from "./RoutineTemplateListPanel";
+import { RoutineTemplateDetailPanel } from "./RoutineTemplateDetailPanel";
+import {
+  RoutineTemplateSortableItemRow,
+  type RoutineTemplateDraftItem,
+} from "./RoutineTemplateSortableItemRow";
 
 type RoutineManageTab = "templates" | "weekdays";
 type WeekdayValue = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -51,70 +60,12 @@ type WeekdayTone = {
   assigned: string;
 };
 
-type TemplateDraftItem = {
-  clientId: string;
-  id?: string;
-  taskId?: string | null;
-  titleSnapshot?: string | null;
-  content: string;
-  scheduledTimeHHmm?: string | null;
-};
-
 type TemplateDraft = {
   templateId: string | null;
   name: string;
-  items: TemplateDraftItem[];
+  items: RoutineTemplateDraftItem[];
 };
 type RoutineEditorMode = "create" | "edit";
-
-function SortableTemplateItemRow({
-  item,
-  onOpenMenu,
-}: {
-  item: TemplateDraftItem;
-  onOpenMenu: (item: TemplateDraftItem) => Promise<void>;
-}) {
-  const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
-    id: item.clientId,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...dragHandleProps}
-      className={[
-        "rounded-lg border border-base-300/70 bg-base-100 px-2.5 py-2 transition-[border-color,background-color,box-shadow]",
-        isDragging
-          ? "border-primary/65 bg-base-100 shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_24px_rgba(0,0,0,0.22)]"
-          : "",
-      ].join(" ")}
-    >
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="m-0 truncate text-sm font-medium text-base-content/85">{item.content}</p>
-          <p className="m-0 mt-0.5 truncate text-[11px] text-base-content/55">
-            <FiTag size={11} className="mr-1 inline-block" />
-            {item.titleSnapshot ?? "직접 입력"}
-            <span className="ml-2">{item.scheduledTimeHHmm ? `시간 ${item.scheduledTimeHHmm}` : "시간 미설정"}</span>
-          </p>
-        </div>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="h-7 min-h-7 rounded-md px-2 text-sm text-base-content/60"
-          onClick={(event) => {
-            event.stopPropagation();
-            void onOpenMenu(item);
-          }}
-          aria-label="루틴 항목 메뉴"
-        >
-          :
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 const WEEKDAY_ITEMS: WeekdayMeta[] = [
   { weekday: 1, key: "1", label: "월요일", shortLabel: "월" },
@@ -174,12 +125,7 @@ const WEEKDAY_TONE_MAP: Record<WeekdayKey, WeekdayTone> = {
   },
 };
 
-type RoutineDragItemId = `routine-template:${string}`;
 type WeekdayDropTargetId = `weekday-slot:${WeekdayKey}`;
-
-function toRoutineDragItemId(templateId: string): RoutineDragItemId {
-  return `routine-template:${templateId}`;
-}
 
 function toWeekdayDropTargetId(dayKey: WeekdayKey): WeekdayDropTargetId {
   return `weekday-slot:${dayKey}`;
@@ -209,89 +155,18 @@ function parseWeekdayDropTargetId(id: unknown): WeekdayKey | null {
   return null;
 }
 
-function DraggableRoutineTemplateCard({
-  template,
-  isSelected,
-  disabled,
-  assignedDays,
-  onOpenDetails,
-}: {
-  template: RoutineTemplate;
-  isSelected: boolean;
-  disabled: boolean;
-  assignedDays: WeekdayMeta[];
-  onOpenDetails: (templateId: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: toRoutineDragItemId(template.id),
-    disabled,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      className={[
-        "touch-pan-y select-none rounded-xl border p-3 transition-[transform,border-color,background-color,box-shadow]",
-        disabled
-          ? "cursor-not-allowed border-base-300/70 bg-base-200/45 text-base-content/55"
-          : "cursor-grab border-base-300/80 bg-base-100 text-base-content shadow-sm hover:border-primary/45 hover:shadow-md active:cursor-grabbing",
-        isDragging ? "border-primary/70 shadow-lg" : "",
-        isSelected ? "border-primary/55 shadow-[inset_0_0_0_1px_rgba(236,72,153,0.35)]" : "",
-      ].join(" ")}
-    >
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-left"
-          onClick={() => {
-            if (isDragging) {
-              return;
-            }
-            onOpenDetails(template.id);
-          }}
-          disabled={disabled}
-        >
-          <p className="m-0 truncate text-sm font-semibold">{template.name}</p>
-          <p className="m-0 mt-0.5 text-xs text-base-content/65">{template.items.length}개 할 일</p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {assignedDays.length > 0 ? (
-              assignedDays.map((day) => (
-                <span
-                  key={`assigned-day-${template.id}-${day.key}`}
-                  className={[
-                    "rounded-md border px-1.5 py-0.5 text-[10px] font-semibold text-slate-800",
-                    WEEKDAY_TONE_MAP[day.key].assigned,
-                  ].join(" ")}
-                >
-                  {day.shortLabel}
-                </span>
-              ))
-            ) : (
-              <span className="rounded-md border border-base-300/70 bg-base-200/45 px-1.5 py-0.5 text-[10px] text-base-content/55">
-                미할당
-              </span>
-            )}
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function WeekdayDropCard({
+const WeekdayDropCard = memo(function WeekdayDropCard({
   day,
   assignedTemplate,
   tone,
   disabled,
-  onClear,
+  onClearDay,
 }: {
   day: WeekdayMeta;
   assignedTemplate: RoutineTemplate | null;
   tone: WeekdayTone;
   disabled: boolean;
-  onClear: () => void;
+  onClearDay: (dayKey: WeekdayKey) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({
     id: toWeekdayDropTargetId(day.key),
@@ -317,7 +192,7 @@ function WeekdayDropCard({
             "mt-2 flex h-[calc(100%-2.05rem)] w-full items-center justify-center rounded-lg border px-2 py-2 text-center",
             `${tone.assigned} text-slate-800`,
           ].join(" ")}
-          onClick={onClear}
+          onClick={() => onClearDay(day.key)}
           disabled={disabled}
           aria-label={`${day.label} 할당 해제`}
         >
@@ -330,7 +205,7 @@ function WeekdayDropCard({
       )}
     </div>
   );
-}
+});
 
 type RoutineEditorRouteState = {
   isEditorRoute: boolean;
@@ -390,7 +265,7 @@ function buildEmptyDraft(): TemplateDraft {
   };
 }
 
-function sanitizeDraftItems(items: TemplateDraftItem[]) {
+function sanitizeDraftItems(items: RoutineTemplateDraftItem[]) {
   return items
     .map((item) => ({
       id: item.id,
@@ -424,11 +299,11 @@ function buildAssignmentMap(
   return next;
 }
 
-type SettingsRoutineViewProps = {
+type RoutineManageViewProps = {
   forcedPathname?: string;
 };
 
-export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps) {
+export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
   const location = useLocation();
   const { goPage } = useAppNavigation();
   const pathname = forcedPathname ?? location.pathname;
@@ -443,6 +318,8 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
   const [editingTimeItemClientId, setEditingTimeItemClientId] = useState<string | null>(null);
   const [renameTemplateId, setRenameTemplateId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState("");
+  const templateDetailScrollRef = useRef<HTMLDivElement | null>(null);
+  const weekdayPreviewDetailScrollRef = useRef<HTMLDivElement | null>(null);
 
   const sensors = useSortableSensors();
 
@@ -509,7 +386,7 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
     [draftAssignments]
   );
   const templateAssignedDaysById = useMemo(() => {
-    const nextMap: Record<string, WeekdayMeta[]> = {};
+    const nextMap: Record<string, RoutineTemplateAssignedDayChip[]> = {};
     for (const day of WEEKDAY_ITEMS) {
       const templateId = draftAssignments[day.key];
       if (!templateId) {
@@ -518,7 +395,11 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
       if (!nextMap[templateId]) {
         nextMap[templateId] = [];
       }
-      nextMap[templateId]?.push(day);
+      nextMap[templateId]?.push({
+        key: day.key,
+        shortLabel: day.shortLabel,
+        toneClassName: WEEKDAY_TONE_MAP[day.key].assigned,
+      });
     }
     return nextMap;
   }, [draftAssignments]);
@@ -553,7 +434,26 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
     setPreviewWeekdayKey(firstAssignedDay.key);
   }, [draftAssignments, previewTemplateId, routineTemplates]);
 
-  const handleSelectTemplate = (nextKey: string) => {
+  useEffect(() => {
+    templateDetailScrollRef.current?.scrollTo({
+      top: 0,
+      behavior: "auto",
+    });
+  }, [selectedTemplateKey]);
+
+  useEffect(() => {
+    weekdayPreviewDetailScrollRef.current?.scrollTo({
+      top: 0,
+      behavior: "auto",
+    });
+  }, [previewTemplateId]);
+
+  const handleOpenPreviewTemplateDetails = useCallback((templateId: string) => {
+    setPreviewTemplateId(templateId);
+    setPreviewWeekdayKey(null);
+  }, []);
+
+  const handleSelectTemplate = useCallback((nextKey: string) => {
     const template = routineTemplates.find((item) => item.id === nextKey);
     if (!template) {
       return;
@@ -561,9 +461,9 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
     setSelectedTemplateKey(template.id);
     const nextDraft = buildDraftFromTemplate(template);
     setTemplateDraft(nextDraft);
-  };
+  }, [routineTemplates]);
 
-  const persistTemplateItems = async (nextItems: TemplateDraftItem[]) => {
+  const persistTemplateItems = useCallback(async (nextItems: RoutineTemplateDraftItem[]) => {
     if (!templateDraft.templateId) {
       return;
     }
@@ -601,9 +501,9 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
       const message = getUserFacingErrorMessage(error, "루틴 저장 중 오류가 발생했어요.");
       toast.error(message, "저장 실패");
     }
-  };
+  }, [templateDraft.name, templateDraft.templateId, updateRoutineTemplateMutation]);
 
-  const handleRemoveTemplateItemByClientId = (clientId: string) => {
+  const handleRemoveTemplateItemByClientId = useCallback((clientId: string) => {
     setTemplateDraft((prev) => {
       if (prev.items.length <= 1) {
         toast.error("루틴 항목을 1개 이상 남겨 주세요.", "삭제 제한");
@@ -616,9 +516,9 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
       void persistTemplateItems(next.items);
       return next;
     });
-  };
+  }, [persistTemplateItems]);
 
-  const handleTemplateItemDragEnd = (event: DragEndEvent) => {
+  const handleTemplateItemDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) {
       return;
@@ -632,9 +532,9 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
         items: nextItems,
       };
     });
-  };
+  }, [persistTemplateItems]);
 
-  const handleOpenTemplateItemMenu = async (item: TemplateDraftItem) => {
+  const handleOpenTemplateItemMenu = useCallback(async (item: RoutineTemplateDraftItem) => {
     const selected = await actionSheet({
       title: item.content,
       message: "작업을 선택하세요",
@@ -693,9 +593,9 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
     if (selected === "set-time") {
       setEditingTimeItemClientId(item.clientId);
     }
-  };
+  }, [handleRemoveTemplateItemByClientId, persistTemplateItems]);
 
-  const handleDeleteTemplate = async (templateId: string) => {
+  const handleDeleteTemplate = useCallback(async (templateId: string) => {
     if (!templateId) {
       return;
     }
@@ -722,7 +622,7 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
       const message = getUserFacingErrorMessage(error, "루틴 삭제 중 오류가 발생했어요.");
       toast.error(message, "삭제 실패");
     }
-  };
+  }, [deleteRoutineTemplateMutation]);
 
   const handleCreateTemplateFromRoute = async (input: {
     name: string;
@@ -765,7 +665,7 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
     }
   };
 
-  const handleOpenTemplateMenu = async (template: RoutineTemplate) => {
+  const handleOpenTemplateMenu = useCallback(async (template: RoutineTemplate) => {
     const selected = await actionSheet({
       title: template.name,
       message: "작업을 선택하세요",
@@ -806,7 +706,7 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
     if (selected === "delete") {
       await handleDeleteTemplate(template.id);
     }
-  };
+  }, [goPage, handleDeleteTemplate]);
 
   const handleSubmitRename = async () => {
     if (!renameTemplateId) {
@@ -880,7 +780,14 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
     setDraftAssignments(nextAssignments);
     void persistAssignments(nextAssignments);
     if (previewWeekdayKey === dayKey) {
-      setPreviewTemplateId(null);
+      const nextPreviewDay = WEEKDAY_ITEMS.find((day) => Boolean(nextAssignments[day.key]));
+      if (!nextPreviewDay) {
+        setPreviewTemplateId(null);
+        setPreviewWeekdayKey(null);
+        return;
+      }
+      setPreviewTemplateId(nextAssignments[nextPreviewDay.key]);
+      setPreviewWeekdayKey(nextPreviewDay.key);
     }
   };
 
@@ -964,99 +871,41 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
 
       <div className="mt-3 min-h-0 flex-1">
         {activeTab === "templates" ? (
-          <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_3.5rem] overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75">
-            <div className="grid min-h-0 grid-rows-2">
-              <div className="min-h-0 overflow-y-auto border-b border-base-300/80 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="m-0 text-sm font-semibold text-base-content">루틴</p>
-                  <span className="rounded-md border border-base-300/80 bg-base-200/45 px-2 py-0.5 text-[11px] text-base-content/70">
-                    {routineTemplates.length}개
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  {routineTemplates.map((template) => {
-                    const isActive = selectedTemplateKey === template.id;
-                    return (
-                      <div
-                        key={template.id}
-                        className={[
-                          "w-full rounded-lg border px-2.5 py-2 transition-colors",
-                          isActive
-                            ? "border-primary/65 bg-primary/10 text-primary"
-                            : "border-base-300/70 bg-base-100 text-base-content/80 hover:border-base-content/25",
-                        ].join(" ")}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-left"
-                            onClick={() => handleSelectTemplate(template.id)}
-                          >
-                            <p className="m-0 truncate text-sm font-semibold">{template.name}</p>
-                            <p className="m-0 mt-0.5 text-xs text-base-content/60">{template.items.length}개 항목</p>
-                          </button>
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            className="h-7 min-h-7 rounded-md px-2 text-sm text-base-content/60"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleOpenTemplateMenu(template);
-                            }}
-                            aria-label="루틴 메뉴"
-                            disabled={isSavingTemplate}
-                          >
-                            :
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {routineTemplates.length === 0 ? (
-                    <p className="m-0 rounded-lg border border-base-300/60 bg-base-200/45 px-2.5 py-2 text-xs text-base-content/60">
-                      저장된 템플릿이 없어요.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="min-h-0 overflow-y-auto p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="m-0 text-sm font-semibold text-base-content">루틴 상세</p>
-                  <span className="rounded-md border border-base-300/80 bg-base-200/45 px-2 py-0.5 text-[11px] text-base-content/70">
-                    {templateDraft.templateId ? `${templateDraft.items.length}개` : "0개"}
-                  </span>
-                </div>
+          <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_3.5rem] overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75 p-2">
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <RoutineTemplateListPanel
+                routineTemplates={routineTemplates}
+                selectedTemplateKey={selectedTemplateKey}
+                isSavingTemplate={isSavingTemplate}
+                onSelectTemplate={handleSelectTemplate}
+                onOpenTemplateMenu={handleOpenTemplateMenu}
+              />
+              <RoutineTemplateDetailPanel
+                hasSelectedTemplate={Boolean(templateDraft.templateId)}
+                itemCount={templateDraft.items.length}
+                scrollContainerRef={templateDetailScrollRef}
+              >
                 {templateDraft.templateId ? (
-                  <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2">
-                    <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleTemplateItemDragEnd}
-                      >
-                        <SortableContext items={sortableItemIds} strategy={verticalListSortingStrategy}>
-                          <div className="space-y-1.5">
-                            {templateDraft.items.map((item) => (
-                              <SortableTemplateItemRow
-                                key={item.clientId}
-                                item={item}
-                                onOpenMenu={handleOpenTemplateItemMenu}
-                              />
-                            ))}
-                          </div>
-                        </SortableContext>
-                      </DndContext>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-base-300/70 bg-base-200/35 p-3 text-sm text-base-content/60">
-                    템플릿을 선택하세요.
-                  </div>
-                )}
-              </div>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleTemplateItemDragEnd}
+                  >
+                    <SortableContext items={sortableItemIds} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-1.5">
+                        {templateDraft.items.map((item) => (
+                          <RoutineTemplateSortableItemRow
+                            key={item.clientId}
+                            item={item}
+                            onOpenMenu={handleOpenTemplateItemMenu}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                ) : null}
+              </RoutineTemplateDetailPanel>
             </div>
-
             <div className="shrink-0 border-t border-base-300/80 bg-base-100 p-2">
               <Button
                 variant="primary"
@@ -1102,7 +951,7 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
                             assignedTemplate={assignedTemplate}
                             tone={WEEKDAY_TONE_MAP[day.key]}
                             disabled={isLoadingAssignments || isSavingAssignments}
-                            onClear={() => handleClearWeekdayAssignment(day.key)}
+                            onClearDay={handleClearWeekdayAssignment}
                           />
                         );
                       })}
@@ -1120,16 +969,13 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
                   <p className="m-0 text-xs text-base-content/60">카드를 요일 칸으로 드래그해 매주 루틴을 배치해요.</p>
                   <div className="no-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
                     {routineTemplates.map((template) => (
-                      <DraggableRoutineTemplateCard
+                      <RoutineTemplateDraggableCard
                         key={template.id}
                         template={template}
                         disabled={isLoadingAssignments || isSavingAssignments}
                         isSelected={previewTemplateId === template.id}
                         assignedDays={templateAssignedDaysById[template.id] ?? []}
-                        onOpenDetails={(templateId) => {
-                          setPreviewTemplateId(templateId);
-                          setPreviewWeekdayKey(null);
-                        }}
+                        onOpenDetails={handleOpenPreviewTemplateDetails}
                       />
                     ))}
                     {routineTemplates.length === 0 ? (
@@ -1158,39 +1004,10 @@ export function SettingsRoutineView({ forcedPathname }: SettingsRoutineViewProps
                   : null}
               </DndContext>
 
-              <section className="flex h-[13rem] min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="m-0 text-sm font-semibold text-base-content">루틴 상세</p>
-                  <span className="rounded-md border border-base-300/80 bg-base-200/45 px-2 py-0.5 text-[11px] text-base-content/70">
-                    {previewTemplate ? `${previewTemplate.items.length}개` : "0개"}
-                  </span>
-                </div>
-
-                {previewTemplate ? (
-                  <div className="mt-2 min-h-0 flex-1 overflow-hidden rounded-lg border border-base-300/70 bg-base-200/35 p-2.5">
-                    <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
-                      {previewTemplate.items
-                        .slice()
-                        .sort((a, b) => a.order - b.order)
-                        .map((item) => (
-                          <div
-                            key={`preview-item-${item.id}`}
-                            className="rounded-md border border-base-300/60 bg-base-100 px-2 py-1.5"
-                          >
-                            <p className="m-0 truncate text-xs font-medium text-base-content/85">{item.content}</p>
-                            <p className="m-0 mt-0.5 text-[11px] text-base-content/55">
-                              {item.scheduledTimeHHmm ? `시작 ${item.scheduledTimeHHmm}` : "시작시간 미설정"}
-                            </p>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border border-dashed border-base-300/80 bg-base-200/35 px-3 text-center text-xs text-base-content/60">
-                    루틴을 선택하면 할 일 목록이 보여요.
-                  </div>
-                )}
-              </section>
+              <RoutinePreviewDetailPanel
+                previewTemplate={previewTemplate}
+                scrollContainerRef={weekdayPreviewDetailScrollRef}
+              />
             </div>
           </div>
         )}

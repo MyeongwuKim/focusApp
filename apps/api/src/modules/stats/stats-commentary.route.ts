@@ -56,8 +56,145 @@ function normalizeCommentaryTone(text: string) {
     .replaceAll("합시다", "해볼까요?")
     .replaceAll("하세요.", "해요.")
     .replaceAll("하세요!", "해요!")
+    .replaceAll("흐름이에요.", "흐름이었어요.")
+    .replaceAll("흐름이에요", "흐름이었어요")
+    .replaceAll("살펴봐요.", "살펴봤어요.")
+    .replaceAll("정리해요.", "정리했어요.")
     .replace(/(\d+)분간/g, "$1분 동안")
     .replaceAll("작업 중", "작업할 때");
+}
+
+const COMMENTARY_LABELS = ["요약", "잘한점", "아쉬운점", "플래너조언"] as const;
+type CommentaryLabel = (typeof COMMENTARY_LABELS)[number];
+
+function resolvePeriodLabel(period: StatsCommentaryRequest["period"]) {
+  const preset = period.preset.toLowerCase();
+  if (preset.includes("week")) {
+    return "일주일";
+  }
+  if (preset.includes("month")) {
+    return "한달";
+  }
+  if (preset.includes("year")) {
+    return "1년";
+  }
+  return `${period.days}일`;
+}
+
+function buildDeterministicCommentary(payload: StatsCommentaryRequest): Record<CommentaryLabel, string> {
+  const periodLabel = resolvePeriodLabel(payload.period);
+  const doneCount = payload.totals.doneCount;
+  const incompleteCount = payload.totals.incompleteCount;
+  const focusMinutes = payload.totals.focusMinutes;
+  const activeDays = payload.meta.activeDays;
+  const completionRate = payload.rates.completionRate.toFixed(1);
+  const totalTodos = doneCount + incompleteCount;
+  const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
+  const activePhrase = activeDays === 1 ? `${periodLabel} 중 하루만 진행했고` : `${periodLabel} 동안 ${activeDays}일 진행했고`;
+
+  const summary =
+    totalTodos === 0 && focusMinutes === 0
+      ? `${activePhrase} 할일과 집중 기록은 거의 없었어요.`
+      : totalTodos === 0
+      ? `${activePhrase} 할일 완료는 0개였고 집중은 ${focusMinutes}분이었어요.`
+      : `${activePhrase} 완료 ${doneCount}개, 미완료 ${incompleteCount}개로 완료율 ${completionRate}%였고 집중은 ${focusMinutes}분이었어요.`;
+
+  const goodPoint =
+    Number(payload.rates.completionRate) >= 70
+      ? `완료율이 ${completionRate}%로 유지돼서 할일 마무리 흐름이 안정적이었어요.`
+      : payload.meta.daysWithFocus > 0
+      ? `집중 기록일이 ${payload.meta.daysWithFocus}일이라 최소한의 실행 리듬은 이어졌어요.`
+      : `활동 기록일이 ${activeDays}일이라 기록 흐름이 끊기지 않았어요.`;
+
+  const weakPoint =
+    incompleteCount > 0
+      ? `미완료가 ${incompleteCount}개라 완료 전에 멈춘 작업이 누적됐어요.`
+      : resumePerTodo >= 1
+      ? `할일당 재개가 ${resumePerTodo.toFixed(2)}회라 한 번에 끝내기 어려운 구간이 있었어요.`
+      : `기록일 대비 완료량 편차가 있어 일정한 마무리 흐름은 조금 아쉬웠어요.`;
+
+  const advice =
+    incompleteCount > 0
+      ? "미완료가 많은 항목부터 오늘 완료 기준을 한 줄로 정하고 같은 유형을 묶어서 처리해보면 좋아요."
+      : "하루 시작할 때 가장 오래 걸리는 할일 1개를 먼저 고정해서 완료 흐름을 만들어보면 좋아요.";
+
+  return {
+    요약: summary,
+    잘한점: goodPoint,
+    아쉬운점: weakPoint,
+    플래너조언: advice,
+  };
+}
+
+function extractCommentarySections(text: string): Partial<Record<CommentaryLabel, string>> {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const sections: Partial<Record<CommentaryLabel, string>> = {};
+  const unlabeledBodies: string[] = [];
+  const normalizedLabelMap = new Map<string, CommentaryLabel>(
+    COMMENTARY_LABELS.map((label) => [label.replace(/\s+/g, ""), label])
+  );
+
+  for (const line of lines) {
+    const inlineMatch = line.match(/^([^:]+):\s*(.+)$/);
+    if (!inlineMatch) {
+      unlabeledBodies.push(line.replace(/\s+/g, " ").trim());
+      continue;
+    }
+    const rawLabel = inlineMatch[1].replace(/\s+/g, "");
+    const body = inlineMatch[2].replace(/\s+/g, " ").trim();
+    const matchedLabel = normalizedLabelMap.get(rawLabel);
+    if (matchedLabel && body) {
+      sections[matchedLabel] = body;
+    } else if (body) {
+      unlabeledBodies.push(body);
+    }
+  }
+
+  for (const label of COMMENTARY_LABELS) {
+    if (!sections[label] && unlabeledBodies.length > 0) {
+      sections[label] = unlabeledBodies.shift();
+    }
+  }
+
+  return sections;
+}
+
+function finalizeCommentary(text: string, payload: StatsCommentaryRequest) {
+  const normalized = normalizeCommentaryTone(text);
+  const parsed = extractCommentarySections(normalized);
+  const fallback = buildDeterministicCommentary(payload);
+
+  const shouldReject = (body: string, requireMetric: boolean) => {
+    const hasPlaceholderLikeText =
+      body.includes("기록이 적어서") ||
+      body.includes("기록이 많지 않아") ||
+      body.includes("관찰된 내용만") ||
+      body.includes("최근 활동 기준으로만");
+    if (hasPlaceholderLikeText) {
+      return true;
+    }
+    if (requireMetric && !/\d/.test(body)) {
+      return true;
+    }
+    return body.length < 6;
+  };
+
+  const lines = COMMENTARY_LABELS.map((label) => {
+    const candidate = parsed[label]?.trim();
+    const requireMetric = label === "요약" || label === "잘한점";
+    const body = candidate && !shouldReject(candidate, requireMetric) ? candidate : fallback[label];
+    return `${label}: ${body}`;
+  });
+
+  if (lines.length !== COMMENTARY_LABELS.length) {
+    return COMMENTARY_LABELS.map((label) => `${label}: ${fallback[label]}`).join("\n");
+  }
+
+  return lines.join("\n");
 }
 
 function buildPrompt(payload: StatsCommentaryRequest) {
@@ -106,41 +243,35 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     : "기록 근거를 바탕으로 간결하게 요약";
 
   return [
-    "너는 생산성 코치이자 일정 플래너다.",
-    "사용자가 실제로 다음 행동을 선택할 수 있게, 근거 기반으로 짧고 자연스럽게 조언한다.",
+    "너는 실무형 생산성 코치다.",
+    "입력 데이터만 근거로 자연스럽고 짧은 요약을 작성한다.",
     `이번 응답의 말투 페르소나: ${coachVoice}`,
     "절대 규칙:",
     "- 반드시 한국어로 작성한다.",
-    "- 반드시 아래 5줄 형식을 정확히 지킨다(순서/제목 고정).",
-    "- 각 줄은 70자 이내, 한 줄당 1~2문장으로 작성한다.",
+    "- 반드시 아래 4줄 형식을 정확히 지킨다(순서/제목 고정).",
+    "- 각 줄은 1문장으로 작성하고 전체는 4문장으로 끝낸다.",
     "- 비난, 훈계, 과장, 반말, 근거 없는 단정 금지.",
     "- 어색한 메타 표현 금지(예: '추세 판단은 조심해야 합니다').",
-    "- 같은 표현 반복 금지(특히 '~어떨까요?' 반복 금지).",
+    "- 같은 표현 반복 금지.",
     "- 문체는 반드시 부드러운 해요체로 작성한다.",
-    "- 종결 어미는 '~해요', '~해볼까요?' 중심으로 사용한다.",
-    "- '~합시다', '~해봅시다', '~하십시오' 같은 지시형 말투는 금지한다.",
-    "- 추상 조언 금지. 실행 가능한 행동 1개를 구체적으로 제시한다.",
+    "- 종결 어미는 '~했어요', '~였어요' 중심으로 사용한다.",
+    "- '~합시다', '~해봅시다', '~하십시오', '~할게요' 같은 말투는 금지한다.",
+    "- '~흐름이에요', '~패턴이에요' 같은 명사형 종결 문장은 금지한다.",
+    "- 문장은 짧고 직관적으로 작성한다.",
     "",
     "출력 형식(그대로):",
-    "1) 한줄요약: 기간 전체 흐름을 한 문장으로 정리",
-    "2) 잘한점: 데이터 근거 1개를 넣어 칭찬",
-    "3) 미완료패턴: 반복 미완료 작업명(횟수) 1~2개 포함",
-    "4) 개선포인트: 원인 가설 + 조정 방법 1개",
-    "5) 다음한걸음: 오늘/내일 바로 가능한 10~30분 단위 행동 1개",
-    "- 5) 다음한걸음은 반드시 1~2문장으로 작성한다.",
-    "- 5) 다음한걸음 첫 문장은 '[오늘/내일] [시간] 동안 [행동 1개]를 해요' 구조로 작성한다.",
-    "- 5) 다음한걸음 둘째 문장은 '[가장 작은 단위]부터 시작해볼까요?' 형태만 허용한다.",
-    "- 5) 다음한걸음에서 명사 나열체 금지(예: '테스트 작업 중 착수 문턱 낮추기').",
+    "요약: 기간 핵심을 한 문장으로 정리",
+    "잘한점: 데이터 근거 1개를 넣어 정리",
+    "아쉬운점: 부족했던 지점을 한 문장으로 정리",
+    "플래너조언: 바로 적용 가능한 조정 1개 제안",
     "",
-    "플래너 품질 기준:",
-    "- 완료율/재개횟수/활동일 수를 함께 보고 리듬 문제인지 난이도 문제인지 구분한다.",
-    "- 활동일이 적으면 결론 대신 최근 관찰 중심으로 표현한다.",
-    "- 기간이 길어도 표본이 적으면 장기 습관 확정 표현을 쓰지 않는다.",
-    "- 미완료 작업이 있으면 우선순위/분할/시작 문턱 낮추기 중 하나를 제안한다.",
-    "",
-    "저표본 문장 가이드:",
-    "- '기록이 아직 적어 이번엔 최근 흐름 위주로 정리해볼게요.'",
-    "- '이번 기간은 표본이 작아 결론보다 관찰 중심으로 볼게요.'",
+    "작성 기준:",
+    "- 요약과 잘한점에는 숫자 근거를 포함한다.",
+    "- 요약은 기간 단위를 명시하고 활동일/완료/미완료를 함께 정리한다.",
+    "- 예시: '일주일 중 하루만 진행했고 완료 2개, 미완료 1개였어요.'",
+    "- 완료율/재개횟수/활동일 수를 함께 보고 핵심만 정리한다.",
+    "- 데이터가 적으면 장기 판단을 하지 않는다.",
+    "- 어색한 합성어를 피하고 일상적인 표현으로 작성한다.",
     "",
     "금지 어휘/문장 예시:",
     "- 추세 판단은 조심해야 합니다",
@@ -169,9 +300,8 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     `자주 미완료된 작업: ${frequentIncompleteTaskLine}`,
     `저표본 여부: ${sparseData ? "매우 높음" : lowData ? "있음" : "낮음"}`,
     "작성 전 체크:",
-    "- 5줄 제목이 정확한가?",
-    "- 각 줄이 자연스러운 한국어인가?",
-    "- 다음한걸음이 실제로 바로 실행 가능한가?",
+    "- 4줄 제목이 정확한가?",
+    "- 각 줄이 자연스럽고 짧은가?",
   ].join("\n");
 }
 
@@ -191,8 +321,8 @@ async function requestCommentary(payload: StatsCommentaryRequest) {
     body: JSON.stringify({
       model: env.OPENAI_MODEL,
       input: buildPrompt(payload),
-      temperature: 0.85,
-      max_output_tokens: 280,
+      temperature: 0.6,
+      max_output_tokens: 240,
     }),
   });
 
@@ -223,7 +353,7 @@ async function requestCommentary(payload: StatsCommentaryRequest) {
     (error as Error & { code?: ServiceErrorCode }).code = "OPENAI_EMPTY_RESPONSE";
     throw error;
   }
-  return normalizeCommentaryTone(text);
+  return finalizeCommentary(text, payload);
 }
 
 export async function registerStatsCommentaryRoute(app: FastifyInstance) {
