@@ -7,7 +7,7 @@ type TaskCollectionsQueryOptions = {
   enabled?: boolean;
 };
 
-export function taskCollectionsQuery(options?: TaskCollectionsQueryOptions) {
+function useTaskCollectionsQuery(options?: TaskCollectionsQueryOptions) {
   return useQuery({
     queryKey: taskCollectionsQueryKey,
     queryFn: () => fetchTaskCollections(),
@@ -21,7 +21,7 @@ export function taskCollectionsQuery(options?: TaskCollectionsQueryOptions) {
 }
 
 export function useTaskCollectionQuery(options?: TaskCollectionsQueryOptions) {
-  const taskCollections = taskCollectionsQuery(options);
+  const taskCollections = useTaskCollectionsQuery(options);
 
   return {
     taskCollectionsQuery: taskCollections,

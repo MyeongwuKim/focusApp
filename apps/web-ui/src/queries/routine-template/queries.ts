@@ -7,7 +7,7 @@ import {
 export const routineTemplatesQueryKey = ["routineTemplates"] as const;
 export const routineTemplateWeekdayAssignmentsQueryKey = ["routineTemplateWeekdayAssignments"] as const;
 
-export function routineTemplatesQuery() {
+function useRoutineTemplatesQuery() {
   return useQuery({
     queryKey: routineTemplatesQueryKey,
     queryFn: () => fetchRoutineTemplates(),
@@ -20,14 +20,14 @@ export function routineTemplatesQuery() {
 }
 
 export function useRoutineTemplateQuery() {
-  const routineTemplates = routineTemplatesQuery();
+  const routineTemplates = useRoutineTemplatesQuery();
 
   return {
     routineTemplatesQuery: routineTemplates,
   };
 }
 
-export function routineTemplateWeekdayAssignmentsQuery() {
+function useRoutineTemplateWeekdayAssignmentsQueryInternal() {
   return useQuery({
     queryKey: routineTemplateWeekdayAssignmentsQueryKey,
     queryFn: () => fetchRoutineTemplateWeekdayAssignments(),
@@ -40,7 +40,7 @@ export function routineTemplateWeekdayAssignmentsQuery() {
 }
 
 export function useRoutineTemplateWeekdayAssignmentsQuery() {
-  const routineTemplateWeekdayAssignments = routineTemplateWeekdayAssignmentsQuery();
+  const routineTemplateWeekdayAssignments = useRoutineTemplateWeekdayAssignmentsQueryInternal();
 
   return {
     routineTemplateWeekdayAssignmentsQuery: routineTemplateWeekdayAssignments,

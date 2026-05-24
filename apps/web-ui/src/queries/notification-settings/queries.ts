@@ -3,7 +3,7 @@ import { fetchNotificationSettings } from "../../api/notificationSettingsApi";
 
 export const notificationSettingsQueryKey = ["notificationSettings"] as const;
 
-export function notificationSettingsQuery() {
+function useNotificationSettingsQueryInternal() {
   return useQuery({
     queryKey: notificationSettingsQueryKey,
     queryFn: () => fetchNotificationSettings(),
@@ -15,7 +15,7 @@ export function notificationSettingsQuery() {
 }
 
 export function useNotificationSettingsQuery() {
-  const settings = notificationSettingsQuery();
+  const settings = useNotificationSettingsQueryInternal();
 
   return {
     notificationSettingsQuery: settings,
