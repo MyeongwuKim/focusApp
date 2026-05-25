@@ -3,7 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { fetchDailyLogByDate } from "../../api/dailyLogApi";
 import { statsDailyDetailQueryKey, useDailyLogQuery } from "../../queries";
 import { addDays, formatDateInput, getMonthKeysBetween, getRangeDays, parseInputDate } from "./statsDate";
-import type { CountBarDatum, TimeBarDatum } from "./components/types";
+import type { CountBarDatum, StatsDailyActivityDatum, TimeBarDatum } from "./components/types";
 
 function toEpochMillis(value: string | null) {
   if (!value) {
@@ -276,7 +276,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       }));
 
   const activitySignal = useMemo(() => {
-    const series = countStats.dailySeries.map((countItem, index) => {
+    const series: StatsDailyActivityDatum[] = countStats.dailySeries.map((countItem, index) => {
       const timeItem = timeStats.dailySeries[index];
       return {
         key: countItem.key,
@@ -303,6 +303,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
     const activeDayCount = activeDays.length;
 
     return {
+      dailySeries: series,
       activeDayCount,
       daysWithTodo,
       daysWithFocus,

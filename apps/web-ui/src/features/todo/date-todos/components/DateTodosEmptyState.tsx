@@ -67,7 +67,7 @@ export function DateTodosEmptyState({
           </div>
         </>
       ) : assignedWeekdayRoutineTemplate ? (
-        <div className="w-full max-w-sm space-y-1.5">
+        <div className="w-full max-w-sm space-y-3">
           <WeekdayRoutinePreviewCard
             templateName={assignedWeekdayRoutineTemplate.name}
             previewItems={weekdayRoutinePreviewItems}
@@ -77,8 +77,8 @@ export function DateTodosEmptyState({
             applyLabel={isToday && yesterdayIncompleteCount > 0 ? "루틴만 적용" : "오늘 루틴 적용"}
           />
           {isToday && yesterdayIncompleteCount > 0 ? (
-            <div className="space-y-1 px-1">
-              <p className="m-0 text-center text-[10px] text-base-content/62">
+            <div className="space-y-4 px-1 pt-1">
+              <p className="m-0 pb-1 text-center text-[10px] leading-relaxed text-base-content/62">
                 어제 미완료 {yesterdayIncompleteCount}개도 같이 가져올 수 있어요.
               </p>
               <Button

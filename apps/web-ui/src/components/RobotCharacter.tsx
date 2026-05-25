@@ -4,13 +4,18 @@ type RobotCharacterProps = {
   className?: string;
   ariaLabel?: string;
   showAlertBadge?: boolean;
+  badgeText?: "!" | "?";
+  mood?: "neutral" | "sad";
 };
 
 export function RobotCharacter({
   className,
   ariaLabel = "로봇 캐릭터",
   showAlertBadge = false,
+  badgeText,
+  mood = "neutral",
 }: RobotCharacterProps) {
+  const isSad = mood === "sad";
   const gradientIdSeed = useId().replace(/:/g, "");
   const shellGradId = `shell-grad-${gradientIdSeed}`;
   const faceGradId = `face-grad-${gradientIdSeed}`;
@@ -51,28 +56,50 @@ export function RobotCharacter({
       />
       <rect x="42" y="60" width="76" height="44" rx="17" fill={`url(#${faceGradId})`} />
 
-      <path d="M56 72l8 3" stroke="#E5E7EB" strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M104 72l-8 3" stroke="#E5E7EB" strokeWidth="2.6" strokeLinecap="round" />
-
-      <ellipse cx="63" cy="82" rx="7.2" ry="6.4" fill={`url(#${eyeGradId})`} />
-      <ellipse cx="97" cy="82" rx="7.2" ry="6.4" fill={`url(#${eyeGradId})`} />
-      <circle cx="65" cy="80" r="2" fill="#ECFEFF" />
-      <circle cx="99" cy="80" r="2" fill="#ECFEFF" />
-
-      <path
-        d="M66 96l4-2.2 4 2.2 4-2.2 4 2.2 4-2.2 4 2.2 4-2.2"
-        fill="none"
-        stroke="#67E8F9"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {showAlertBadge ? (
+      {isSad ? (
         <>
-          <circle cx="124" cy="42" r="11" fill="#F59E0B" />
+          <path d="M56 74l9 1.5" stroke="#E5E7EB" strokeWidth="2.6" strokeLinecap="round" />
+          <path d="M104 74l-9 1.5" stroke="#E5E7EB" strokeWidth="2.6" strokeLinecap="round" />
+        </>
+      ) : (
+        <>
+          <path d="M56 72l8 3" stroke="#E5E7EB" strokeWidth="2.6" strokeLinecap="round" />
+          <path d="M104 72l-8 3" stroke="#E5E7EB" strokeWidth="2.6" strokeLinecap="round" />
+        </>
+      )}
+
+      <ellipse cx="63" cy="82" rx="7.2" ry={isSad ? 5.2 : 6.4} fill={`url(#${eyeGradId})`} opacity={isSad ? 0.9 : 1} />
+      <ellipse cx="97" cy="82" rx="7.2" ry={isSad ? 5.2 : 6.4} fill={`url(#${eyeGradId})`} opacity={isSad ? 0.9 : 1} />
+      <circle cx="65" cy="80" r="2" fill="#ECFEFF" opacity={isSad ? 0.75 : 1} />
+      <circle cx="99" cy="80" r="2" fill="#ECFEFF" opacity={isSad ? 0.75 : 1} />
+
+      {isSad ? (
+        <>
+          <path
+            d="M66 97c4-2.2 24-2.2 28 0"
+            fill="none"
+            stroke="#67E8F9"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : (
+        <path
+          d="M66 96l4-2.2 4 2.2 4-2.2 4 2.2 4-2.2 4 2.2 4-2.2"
+          fill="none"
+          stroke="#67E8F9"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+
+      {showAlertBadge || badgeText ? (
+        <>
+          <circle cx="124" cy="42" r="11" fill={badgeText === "?" ? "#60A5FA" : "#F59E0B"} />
           <text x="124" y="46" textAnchor="middle" fontSize="13" fontWeight="700" fill="#111827">
-            !
+            {badgeText ?? "!"}
           </text>
         </>
       ) : null}

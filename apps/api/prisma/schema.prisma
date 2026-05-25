@@ -152,6 +152,54 @@ model PushDeviceToken {
   @@index([userId, isActive])
 }
 
+model AchievementProgress {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String
+  badgeId            String
+  title              String
+  description        String
+  icon               String
+  category           String
+  scope              String
+  tier               String
+  goal               Int
+  currentValue       Int      @default(0)
+  isAchieved         Boolean  @default(false)
+  achievedCount      Int      @default(0)
+  lastAchievedAt     DateTime?
+  lastAchievedWeekKey String?
+  weeklyStreak       Int      @default(0)
+  bestWeeklyStreak   Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([userId, badgeId])
+  @@index([userId, category])
+  @@index([userId, scope])
+}
+
+model AchievementEvent {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String
+  badgeId     String
+  title       String
+  description String
+  icon        String
+  category    String
+  scope       String
+  tier        String
+  goal        Int
+  currentValue Int
+  cycleIndex  Int
+  weekKey     String?
+  weeklyStreak Int?
+  achievedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([userId, achievedAt(sort: Desc)])
+  @@index([userId, badgeId, weekKey])
+}
+
 type DailyTaskEntry {
   id                 String
   taskId             String?

@@ -14,3 +14,12 @@ export type TimeBarDatum = {
   focusMin: number;
   restMin: number;
 };
+
+export type StatsDailyActivityDatum = {
+  key: string;
+  done: number;
+  incomplete: number;
+  resumeCount: number;
+  focusMin: number;
+  restMin: number;
+};

@@ -740,6 +740,8 @@ export async function registerAuthRoute(app: FastifyInstance) {
     const { userId } = auth;
 
     await prisma.$transaction(async (tx) => {
+      await tx.achievementEvent.deleteMany({ where: { userId } });
+      await tx.achievementProgress.deleteMany({ where: { userId } });
       await tx.pushDeviceToken.deleteMany({ where: { userId } });
       await tx.notificationSettings.deleteMany({ where: { userId } });
       await tx.routineTemplate.deleteMany({ where: { userId } });

@@ -5,6 +5,7 @@ import { RoutineRoutePage } from "./pages/RoutineRoutePage";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
 import { CalendarRootPage } from "./pages/CalendarRootPage";
 import { TaskManagementRoutePage } from "./pages/TaskManagementRoutePage";
+import { AchievementsRoutePage } from "./pages/AchievementsRoutePage";
 import { StatsRoutePage } from "./pages/StatsRoutePage";
 import { LoginPage } from "./pages/LoginPage";
 import { DrawerMenu } from "./components/DrawerMenu";
@@ -70,6 +71,7 @@ const ROUTE_PATH: Record<RouteKey, string> = {
   tasks: "/tasks",
   dateTasks: "/date-tasks",
   stats: "/stats",
+  achievements: "/achievements",
   settings: "/settings",
   routine: ROUTINE_MANAGE_PATH,
 };
@@ -965,6 +967,8 @@ function App() {
         );
       case "stats":
         return <StatsRoutePage forcedSearch={options?.forcedSearch} />;
+      case "achievements":
+        return <AchievementsRoutePage forcedSearch={options?.forcedSearch} />;
       case "calendar":
         return null;
       default: {

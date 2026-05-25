@@ -12,7 +12,7 @@ export type DrawerRouteConfig = {
   routeKey?: RouteKey;
   path?: string;
   activePathPrefixes?: string[];
-  iconKey: "tasks" | "stats" | "settings" | "routine";
+  iconKey: "tasks" | "stats" | "achievements" | "settings" | "routine";
 };
 
 export const MAIN_ROUTE: RouteKey = "calendar";
@@ -24,6 +24,7 @@ export const ROUTINE_EDIT_PATH_PREFIX = "/routine/edit/";
 export const ROUTES: RouteConfig[] = [
   { key: "tasks", label: "할일 관리", inDrawer: true },
   { key: "stats", label: "통계", inDrawer: true },
+  { key: "achievements", label: "업적", inDrawer: true },
   { key: "routine", label: "루틴 관리", inDrawer: true },
   { key: "settings", label: "설정", inDrawer: false },
 ];
@@ -38,6 +39,14 @@ const CORE_DRAWER_ROUTES: DrawerRouteConfig[] = ROUTES.filter((route) => route.i
   label: route.label,
   routeKey: route.key,
   iconKey:
-    route.key === "tasks" ? "tasks" : route.key === "stats" ? "stats" : route.key === "routine" ? "routine" : "settings",
+    route.key === "tasks"
+      ? "tasks"
+      : route.key === "stats"
+        ? "stats"
+        : route.key === "achievements"
+          ? "achievements"
+          : route.key === "routine"
+            ? "routine"
+            : "settings",
 }));
 export const DRAWER_ROUTES: DrawerRouteConfig[] = CORE_DRAWER_ROUTES;

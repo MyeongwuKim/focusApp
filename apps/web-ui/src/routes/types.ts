@@ -1,1 +1,1 @@
-export type RouteKey = "calendar" | "tasks" | "dateTasks" | "stats" | "settings" | "routine";
+export type RouteKey = "calendar" | "tasks" | "dateTasks" | "stats" | "achievements" | "settings" | "routine";

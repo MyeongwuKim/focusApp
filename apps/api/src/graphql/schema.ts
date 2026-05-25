@@ -17,6 +17,10 @@ import {
   pushDeviceTokenResolvers,
   pushDeviceTokenTypeDefs,
 } from "../modules/push-device-token/push-device-token.resolver.js";
+import {
+  achievementResolvers,
+  achievementTypeDefs,
+} from "../modules/achievement/achievement.resolver.js";
 
 type ResolverRecord = Record<string, Record<string, unknown>>;
 
@@ -50,6 +54,7 @@ export const typeDefs = [
   routineTemplateTypeDefs,
   notificationSettingsTypeDefs,
   pushDeviceTokenTypeDefs,
+  achievementTypeDefs,
 ];
 
 export const resolvers = mergeResolvers(
@@ -58,5 +63,6 @@ export const resolvers = mergeResolvers(
   taskCollectionResolvers,
   routineTemplateResolvers,
   notificationSettingsResolvers,
-  pushDeviceTokenResolvers
+  pushDeviceTokenResolvers,
+  achievementResolvers
 );
