@@ -11,6 +11,10 @@ import { DateTodosRouteProvider } from "../features/todo/date-todos/DateTodosRou
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 import { formatDateKey } from "../utils/holidays";
 
+type DateTodosSubRouteNavigationState = {
+  fromDateTasksMain?: boolean;
+};
+
 type DateTodosRoutePageProps = {
   forcedPathname?: string;
   forcedSearch?: string;
@@ -45,6 +49,7 @@ export function DateTodosRoutePage({
   const focusTargetTodoId = searchParams.get("todoId");
   const startTodoPromptAt = searchParams.get("promptAt");
   const startTodoPromptSource = searchParams.get("startTodoPromptSource");
+  const routeState = location.state as DateTodosSubRouteNavigationState | null;
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
   const isRoutineImportRoute = normalizedPathname === "/date-tasks/routines";
   const isRoutineCreateRoute = normalizedPathname === "/date-tasks/routines/new";
@@ -83,11 +88,8 @@ export function DateTodosRoutePage({
   ]);
 
   const closeSubRoute = () => {
-    const historyState = window.history.state as { idx?: number } | null;
-    const stackIndex = typeof historyState?.idx === "number" ? historyState.idx : 0;
-
-    if (stackIndex > 0) {
-      goBack();
+    if (routeState?.fromDateTasksMain) {
+      goBack({ animated: false });
       return;
     }
 
@@ -102,28 +104,40 @@ export function DateTodosRoutePage({
       onOpenTaskPickerPage();
       return;
     }
-    goPage("/date-tasks/add", { query: { date: resolvedDateKey } });
+    goPage("/date-tasks/add", {
+      query: { date: resolvedDateKey },
+      state: { fromDateTasksMain: true } satisfies DateTodosSubRouteNavigationState,
+    });
   };
   const openMemoRoute = () => {
     if (onOpenMemoPage) {
       onOpenMemoPage();
       return;
     }
-    goPage("/date-tasks/memo", { query: { date: resolvedDateKey } });
+    goPage("/date-tasks/memo", {
+      query: { date: resolvedDateKey },
+      state: { fromDateTasksMain: true } satisfies DateTodosSubRouteNavigationState,
+    });
   };
   const openRoutineImportRoute = () => {
     if (onOpenRoutineImportPage) {
       onOpenRoutineImportPage();
       return;
     }
-    goPage("/date-tasks/routines", { query: { date: resolvedDateKey } });
+    goPage("/date-tasks/routines", {
+      query: { date: resolvedDateKey },
+      state: { fromDateTasksMain: true } satisfies DateTodosSubRouteNavigationState,
+    });
   };
   const openRoutineCreateRoute = () => {
     if (onOpenRoutineCreatePage) {
       onOpenRoutineCreatePage();
       return;
     }
-    goPage("/date-tasks/routines/new", { query: { date: resolvedDateKey } });
+    goPage("/date-tasks/routines/new", {
+      query: { date: resolvedDateKey },
+      state: { fromDateTasksMain: true } satisfies DateTodosSubRouteNavigationState,
+    });
   };
   const handleShiftDate = (days: number) => {
     const nextDateKey = shiftDateKey(resolvedDateKey, days);

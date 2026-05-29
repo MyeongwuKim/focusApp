@@ -91,6 +91,15 @@ const guideByPath: Record<string, PageHelpGuide> = {
       "일자별 완료/미완료 및 시간 흐름 확인 가능",
     ],
   },
+  "/achievements": {
+    title: "업적 안내",
+    description: "업적 달성 진행상황과 획득 히스토리를 한 화면에서 확인할 수 있어요.",
+    highlights: [
+      "진행상황 탭에서 카테고리별 업적 달성률 확인 가능",
+      "집중/완료/주간 연속 기록 지표 확인 가능",
+      "히스토리 탭에서 업적 획득 내역을 최신순으로 확인 가능",
+    ],
+  },
   "/settings": {
     title: "설정 안내",
     description: "앱 사용 환경을 취향에 맞게 조정할 수 있어요.",

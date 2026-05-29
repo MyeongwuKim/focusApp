@@ -305,9 +305,12 @@ type RoutineManageViewProps = {
 
 export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
   const location = useLocation();
-  const { goPage } = useAppNavigation();
+  const { goBack, goPage } = useAppNavigation();
   const pathname = forcedPathname ?? location.pathname;
   const routeState = useMemo(() => getRoutineEditorRouteState(pathname), [pathname]);
+  const openedFromRoutineManage = Boolean(
+    (location.state as { fromRoutineManage?: boolean } | null)?.fromRoutineManage
+  );
   const [activeTab, setActiveTab] = useState<RoutineManageTab>("templates");
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<string | null>(null);
   const [templateDraft, setTemplateDraft] = useState<TemplateDraft>(buildEmptyDraft());
@@ -700,7 +703,9 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
       return;
     }
     if (selected === "edit") {
-      goPage(`${ROUTINE_EDIT_PATH_PREFIX}${template.id}`);
+      goPage(`${ROUTINE_EDIT_PATH_PREFIX}${template.id}`, {
+        state: { fromRoutineManage: true },
+      });
       return;
     }
     if (selected === "delete") {
@@ -808,6 +813,14 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
   }
 
   if (routeState.isEditorRoute) {
+    const handleCloseEditor = () => {
+      if (openedFromRoutineManage) {
+        goBack({ animated: false });
+        return;
+      }
+      goPage(ROUTINE_MANAGE_PATH, { replace: true });
+    };
+
     return (
       <section className="flex h-full min-h-0 flex-col rounded-2xl border border-base-300 bg-base-200/50 px-1.5 pt-1.5 pb-0">
         <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75">
@@ -825,7 +838,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
             </div>
           ) : (
             <TodoRoutineCreateModal
-              onClose={() => goPage(ROUTINE_MANAGE_PATH, { replace: true })}
+              onClose={handleCloseEditor}
               onCreate={handleCreateTemplateFromRoute}
               initialDraft={
                 editingTemplateForRoute
@@ -912,7 +925,9 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
                 block
                 className="h-10 min-h-10 rounded-xl"
                 onClick={() => {
-                  goPage(ROUTINE_CREATE_PATH);
+                  goPage(ROUTINE_CREATE_PATH, {
+                    state: { fromRoutineManage: true },
+                  });
                 }}
               >
                 루틴 만들기

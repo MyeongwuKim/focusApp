@@ -25,7 +25,8 @@ function resolveBestStreak(
   return target?.currentValue ?? 0;
 }
 
-export function AchievementsRoutePage({ forcedSearch: _forcedSearch }: AchievementsRoutePageProps) {
+export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePageProps) {
+  void forcedSearch;
   const queryClient = useQueryClient();
   const didSyncRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);

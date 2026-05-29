@@ -22,7 +22,7 @@ type DateTasksBottomSheetProps = {
   onExpandedChange: (isExpanded: boolean) => void;
 };
 
-const EXPAND_THRESHOLD_PX = 88;
+const EXPAND_THRESHOLD_PX = 56;
 const COLLAPSE_THRESHOLD_PX = 132;
 
 function getViewportHeight() {
@@ -118,10 +118,13 @@ export function DateTasksBottomSheet({
   const canGoToday = resolvedDateKey !== todayDateKey || !isViewingCurrentMonth;
   const isLocalRoutineOverlayOpen = localOverlayLayer !== null;
   const effectiveContainerHeight = sheetContainerHeight > 0 ? sheetContainerHeight : viewportHeight;
-  const collapsedOffset = Math.max(0, effectiveContainerHeight - barHeight);
+  const collapsedVisibleHeight = Math.min(effectiveContainerHeight, barHeight);
+  const collapsedOffset = Math.max(0, effectiveContainerHeight - collapsedVisibleHeight);
 
   const baseOffset = isExpanded ? 0 : collapsedOffset;
   const translateY = Math.min(collapsedOffset, Math.max(0, baseOffset + dragY));
+  const bridgeTop = Math.max(0, translateY - 34);
+  const bridgeOpacity = isExpanded && !isHeaderDragging ? 0 : 1;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -257,9 +260,30 @@ export function DateTasksBottomSheet({
         isHelpModalOpen ? "pointer-events-auto" : "pointer-events-none",
       ].join(" ")}
     >
+      <div
+        className="pointer-events-auto absolute inset-x-0 z-40 flex touch-pan-y justify-center"
+        style={{
+          top: `${bridgeTop}px`,
+          opacity: bridgeOpacity,
+          transition: isHeaderDragging
+            ? "none"
+            : "top 260ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
+        }}
+        onTouchStart={handleHeaderTouchStart}
+        onTouchMove={handleHeaderTouchMove}
+        onTouchEnd={handleHeaderTouchEnd}
+        onTouchCancel={handleHeaderTouchEnd}
+        aria-hidden={false}
+      >
+        <div className="relative h-[34px] w-full">
+          <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-b from-transparent via-base-100/28 to-base-100/78" />
+          <div className="absolute left-1/2 top-[9px] h-1.5 w-12 -translate-x-1/2 rounded-full bg-base-content/28" />
+        </div>
+      </div>
+
       <section
         className={[
-          "absolute inset-x-0 top-0 bottom-0 flex flex-col border border-base-300 bg-base-100/98 shadow-[0_-14px_40px_rgba(15,23,42,0.24)]",
+          "absolute inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden border border-base-300 bg-base-100/98 shadow-[0_-14px_40px_rgba(15,23,42,0.24)]",
           isHelpModalOpen ? "pointer-events-none" : "pointer-events-auto",
           isExpanded && !isHeaderDragging ? "rounded-none" : "rounded-t-2xl",
         ].join(" ")}

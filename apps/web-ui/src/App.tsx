@@ -301,6 +301,7 @@ function App() {
   const isLoggedIn = useAuthStore(selectIsLoggedIn);
   const setAuthToken = useAuthStore((state) => state.setAuthToken);
   const setAuthProvider = useAuthStore((state) => state.setAuthProvider);
+  const [isAuthHydrated, setIsAuthHydrated] = useState(() => useAuthStore.persist.hasHydrated());
   const isLoginRoute = location.pathname === LOGIN_ROUTE_PATH;
   const isAuthCallbackRoute = location.pathname === AUTH_CALLBACK_ROUTE_PATH;
   const isAuthenticatedAppRoute = isLoggedIn && !isLoginRoute && !isAuthCallbackRoute;
@@ -342,6 +343,21 @@ function App() {
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
+
+  useEffect(() => {
+    const unsubscribeOnHydrate = useAuthStore.persist.onHydrate(() => {
+      setIsAuthHydrated(false);
+    });
+    const unsubscribeOnFinishHydration = useAuthStore.persist.onFinishHydration(() => {
+      setIsAuthHydrated(true);
+    });
+    setIsAuthHydrated(useAuthStore.persist.hasHydrated());
+
+    return () => {
+      unsubscribeOnHydrate();
+      unsubscribeOnFinishHydration();
+    };
+  }, []);
 
   useEffect(() => {
     const previousToken = previousAuthTokenRef.current;
@@ -428,6 +444,10 @@ function App() {
       return;
     }
 
+    if (!isAuthHydrated) {
+      return;
+    }
+
     if (!isLoggedIn && !isLoginRoute) {
       navigate(LOGIN_ROUTE_PATH, { replace: true });
       return;
@@ -459,6 +479,7 @@ function App() {
     isLoginRoute,
     location.pathname,
     navigate,
+    isAuthHydrated,
     setAuthProvider,
     setAuthToken,
   ]);

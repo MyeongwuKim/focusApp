@@ -7,7 +7,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FiDownload, FiSave, FiTag, FiTrash2 } from "react-icons/fi";
 import type { RoutineTemplate, RoutineTemplateItem } from "../../../api/routineTemplateApi";
 import { Button } from "../../../components/ui/Button";
@@ -42,6 +42,8 @@ type EditableRoutineItem = {
   content: string;
   scheduledTimeHHmm: string | null;
 };
+
+const POST_EDIT_ACTION_LOCK_MS = 420;
 
 function normalizeRoutineItems(items: RoutineTemplateItem[]): EditableRoutineItem[] {
   return items
@@ -150,8 +152,29 @@ export function TodoRoutineImportModal({
   const [isSavingRoutine, setIsSavingRoutine] = useState(false);
   const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isPostEditActionLocked, setIsPostEditActionLocked] = useState(false);
+  const postEditActionLockTimerRef = useRef<number | null>(null);
 
   const sensors = useSortableSensors();
+
+  const lockPostEditActions = () => {
+    if (postEditActionLockTimerRef.current !== null) {
+      window.clearTimeout(postEditActionLockTimerRef.current);
+    }
+    setIsPostEditActionLocked(true);
+    postEditActionLockTimerRef.current = window.setTimeout(() => {
+      postEditActionLockTimerRef.current = null;
+      setIsPostEditActionLocked(false);
+    }, POST_EDIT_ACTION_LOCK_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (postEditActionLockTimerRef.current !== null) {
+        window.clearTimeout(postEditActionLockTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedId && routines.length > 0) {
@@ -193,7 +216,7 @@ export function TodoRoutineImportModal({
   );
 
   const handleApply = async () => {
-    if (!selectedId || isApplying) {
+    if (!selectedId || isApplying || isPostEditActionLocked) {
       return;
     }
     setIsApplying(true);
@@ -236,6 +259,7 @@ export function TodoRoutineImportModal({
         })),
       });
       setIsEditMode(false);
+      lockPostEditActions();
     } finally {
       setIsSavingRoutine(false);
     }
@@ -262,6 +286,7 @@ export function TodoRoutineImportModal({
     setIsDeletingRoutine(true);
     try {
       await onDeleteRoutine(selectedRoutine.id);
+      lockPostEditActions();
     } finally {
       setIsDeletingRoutine(false);
     }
@@ -383,7 +408,7 @@ export function TodoRoutineImportModal({
               variant="primary"
               block
               className="h-10 min-h-10 flex-1 rounded-xl"
-              disabled={!selectedRoutine || isApplying}
+              disabled={!selectedRoutine || isApplying || isPostEditActionLocked}
               onClick={handleApply}
             >
               <FiDownload size={14} />
