@@ -213,23 +213,6 @@ export function TodoRoutineCreateModal({ onClose, onCreate, initialDraft = null 
   }, [editingTimeTaskId, selectedTaskIds]);
 
   useEffect(() => {
-    if (!initialDraft) {
-      return;
-    }
-    setName(initialDraft.name);
-    setSelectedTaskIds(
-      Array.from(
-        new Set(
-          initialDraft.items
-            .map((item) => item.taskId ?? null)
-            .filter((taskId): taskId is string => Boolean(taskId))
-        )
-      )
-    );
-    setSelectedTaskTimes(buildInitialTaskTimes(initialDraft.items));
-  }, [initialDraft]);
-
-  useEffect(() => {
     setSelectedTaskIds((prev) => prev.filter((taskId) => allTaskIdSet.has(taskId)));
     setSelectedTaskTimes((prev) =>
       Object.entries(prev).reduce<Record<string, string | null>>((acc, [taskId, value]) => {

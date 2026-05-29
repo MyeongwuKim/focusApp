@@ -7,6 +7,7 @@ import { AppErrorFallback } from "./components/AppErrorFallback";
 import { ThemeController } from "./components/ThemeController";
 import { queryClient } from "./queryClient";
 import { initWebSentry, Sentry } from "./sentry";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 const sentryEnabled = initWebSentry();
 const rootElement = document.getElementById("root")!;
@@ -29,6 +30,6 @@ root.render(
         <App />
       </HashRouter>
     </Sentry.ErrorBoundary>
-    {/* <ReactQueryDevtools initialIsOpen={false} /> */}
+    <ReactQueryDevtools initialIsOpen={false} />
   </QueryClientProvider>
 );

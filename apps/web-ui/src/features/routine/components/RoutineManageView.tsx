@@ -265,6 +265,28 @@ function buildEmptyDraft(): TemplateDraft {
   };
 }
 
+function isSameTemplateDraft(left: TemplateDraft, right: TemplateDraft) {
+  if (left.templateId !== right.templateId || left.name !== right.name) {
+    return false;
+  }
+  if (left.items.length !== right.items.length) {
+    return false;
+  }
+  return left.items.every((item, index) => {
+    const target = right.items[index];
+    if (!target) {
+      return false;
+    }
+    return (
+      item.id === target.id &&
+      item.taskId === target.taskId &&
+      item.titleSnapshot === target.titleSnapshot &&
+      item.content === target.content &&
+      item.scheduledTimeHHmm === target.scheduledTimeHHmm
+    );
+  });
+}
+
 function sanitizeDraftItems(items: RoutineTemplateDraftItem[]) {
   return items
     .map((item) => ({
@@ -361,6 +383,18 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
       const nextDraft = buildDraftFromTemplate(first);
       setTemplateDraft(nextDraft);
     }
+  }, [routineTemplates, selectedTemplateKey]);
+
+  useEffect(() => {
+    if (!selectedTemplateKey) {
+      return;
+    }
+    const selectedTemplate = routineTemplates.find((template) => template.id === selectedTemplateKey);
+    if (!selectedTemplate) {
+      return;
+    }
+    const nextDraft = buildDraftFromTemplate(selectedTemplate);
+    setTemplateDraft((prev) => (isSameTemplateDraft(prev, nextDraft) ? prev : nextDraft));
   }, [routineTemplates, selectedTemplateKey]);
   const editingTemplateForRoute = useMemo(
     () =>
@@ -838,6 +872,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
             </div>
           ) : (
             <TodoRoutineCreateModal
+              key={routeState.mode === "edit" ? routeState.editingTemplateId ?? "routine-edit" : "routine-create"}
               onClose={handleCloseEditor}
               onCreate={handleCreateTemplateFromRoute}
               initialDraft={
