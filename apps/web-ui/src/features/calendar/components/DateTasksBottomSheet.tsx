@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronDown, FiChevronUp, FiHelpCircle } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import { PageHelpModal } from "../../../components/PageHelpModal";
@@ -24,6 +24,7 @@ type DateTasksBottomSheetProps = {
 
 const EXPAND_THRESHOLD_PX = 56;
 const COLLAPSE_THRESHOLD_PX = 132;
+const LOCAL_OVERLAY_HISTORY_KEY = "__dateTasksLocalOverlay";
 
 function getViewportHeight() {
   if (typeof window === "undefined") {
@@ -47,6 +48,14 @@ function formatSelectedDate(dateKey: string) {
     day: "numeric",
     weekday: "short",
   }).format(new Date(year, month - 1, day));
+}
+
+function isLocalOverlayHistoryState(state: unknown) {
+  return Boolean(
+    state &&
+      typeof state === "object" &&
+      LOCAL_OVERLAY_HISTORY_KEY in state
+  );
 }
 
 export function DateTasksBottomSheet({
@@ -75,6 +84,7 @@ export function DateTasksBottomSheet({
   const sheetContainerRef = useRef<HTMLDivElement | null>(null);
   const headerTouchStartYRef = useRef<number | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
+  const localOverlayLayerRef = useRef<LocalOverlayLayer>(null);
   const helpGuide = useMemo(() => getPageHelpGuide("/date-tasks"), []);
 
   const resolvedDateKey = selectedDateKey ?? formatDateKey(new Date());
@@ -116,7 +126,7 @@ export function DateTasksBottomSheet({
   const isViewingCurrentMonth =
     viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() === today.getMonth();
   const canGoToday = resolvedDateKey !== todayDateKey || !isViewingCurrentMonth;
-  const isLocalRoutineOverlayOpen = localOverlayLayer !== null;
+  const isLocalOverlayOpen = localOverlayLayer !== null;
   const effectiveContainerHeight = sheetContainerHeight > 0 ? sheetContainerHeight : viewportHeight;
   const collapsedVisibleHeight = Math.min(effectiveContainerHeight, barHeight);
   const collapsedOffset = Math.max(0, effectiveContainerHeight - collapsedVisibleHeight);
@@ -124,7 +134,51 @@ export function DateTasksBottomSheet({
   const baseOffset = isExpanded ? 0 : collapsedOffset;
   const translateY = Math.min(collapsedOffset, Math.max(0, baseOffset + dragY));
   const bridgeTop = Math.max(0, translateY - 34);
-  const bridgeOpacity = isExpanded && !isHeaderDragging ? 0 : 1;
+  const isBridgeDragHandleEnabled = !isExpanded && !isLocalOverlayOpen;
+  const isSheetHeaderDragEnabled = !isLocalOverlayOpen;
+  const bridgeOpacity = isBridgeDragHandleEnabled || (!isExpanded && isHeaderDragging) ? 1 : 0;
+
+  const setLocalOverlayLayerState = useCallback((nextLayer: LocalOverlayLayer) => {
+    localOverlayLayerRef.current = nextLayer;
+    setLocalOverlayLayer(nextLayer);
+  }, []);
+
+  const openLocalOverlayLayer = useCallback(
+    (nextLayer: Exclude<LocalOverlayLayer, null>) => {
+      setLocalOverlayLayerState(nextLayer);
+
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const currentState = window.history.state;
+      const nextState = {
+        ...(currentState && typeof currentState === "object" ? currentState : {}),
+        [LOCAL_OVERLAY_HISTORY_KEY]: nextLayer,
+      };
+      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+      if (isLocalOverlayHistoryState(currentState)) {
+        window.history.replaceState(nextState, "", currentUrl);
+        return;
+      }
+
+      window.history.pushState(nextState, "", currentUrl);
+    },
+    [setLocalOverlayLayerState]
+  );
+
+  const closeLocalOverlayLayer = useCallback(() => {
+    setLocalOverlayLayerState(null);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (isLocalOverlayHistoryState(window.history.state)) {
+      window.history.back();
+    }
+  }, [setLocalOverlayLayerState]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -165,6 +219,24 @@ export function DateTasksBottomSheet({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handlePopState = () => {
+      if (!localOverlayLayerRef.current) {
+        return;
+      }
+      setLocalOverlayLayerState(null);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [setLocalOverlayLayerState]);
+
+  useEffect(() => {
     if (!isVisible) {
       return;
     }
@@ -178,23 +250,31 @@ export function DateTasksBottomSheet({
     if (!isVisible) {
       setDragY(0);
       setIsHeaderDragging(false);
-      setLocalOverlayLayer(null);
+      setLocalOverlayLayerState(null);
       setIsHelpModalOpen(false);
       headerTouchStartYRef.current = null;
     }
-  }, [isVisible]);
+  }, [isVisible, setLocalOverlayLayerState]);
 
   if (!isVisible) {
     return null;
   }
 
   const handleHeaderTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    if (!isSheetHeaderDragEnabled) {
+      return;
+    }
+
     const touch = event.touches[0];
     headerTouchStartYRef.current = touch.clientY;
     setIsHeaderDragging(true);
   };
 
   const handleHeaderTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    if (!isSheetHeaderDragEnabled) {
+      return;
+    }
+
     const startY = headerTouchStartYRef.current;
     if (startY === null) {
       return;
@@ -223,6 +303,13 @@ export function DateTasksBottomSheet({
   };
 
   const handleHeaderTouchEnd = () => {
+    if (!isSheetHeaderDragEnabled) {
+      setIsHeaderDragging(false);
+      headerTouchStartYRef.current = null;
+      setDragY(0);
+      return;
+    }
+
     const currentDragY = dragY;
     setIsHeaderDragging(false);
     headerTouchStartYRef.current = null;
@@ -261,7 +348,10 @@ export function DateTasksBottomSheet({
       ].join(" ")}
     >
       <div
-        className="pointer-events-auto absolute inset-x-0 z-40 flex touch-pan-y justify-center"
+        className={[
+          "absolute inset-x-0 z-40 flex touch-pan-y justify-center",
+          isBridgeDragHandleEnabled ? "pointer-events-auto" : "pointer-events-none",
+        ].join(" ")}
         style={{
           top: `${bridgeTop}px`,
           opacity: bridgeOpacity,
@@ -298,7 +388,7 @@ export function DateTasksBottomSheet({
           ref={barRef}
           className={[
             "touch-pan-y transition-opacity duration-150",
-            isLocalRoutineOverlayOpen ? "shrink-0 pointer-events-none opacity-100" : "shrink-0 opacity-100",
+            isLocalOverlayOpen ? "shrink-0 pointer-events-none opacity-100" : "shrink-0 opacity-100",
           ].join(" ")}
           onTouchStart={handleHeaderTouchStart}
           onTouchMove={handleHeaderTouchMove}
@@ -377,10 +467,10 @@ export function DateTasksBottomSheet({
             forcedSearch={forcedSearch}
             isActive={isVisible}
             onShiftDateKey={handleShiftDateKeyInSheet}
-            onOpenTaskPickerPage={() => setLocalOverlayLayer("task-picker")}
-            onOpenMemoPage={() => setLocalOverlayLayer("memo")}
-            onOpenRoutineImportPage={() => setLocalOverlayLayer("routine-import")}
-            onOpenRoutineCreatePage={() => setLocalOverlayLayer("routine-create")}
+            onOpenTaskPickerPage={() => openLocalOverlayLayer("task-picker")}
+            onOpenMemoPage={() => openLocalOverlayLayer("memo")}
+            onOpenRoutineImportPage={() => openLocalOverlayLayer("routine-import")}
+            onOpenRoutineCreatePage={() => openLocalOverlayLayer("routine-create")}
           />
         </div>
 
@@ -391,21 +481,21 @@ export function DateTasksBottomSheet({
                 dateKey={resolvedDateKey}
                 mode={localOverlayLayer === "routine-import" ? "import" : "create"}
                 swipeCloseEnabled
-                onClose={() => setLocalOverlayLayer(null)}
+                onClose={closeLocalOverlayLayer}
               />
             ) : null}
             {localOverlayLayer === "task-picker" ? (
               <DateTodosTaskPickerStandaloneLayer
                 dateKey={resolvedDateKey}
                 swipeCloseEnabled
-                onClose={() => setLocalOverlayLayer(null)}
+                onClose={closeLocalOverlayLayer}
               />
             ) : null}
             {localOverlayLayer === "memo" ? (
               <DateTodosMemoStandaloneLayer
                 dateKey={resolvedDateKey}
                 swipeCloseEnabled
-                onClose={() => setLocalOverlayLayer(null)}
+                onClose={closeLocalOverlayLayer}
               />
             ) : null}
           </div>
