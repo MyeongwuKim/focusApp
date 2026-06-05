@@ -224,15 +224,33 @@ function resolveWebUiStartupErrorMessage(error: unknown) {
 }
 
 function closeAppFromFatalStartupError() {
+  const exitAndroidApp = () => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    setTimeout(() => {
+      BackHandler.exitApp();
+    }, 0);
+    setTimeout(() => {
+      BackHandler.exitApp();
+    }, 250);
+  };
+
   const nativeModulesRecord = readUnknownRecord(NativeModules);
+  const nativeAppControl = readUnknownRecord(nativeModulesRecord?.NativeAppControl);
   const rnExitApp = readUnknownRecord(nativeModulesRecord?.RNExitApp);
-  const exitAppFn = rnExitApp?.exitApp;
+  const exitAppFn = nativeAppControl?.exitApp ?? rnExitApp?.exitApp;
   if (typeof exitAppFn === "function") {
-    exitAppFn();
+    try {
+      exitAppFn();
+    } finally {
+      exitAndroidApp();
+    }
     return;
   }
 
-  BackHandler.exitApp();
+  exitAndroidApp();
 }
 
 function isNativeLoginCancelledError(error: unknown) {
@@ -990,6 +1008,10 @@ export default function WebViewScreen() {
     pendingNotificationPathRef.current = resolvedTargetPath;
 
     if (!webViewRef.current || !isWebViewReadyRef.current) {
+      if (webUiEntryUri) {
+        const nextUri = buildWebUiUriWithHash(webUiEntryUri, hashPath);
+        setWebViewUri((prev) => (prev === nextUri ? prev : nextUri));
+      }
       return;
     }
 

@@ -15,6 +15,7 @@ try {
     port: env.PORT,
     host: "0.0.0.0"
   });
+  app.log.info("[deploy-test] API server started for Cloud Build trigger check");
   startNotificationBatchScheduler(app.log);
 } catch (error) {
   app.log.error(error);

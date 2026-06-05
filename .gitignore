@@ -11,12 +11,10 @@ apps/mobile/web-dist/
 # Expo / React Native local artifacts
 apps/mobile/.expo/
 apps/mobile/expo-env.d.ts
-apps/api/.env
-apps/api/.env.local
-apps/web-ui/.env
-apps/web-ui/.env.local
-apps/mobile/.env
-apps/mobile/.env.local
+
+# env files
+.env*
+apps/*/.env*
 
 # OS files
 .DS_Store
