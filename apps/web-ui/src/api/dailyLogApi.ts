@@ -26,6 +26,36 @@ const DAILY_LOGS_BY_MONTH_QUERY = /* GraphQL */ `
   }
 `;
 
+const DAILY_LOGS_WITH_MEMO_QUERY = /* GraphQL */ `
+  query DailyLogsWithMemo(
+    $limit: Int
+    $cursorDateKey: String
+    $monthKey: String
+    $search: String
+    $sortOrder: String
+  ) {
+    dailyLogsWithMemo(
+      limit: $limit
+      cursorDateKey: $cursorDateKey
+      monthKey: $monthKey
+      search: $search
+      sortOrder: $sortOrder
+    ) {
+      items {
+        id
+        dateKey
+        monthKey
+        memo
+        todoCount
+        doneCount
+        previewTodos
+      }
+      nextCursorDateKey
+      hasNextPage
+    }
+  }
+`;
+
 const DAILY_LOG_QUERY = /* GraphQL */ `
   query DailyLog($dateKey: String!) {
     dailyLog(dateKey: $dateKey) {
@@ -539,6 +569,22 @@ type DailyLogsByMonthQuery = {
   }>;
 };
 
+type DailyLogsWithMemoQuery = {
+  dailyLogsWithMemo: {
+    items: Array<{
+      id: string;
+      dateKey: string;
+      monthKey: string;
+      memo: string | null;
+      todoCount: number;
+      doneCount: number;
+      previewTodos: string[];
+    }>;
+    nextCursorDateKey: string | null;
+    hasNextPage: boolean;
+  };
+};
+
 type DailyLogMemoQuery = {
   dailyLog: {
     dateKey: string;
@@ -636,6 +682,41 @@ export async function fetchDailyLogsByMonth(monthKey: string) {
     throw new Error(result.errors[0]?.message ?? "GraphQL dailyLogsByMonth failed");
   }
   return result.data?.dailyLogsByMonth ?? [];
+}
+
+export type FetchDailyLogsWithMemoInput = {
+  limit?: number;
+  cursorDateKey?: string | null;
+  monthKey?: string | null;
+  search?: string | null;
+  sortOrder?: "asc" | "desc";
+};
+
+export async function fetchDailyLogsWithMemo(input: FetchDailyLogsWithMemoInput = {}) {
+  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: JSON.stringify({
+      query: DAILY_LOGS_WITH_MEMO_QUERY,
+      variables: {
+        limit: input.limit ?? 30,
+        cursorDateKey: input.cursorDateKey ?? null,
+        monthKey: input.monthKey ?? null,
+        search: input.search ?? null,
+        sortOrder: input.sortOrder ?? "desc",
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Daily memo logs fetch failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as GraphQLResponse<DailyLogsWithMemoQuery>;
+  if (result.errors?.length) {
+    throw new Error(result.errors[0]?.message ?? "GraphQL dailyLogsWithMemo failed");
+  }
+  return result.data?.dailyLogsWithMemo ?? { items: [], nextCursorDateKey: null, hasNextPage: false };
 }
 
 export async function fetchDailyLogMemo(dateKey: string) {

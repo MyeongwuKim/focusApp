@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAchievementHistory, fetchAchievementProgressList, syncAchievements } from "../api/achievementApi";
+import { RobotCharacter } from "../components/RobotCharacter";
 import { Button } from "../components/ui/Button";
 import { AchievementHistoryTab } from "../features/achievement/components/AchievementHistoryTab";
 import { AchievementProgressTab } from "../features/achievement/components/AchievementProgressTab";
@@ -25,6 +26,35 @@ function resolveBestStreak(
   return target?.currentValue ?? 0;
 }
 
+function AchievementLoadingSignal() {
+  return (
+    <span className="absolute left-1/2 top-0 block h-10 w-12 -translate-x-1/2" aria-hidden="true">
+      <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary shadow-sm shadow-primary/30" />
+      <span className="absolute bottom-1 left-1/2 h-4 w-4 -translate-x-1/2 rounded-t-full border-t-2 border-primary/80 motion-safe:animate-ping" />
+      <span className="absolute bottom-1 left-1/2 h-6 w-6 -translate-x-1/2 rounded-t-full border-t-2 border-primary/55 motion-safe:animate-pulse" />
+      <span className="absolute bottom-1 left-1/2 h-8 w-8 -translate-x-1/2 rounded-t-full border-t-2 border-primary/25 motion-safe:animate-pulse" />
+    </span>
+  );
+}
+
+function AchievementInitialLoadingState() {
+  return (
+    <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 text-center" aria-live="polite">
+      <div className="relative h-36 w-32">
+        <AchievementLoadingSignal />
+        <RobotCharacter
+          className="absolute bottom-0 left-1/2 h-28 w-28 -translate-x-1/2 drop-shadow-sm"
+          ariaLabel="업적을 불러오는 로봇 캐릭터"
+        />
+      </div>
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-base-content">업적 데이터 불러오는 중...</p>
+        <p className="text-xs text-base-content/60">이번 주 진행 상황을 정리하고 있어요.</p>
+      </div>
+    </div>
+  );
+}
+
 export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePageProps) {
   void forcedSearch;
   const queryClient = useQueryClient();
@@ -33,6 +63,7 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
   const [activeTab, setActiveTab] = useState<AchievementsTab>("progress");
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>("all");
   const [activeHistoryFilter, setActiveHistoryFilter] = useState<HistoryFilter>("all");
+  const [hasCompletedInitialSync, setHasCompletedInitialSync] = useState(false);
 
   const progressQuery = useQuery({
     queryKey: PROGRESS_QUERY_KEY,
@@ -64,6 +95,10 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
         queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: HISTORY_QUERY_KEY }),
       ]);
+      setHasCompletedInitialSync(true);
+    },
+    onError: () => {
+      setHasCompletedInitialSync(true);
     },
   });
 
@@ -133,54 +168,60 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
         : historyRows;
 
   const isBusy = progressQuery.isFetching || historyQuery.isFetching || syncMutation.isPending;
+  const isInitialAchievementLoading =
+    !hasCompletedInitialSync || progressQuery.isLoading || historyQuery.isLoading;
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-base-300 bg-base-100/80 p-4 md:p-5">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-base-300/80 bg-base-200/35 p-1">
-          <Button
-            size="sm"
-            variant={activeTab === "progress" ? "primary" : "ghost"}
-            onClick={() => setActiveTab("progress")}
-          >
-            업적 진행상황
-          </Button>
-          <Button
-            size="sm"
-            variant={activeTab === "history" ? "primary" : "ghost"}
-            onClick={() => setActiveTab("history")}
-          >
-            업적 히스토리
-          </Button>
+      {isInitialAchievementLoading ? (
+        <AchievementInitialLoadingState />
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-base-300/80 bg-base-200/35 p-1">
+            <Button
+              size="sm"
+              variant={activeTab === "progress" ? "primary" : "ghost"}
+              onClick={() => setActiveTab("progress")}
+            >
+              업적 진행상황
+            </Button>
+            <Button
+              size="sm"
+              variant={activeTab === "history" ? "primary" : "ghost"}
+              onClick={() => setActiveTab("history")}
+            >
+              업적 히스토리
+            </Button>
+          </div>
+
+          {activeTab === "progress" ? (
+            <AchievementProgressTab
+              unlockedCount={unlockedCount}
+              totalCount={totalCount}
+              focusBestStreak={focusBestStreak}
+              doneBestStreak={doneBestStreak}
+              weeklyBestStreak={weeklyBestStreak}
+              weeklyAchievedCount={weeklyAchievedCount}
+              weeklyChallengeRows={weeklyChallengeRows}
+              activeCategory={activeCategory}
+              onChangeCategory={setActiveCategory}
+              filteredProgressRows={filteredProgressRows}
+            />
+          ) : (
+            <AchievementHistoryTab
+              activeHistoryFilter={activeHistoryFilter}
+              onChangeHistoryFilter={setActiveHistoryFilter}
+              permanentHistoryRows={permanentHistoryRows}
+              weeklyHistoryRows={weeklyHistoryRows}
+              filteredHistoryRows={filteredHistoryRows}
+              loadMoreRef={loadMoreRef}
+              isFetchingNextPage={historyQuery.isFetchingNextPage}
+            />
+          )}
+
+          {isBusy ? <p className="text-xs text-base-content/60">업적 데이터 동기화 중...</p> : null}
         </div>
-
-        {activeTab === "progress" ? (
-          <AchievementProgressTab
-            unlockedCount={unlockedCount}
-            totalCount={totalCount}
-            focusBestStreak={focusBestStreak}
-            doneBestStreak={doneBestStreak}
-            weeklyBestStreak={weeklyBestStreak}
-            weeklyAchievedCount={weeklyAchievedCount}
-            weeklyChallengeRows={weeklyChallengeRows}
-            activeCategory={activeCategory}
-            onChangeCategory={setActiveCategory}
-            filteredProgressRows={filteredProgressRows}
-          />
-        ) : (
-          <AchievementHistoryTab
-            activeHistoryFilter={activeHistoryFilter}
-            onChangeHistoryFilter={setActiveHistoryFilter}
-            permanentHistoryRows={permanentHistoryRows}
-            weeklyHistoryRows={weeklyHistoryRows}
-            filteredHistoryRows={filteredHistoryRows}
-            loadMoreRef={loadMoreRef}
-            isFetchingNextPage={historyQuery.isFetchingNextPage}
-          />
-        )}
-
-        {isBusy ? <p className="text-xs text-base-content/60">업적 데이터 동기화 중...</p> : null}
-      </div>
+      )}
     </section>
   );
 }

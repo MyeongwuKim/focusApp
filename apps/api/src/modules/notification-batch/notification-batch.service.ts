@@ -50,17 +50,19 @@ export type NotificationBatchResult = {
 
 const DEFAULT_TIMEZONE = "Asia/Seoul";
 const NEW_USER_REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
+const EMPTY_TODO_TITLE = "오늘 할일을 정해볼까요?";
+const INCOMPLETE_TODO_TITLE = "할일 이어가기";
 
 const EMPTY_TODO_COPY: Record<ReminderTone, string> = {
-  soft: "오늘 할일이 아직 없어요. 가볍게 하나부터 시작해볼까요?",
-  balanced: "오늘 할일을 추가하고 하루를 시작해보세요.",
-  firm: "오늘 할일이 비어 있습니다. 지금 바로 첫 할일을 추가해 주세요.",
+  soft: "가볍게 하나만 적어도 충분해요.",
+  balanced: "오늘 할일을 하나 정하고 하루를 시작해보세요.",
+  firm: "오늘 할일이 비어 있어요. 지금 하나 정해보세요.",
 };
 
 const INCOMPLETE_COPY_BY_TONE: Record<ReminderTone, string> = {
-  soft: "아직 시작하지 않았거나 잠시 멈춘 작업이에요. 가볍게 다시 시작해볼까요?",
-  balanced: "아직 시작하지 않았거나 멈춘 작업이 남아 있어요. 지금 이어가면 흐름을 유지할 수 있어요.",
-  firm: "아직 시작하지 않았거나 멈춘 작업이 남아 있습니다. 지금 바로 시작해 주세요.",
+  soft: "가볍게 이어가볼까요?",
+  balanced: "지금 이어가면 흐름을 다시 잡을 수 있어요.",
+  firm: "다음 할일로 남아 있어요. 지금 시작해 주세요.",
 };
 
 const REMINDER_LOCK_TTL_MS = 90 * 1000;
@@ -270,7 +272,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       deliveries.push({
         userId: settings.userId,
         kind: "empty_todo_start",
-        title: "오늘 할일 시작",
+        title: EMPTY_TODO_TITLE,
         body: EMPTY_TODO_COPY[tone],
         tone,
       });
@@ -286,7 +288,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
           await sendExpoPushMessages({
             entries: tokens.map((token) => ({
               pushToken: token.pushToken,
-              title: "오늘 할일 시작",
+              title: EMPTY_TODO_TITLE,
               body: EMPTY_TODO_COPY[tone],
               data: {
                 kind: "empty_todo_start",
@@ -314,7 +316,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
       deliveries.push({
         userId: settings.userId,
         kind: "incomplete_todo",
-        title: "작업 리마인드",
+        title: INCOMPLETE_TODO_TITLE,
         body: incompleteBody,
         tone,
       });
@@ -333,7 +335,7 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
           await sendExpoPushMessages({
             entries: tokens.map((token) => ({
               pushToken: token.pushToken,
-              title: "작업 리마인드",
+              title: INCOMPLETE_TODO_TITLE,
               body: incompleteBody,
               data: {
                 kind: "incomplete_todo",

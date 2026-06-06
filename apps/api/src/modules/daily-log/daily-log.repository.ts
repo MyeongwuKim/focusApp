@@ -52,6 +52,34 @@ export class DailyLogRepository {
     });
   }
 
+  findWithMemo(input: {
+    userId: string;
+    limit: number;
+    cursorDateKey?: string | null;
+    monthKey?: string | null;
+    search?: string | null;
+    sortOrder?: "asc" | "desc";
+  }) {
+    const sortOrder = input.sortOrder ?? "desc";
+    return this.prisma.dailyLog.findMany({
+      where: {
+        userId: input.userId,
+        memo: {
+          not: null,
+          ...(input.search ? { contains: input.search } : {})
+        },
+        ...(input.cursorDateKey
+          ? { dateKey: sortOrder === "desc" ? { lt: input.cursorDateKey } : { gt: input.cursorDateKey } }
+          : {}),
+        ...(input.monthKey ? { monthKey: input.monthKey } : {})
+      },
+      orderBy: {
+        dateKey: sortOrder
+      },
+      take: input.limit
+    });
+  }
+
   upsertDailyLog(input: UpsertDailyLogInput) {
     return this.prisma.dailyLog.upsert({
       where: {

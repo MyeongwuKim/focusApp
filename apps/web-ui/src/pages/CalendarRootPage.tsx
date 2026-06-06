@@ -15,15 +15,24 @@ type CalendarRootPageProps = {
 };
 
 function hasMeaningfulMemoContent(memo?: string | null) {
+  return getMemoPreviewText(memo).length > 0;
+}
+
+function getMemoPreviewText(memo?: string | null) {
   if (!memo) {
-    return false;
+    return "";
   }
 
-  const text = memo
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(memo, "text/html");
+    return (parsed.body.textContent ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  return memo
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
-  return text.length > 0;
 }
 
 export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
@@ -69,6 +78,11 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         doneCount: log.doneCount,
         allDone: log.todoCount > 0 && log.doneCount === log.todoCount,
         hasMemo: hasMeaningfulMemoContent(log.memo),
+        memoPreview: getMemoPreviewText(log.memo),
+        selectedTasks: sortedTodos.map((todo) => ({
+          label: todo.content,
+          done: todo.done,
+        })),
         previewBars: sortedTodos.map((todo) => ({
           id: todo.id,
           label: todo.content,
@@ -82,10 +96,20 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         doneCount: number;
         allDone: boolean;
         hasMemo: boolean;
+        memoPreview: string;
+        selectedTasks: { label: string; done: boolean }[];
         previewBars: { id: string; label: string }[];
       }
     >);
   }, [monthlyLogs]);
+
+  const selectedLog = selectedDateKey ? logsByDate[selectedDateKey] : null;
+  const selectedTasks = selectedLog?.selectedTasks ?? [];
+  const selectedMemoPreview = selectedLog?.memoPreview ? selectedLog.memoPreview : null;
+
+  const openDateTasksSheet = () => {
+    setIsDateSheetExpanded(true);
+  };
 
   useEffect(() => {
     if (isOverlayActive) {
@@ -178,15 +202,17 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <PageHeader route={MAIN_ROUTE} />
-      <div className="flex min-h-0 flex-1 flex-col pb-[calc(5.9rem+env(safe-area-inset-bottom))]">
+      <div className="flex min-h-0 flex-1 flex-col pb-[calc(12rem+env(safe-area-inset-bottom))]">
         <CalendarPage
           logsByDate={logsByDate}
-          onRequestOpenDateTasksSheet={() => setIsDateSheetExpanded(true)}
+          onRequestOpenDateTasksSheet={openDateTasksSheet}
         />
       </div>
       <DateTasksBottomSheet
         isVisible={!isOverlayActive}
         isExpanded={isDateSheetExpanded}
+        selectedMemoPreview={selectedMemoPreview}
+        selectedTasks={selectedTasks}
         restFinishedRequested={restFinishedRequestedFromUrl}
         focusTargetElapsedRequested={focusTargetElapsedRequestedFromUrl}
         startTodoPromptRequested={startTodoPromptRequestedFromUrl}

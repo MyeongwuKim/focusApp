@@ -43,6 +43,12 @@ export const dailyLogTypeDefs = gql`
     updatedAt: String!
   }
 
+  type DailyLogMemoConnection {
+    items: [DailyLog!]!
+    nextCursorDateKey: String
+    hasNextPage: Boolean!
+  }
+
   input UpsertDailyLogInput {
     dateKey: String!
     memo: String
@@ -101,6 +107,13 @@ export const dailyLogTypeDefs = gql`
   extend type Query {
     dailyLog(dateKey: String!): DailyLog
     dailyLogsByMonth(monthKey: String!): [DailyLog!]!
+    dailyLogsWithMemo(
+      limit: Int
+      cursorDateKey: String
+      monthKey: String
+      search: String
+      sortOrder: String
+    ): DailyLogMemoConnection!
   }
 
   extend type Mutation {
@@ -156,6 +169,27 @@ export const dailyLogResolvers = {
     dailyLogsByMonth: async (_parent: unknown, args: { monthKey: string }, context: GraphQLContext) => {
       const service = buildService(context);
       return service.getDailyLogsByMonth(getUserId(context), args.monthKey);
+    },
+    dailyLogsWithMemo: async (
+      _parent: unknown,
+      args: {
+        limit?: number | null;
+        cursorDateKey?: string | null;
+        monthKey?: string | null;
+        search?: string | null;
+        sortOrder?: string | null;
+      },
+      context: GraphQLContext
+    ) => {
+      const service = buildService(context);
+      return service.getDailyLogsWithMemo({
+        userId: getUserId(context),
+        limit: args.limit,
+        cursorDateKey: args.cursorDateKey,
+        monthKey: args.monthKey,
+        search: args.search,
+        sortOrder: args.sortOrder,
+      });
     },
   },
   Mutation: {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiChevronDown, FiChevronUp, FiHelpCircle } from "react-icons/fi";
+import { FiCheckCircle, FiChevronDown, FiChevronRight, FiChevronUp, FiEdit3, FiFileText, FiHelpCircle } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import { PageHelpModal } from "../../../components/PageHelpModal";
 import { getPageHelpGuide } from "../../../config/pageHelpGuide";
@@ -13,6 +13,8 @@ import { formatDateKey } from "../../../utils/holidays";
 type DateTasksBottomSheetProps = {
   isVisible: boolean;
   isExpanded: boolean;
+  selectedMemoPreview?: string | null;
+  selectedTasks?: SelectedTaskItem[];
   restFinishedRequested?: boolean;
   focusTargetElapsedRequested?: boolean;
   startTodoPromptRequested?: boolean;
@@ -20,6 +22,11 @@ type DateTasksBottomSheetProps = {
   startTodoPromptAt?: string | null;
   startTodoPromptSource?: string | null;
   onExpandedChange: (isExpanded: boolean) => void;
+};
+
+type SelectedTaskItem = {
+  label: string;
+  done: boolean;
 };
 
 const EXPAND_THRESHOLD_PX = 56;
@@ -61,6 +68,8 @@ function isLocalOverlayHistoryState(state: unknown) {
 export function DateTasksBottomSheet({
   isVisible,
   isExpanded,
+  selectedMemoPreview = null,
+  selectedTasks = [],
   restFinishedRequested = false,
   focusTargetElapsedRequested = false,
   startTodoPromptRequested = false,
@@ -126,6 +135,8 @@ export function DateTasksBottomSheet({
   const isViewingCurrentMonth =
     viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() === today.getMonth();
   const canGoToday = resolvedDateKey !== todayDateKey || !isViewingCurrentMonth;
+  const hasMemoPreview = Boolean(selectedMemoPreview);
+  const completedTaskCount = selectedTasks.filter((task) => task.done).length;
   const isLocalOverlayOpen = localOverlayLayer !== null;
   const effectiveContainerHeight = sheetContainerHeight > 0 ? sheetContainerHeight : viewportHeight;
   const collapsedVisibleHeight = Math.min(effectiveContainerHeight, barHeight);
@@ -244,7 +255,7 @@ export function DateTasksBottomSheet({
     if (Number.isFinite(nextBarHeight) && nextBarHeight > 0) {
       setBarHeight(nextBarHeight);
     }
-  }, [isExpanded, isVisible, selectedDateLabel]);
+  }, [isExpanded, isVisible, selectedDateLabel, selectedMemoPreview, selectedTasks.length]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -337,6 +348,10 @@ export function DateTasksBottomSheet({
       return;
     }
     setViewMonth(new Date(year, month - 1, 1));
+  };
+
+  const handlePreviewActionTouchStart: React.TouchEventHandler<HTMLElement> = (event) => {
+    event.stopPropagation();
   };
 
   return (
@@ -459,6 +474,59 @@ export function DateTasksBottomSheet({
               </div>
             </div>
           </div>
+
+          {!isExpanded ? (
+            <div className="border-t border-base-300/55 bg-base-100/92 px-4 pb-[calc(0.9rem+env(safe-area-inset-bottom))] pt-2.5">
+              <section className="rounded-xl border border-info/20 bg-info/8 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-info">
+                    <FiFileText size={13} className="shrink-0" />
+                    <span className="truncate">선택한 날짜 메모</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-base-300 bg-base-100 px-2 text-[11px] font-semibold text-base-content/75 shadow-sm"
+                    onTouchStart={handlePreviewActionTouchStart}
+                    onClick={() => {
+                      onExpandedChange(true);
+                      openLocalOverlayLayer("memo");
+                    }}
+                  >
+                    <FiEdit3 size={12} />
+                    {hasMemoPreview ? "수정" : "작성"}
+                  </button>
+                </div>
+
+                <p
+                  className={[
+                    "m-0 mt-1.5 line-clamp-2 text-[13px] leading-5",
+                    hasMemoPreview ? "whitespace-pre-line text-base-content/82" : "text-base-content/56",
+                  ].join(" ")}
+                >
+                  {selectedMemoPreview ?? "아직 남긴 메모가 없어요."}
+                </p>
+
+                <div className="mt-2 flex items-center justify-between gap-3 border-t border-info/15 pt-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-base-content/58">
+                    <FiCheckCircle size={12} className="shrink-0 text-success/75" />
+                    <span className="truncate">
+                      할 일 {selectedTasks.length}개
+                      {selectedTasks.length > 0 ? ` · 완료 ${completedTaskCount}개` : ""}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-full px-2 text-[11px] font-semibold text-base-content/70"
+                    onTouchStart={handlePreviewActionTouchStart}
+                    onClick={() => onExpandedChange(true)}
+                  >
+                    상세
+                    <FiChevronRight size={12} />
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : null}
         </div>
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">

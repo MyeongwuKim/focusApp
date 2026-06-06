@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { DRAWER_ROUTES, type DrawerRouteConfig } from "../routes/route-config";
-import { FiArchive, FiAward, FiBarChart2, FiLogOut, FiRefreshCw, FiSettings } from "react-icons/fi";
+import { FiArchive, FiAward, FiBarChart2, FiFileText, FiLogOut, FiRefreshCw, FiSettings } from "react-icons/fi";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 import { logout } from "../api/authApi";
 import { fetchMe } from "../api/userApi";
@@ -18,6 +18,7 @@ const ROUTE_ICON: Record<DrawerRouteConfig["iconKey"], ReactNode> = {
   tasks: <FiArchive size={15} />,
   stats: <FiBarChart2 size={15} />,
   achievements: <FiAward size={15} />,
+  memo: <FiFileText size={15} />,
   settings: <FiSettings size={15} />,
   routine: <FiRefreshCw size={15} />,
 };

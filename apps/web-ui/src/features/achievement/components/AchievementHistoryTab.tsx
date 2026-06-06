@@ -56,7 +56,6 @@ export function AchievementHistoryTab({
       ) : activeHistoryFilter === "all" ? (
         <>
           <div className="space-y-2">
-            <p className="m-0 text-xs font-semibold text-base-content/70">누적 기록 히스토리</p>
             {permanentHistoryRows.length > 0 ? (
               permanentHistoryRows.map((event) => <AchievementHistoryEventCard key={event.id} event={event} />)
             ) : (
@@ -64,7 +63,6 @@ export function AchievementHistoryTab({
             )}
           </div>
           <div className="space-y-2">
-            <p className="m-0 text-xs font-semibold text-base-content/70">주간 도전 히스토리</p>
             {weeklyHistoryRows.length > 0 ? (
               weeklyHistoryRows.map((event) => <AchievementHistoryEventCard key={event.id} event={event} />)
             ) : (

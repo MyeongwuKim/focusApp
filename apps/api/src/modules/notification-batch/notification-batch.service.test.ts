@@ -95,7 +95,7 @@ describe("runNotificationBatch", () => {
     expect(result.deliveries[0]).toMatchObject({
       userId: "user-1",
       kind: "incomplete_todo",
-      title: "작업 리마인드",
+      title: "할일 이어가기",
     });
     expect(result.deliveries[0]?.body).toContain("A");
   });

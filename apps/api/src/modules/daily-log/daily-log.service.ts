@@ -58,6 +58,36 @@ export class DailyLogService {
     return this.repository.findByMonth(userId, monthKey);
   }
 
+  async getDailyLogsWithMemo(input: {
+    userId: string;
+    limit?: number | null;
+    cursorDateKey?: string | null;
+    monthKey?: string | null;
+    search?: string | null;
+    sortOrder?: string | null;
+  }) {
+    const limit = input.limit ?? 30;
+    const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 200);
+    const search = input.search?.trim() || null;
+    const monthKey = input.monthKey?.trim() || null;
+    const cursorDateKey = input.cursorDateKey?.trim() || null;
+    const sortOrder = input.sortOrder === "asc" ? "asc" : "desc";
+    const rows = await this.repository.findWithMemo({
+      userId: input.userId,
+      limit: safeLimit + 1,
+      cursorDateKey,
+      monthKey,
+      search,
+      sortOrder
+    });
+    const items = rows.slice(0, safeLimit);
+    return {
+      items,
+      nextCursorDateKey: rows.length > safeLimit ? items.at(-1)?.dateKey ?? null : null,
+      hasNextPage: rows.length > safeLimit
+    };
+  }
+
   upsertDailyLog(input: BaseInput & { memo?: string | null }) {
     return this.repository.upsertDailyLog({
       userId: input.userId,

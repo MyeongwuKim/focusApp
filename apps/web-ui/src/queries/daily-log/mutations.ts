@@ -23,6 +23,7 @@ import {
   dailyLogByDateQueryKey,
   dailyLogMemoQueryKey,
   dailyLogsByMonthQueryKey,
+  dailyLogsWithMemoBaseQueryKey,
   statsDailyDetailQueryKey,
 } from "./queries";
 import { taskCollectionsQueryKey } from "../task-collection/queries";
@@ -633,6 +634,11 @@ export function useUpsertDailyLogMemoMutation(dateKey: string) {
           );
         }
       );
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogsWithMemoBaseQueryKey,
+        exact: false,
+        refetchType: "active",
+      });
     },
   });
 }

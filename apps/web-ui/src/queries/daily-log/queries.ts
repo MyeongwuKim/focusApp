@@ -1,8 +1,20 @@
 import { useMemo } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { fetchDailyLogByDate, fetchDailyLogMemo, fetchDailyLogsByMonth } from "../../api/dailyLogApi";
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import {
+  fetchDailyLogByDate,
+  fetchDailyLogMemo,
+  fetchDailyLogsByMonth,
+  fetchDailyLogsWithMemo,
+} from "../../api/dailyLogApi";
 
 export const dailyLogsByMonthQueryKey = (monthKey: string) => ["daily-logs", monthKey] as const;
+export const dailyLogsWithMemoBaseQueryKey = ["daily-logs-with-memo"] as const;
+export const dailyLogsWithMemoQueryKey = (input?: {
+  limit?: number;
+  monthKey?: string | null;
+  search?: string | null;
+  sortOrder?: "asc" | "desc";
+}) => [...dailyLogsWithMemoBaseQueryKey, input ?? {}] as const;
 export const dailyLogByDateQueryKey = (dateKey: string) => ["daily-log-by-date", dateKey] as const;
 export const dailyLogMemoQueryKey = (dateKey: string) => ["daily-log-memo", dateKey] as const;
 export const statsDailyDetailQueryKey = (dateKey: string) => ["stats-daily-detail", dateKey] as const;
@@ -51,6 +63,33 @@ function useDailyLogMemoQuery(dateKey: string | null) {
     queryKey: dailyLogMemoQueryKey(dateKey ?? ""),
     queryFn: () => fetchDailyLogMemo(dateKey as string),
     enabled: Boolean(dateKey),
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useDailyLogsWithMemoQuery(input?: {
+  limit?: number;
+  monthKey?: string | null;
+  search?: string | null;
+  sortOrder?: "asc" | "desc";
+}) {
+  const limit = input?.limit ?? 30;
+  const monthKey = input?.monthKey ?? null;
+  const search = input?.search?.trim() || null;
+  const sortOrder = input?.sortOrder ?? "desc";
+
+  return useInfiniteQuery({
+    queryKey: dailyLogsWithMemoQueryKey({ limit, monthKey, search, sortOrder }),
+    queryFn: ({ pageParam }) =>
+      fetchDailyLogsWithMemo({
+        limit,
+        cursorDateKey: pageParam,
+        monthKey,
+        search,
+        sortOrder,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursorDateKey,
     staleTime: 30 * 1000,
   });
 }

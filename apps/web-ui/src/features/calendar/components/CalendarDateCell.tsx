@@ -84,7 +84,7 @@ export const CalendarDateCell = memo(function CalendarDateCell({
           {isToday ? (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute -bottom-[3px] left-0 right-0 mx-auto h-[2px] w-[0.95rem] rounded-full bg-primary/80"
+              className="pointer-events-none absolute -bottom-[1px] left-0 right-0 mx-auto h-[2px] w-[0.95rem] rounded-full bg-primary/80"
             />
           ) : null}
         </div>

@@ -12,21 +12,15 @@ export function AchievementHistoryEmptyState({ variant }: AchievementHistoryEmpt
       ? {
           title: "아직 업적 히스토리가 없어요.",
           description: "첫 달성 기록이 쌓이면 여기서 시간순으로 확인할 수 있어요.",
-          badgeText: "?" as const,
-          mood: "neutral" as const,
         }
       : variant === "permanent"
         ? {
             title: "누적 기록이 없어요.",
             description: "누적/연속 배지를 달성하면 누적 기록 히스토리에 남아요.",
-            badgeText: undefined,
-            mood: "neutral" as const,
           }
         : {
             title: "완료한 주간 도전 기록이 없어요.",
             description: "이번 주 도전 달성 시 주간 히스토리에 쌓여요.",
-            badgeText: undefined,
-            mood: "sad" as const,
           };
 
   return (
@@ -36,8 +30,7 @@ export function AchievementHistoryEmptyState({ variant }: AchievementHistoryEmpt
           <RobotCharacter
             className="h-auto w-full"
             ariaLabel="업적 히스토리 빈 상태 캐릭터"
-            badgeText={content.badgeText}
-            mood={content.mood}
+            mood="sad"
           />
         </div>
         <p className="m-0 text-base font-semibold text-base-content/75">{content.title}</p>
