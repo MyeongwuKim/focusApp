@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiCheckCircle, FiChevronDown, FiChevronRight, FiChevronUp, FiEdit3, FiFileText, FiHelpCircle } from "react-icons/fi";
+import { FiCheckCircle, FiChevronDown, FiChevronUp, FiEdit3, FiFileText, FiHelpCircle } from "react-icons/fi";
 import { Button } from "../../../components/ui/Button";
 import { PageHelpModal } from "../../../components/PageHelpModal";
 import { getPageHelpGuide } from "../../../config/pageHelpGuide";
@@ -137,6 +137,10 @@ export function DateTasksBottomSheet({
   const canGoToday = resolvedDateKey !== todayDateKey || !isViewingCurrentMonth;
   const hasMemoPreview = Boolean(selectedMemoPreview);
   const completedTaskCount = selectedTasks.filter((task) => task.done).length;
+  const taskStatusLabel =
+    selectedTasks.length > 0
+      ? `할 일 ${selectedTasks.length}개 · 완료 ${completedTaskCount}개`
+      : "할 일 0개";
   const isLocalOverlayOpen = localOverlayLayer !== null;
   const effectiveContainerHeight = sheetContainerHeight > 0 ? sheetContainerHeight : viewportHeight;
   const collapsedVisibleHeight = Math.min(effectiveContainerHeight, barHeight);
@@ -428,7 +432,7 @@ export function DateTasksBottomSheet({
               <div className="pointer-events-none absolute left-1/2 top-1/2 w-[calc(100%-11rem)] -translate-x-1/2 -translate-y-1/2">
                 <button
                   type="button"
-                  className="pointer-events-auto w-full min-w-0 rounded-lg px-2 py-1 text-center text-[15px] font-semibold tracking-tight text-base-content/90 transition-colors hover:bg-base-100/40"
+                  className="pointer-events-auto flex w-full min-w-0 flex-col items-center justify-center rounded-lg px-2 py-1 text-center text-[15px] font-semibold tracking-tight text-base-content/90 transition-colors hover:bg-base-100/40"
                   onClick={() => onExpandedChange(true)}
                   tabIndex={0}
                 >
@@ -476,13 +480,27 @@ export function DateTasksBottomSheet({
           </div>
 
           {!isExpanded ? (
-            <div className="border-t border-base-300/55 bg-base-100/92 px-4 pb-[calc(0.9rem+env(safe-area-inset-bottom))] pt-2.5">
-              <section className="rounded-xl border border-info/20 bg-info/8 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-info">
-                    <FiFileText size={13} className="shrink-0" />
-                    <span className="truncate">선택한 날짜 메모</span>
-                  </div>
+            <div className="border-t border-base-300/55 bg-base-100/92 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2">
+              <section className="rounded-xl border border-info/18 bg-info/7 px-3 py-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <FiFileText
+                    size={14}
+                    className={["shrink-0", hasMemoPreview ? "text-info" : "text-base-content/42"].join(" ")}
+                  />
+                  <button
+                    type="button"
+                    className={[
+                      "min-w-0 flex-1 truncate text-left text-[13px] leading-5",
+                      hasMemoPreview ? "text-base-content/82" : "text-base-content/56",
+                    ].join(" ")}
+                    onTouchStart={handlePreviewActionTouchStart}
+                    onClick={() => {
+                      onExpandedChange(true);
+                      openLocalOverlayLayer("memo");
+                    }}
+                  >
+                    {selectedMemoPreview ?? "아직 남긴 메모가 없어요."}
+                  </button>
                   <button
                     type="button"
                     className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-base-300 bg-base-100 px-2 text-[11px] font-semibold text-base-content/75 shadow-sm"
@@ -497,32 +515,9 @@ export function DateTasksBottomSheet({
                   </button>
                 </div>
 
-                <p
-                  className={[
-                    "m-0 mt-1.5 line-clamp-2 text-[13px] leading-5",
-                    hasMemoPreview ? "whitespace-pre-line text-base-content/82" : "text-base-content/56",
-                  ].join(" ")}
-                >
-                  {selectedMemoPreview ?? "아직 남긴 메모가 없어요."}
-                </p>
-
-                <div className="mt-2 flex items-center justify-between gap-3 border-t border-info/15 pt-2">
-                  <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-base-content/58">
-                    <FiCheckCircle size={12} className="shrink-0 text-success/75" />
-                    <span className="truncate">
-                      할 일 {selectedTasks.length}개
-                      {selectedTasks.length > 0 ? ` · 완료 ${completedTaskCount}개` : ""}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-full px-2 text-[11px] font-semibold text-base-content/70"
-                    onTouchStart={handlePreviewActionTouchStart}
-                    onClick={() => onExpandedChange(true)}
-                  >
-                    상세
-                    <FiChevronRight size={12} />
-                  </button>
+                <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-base-content/58">
+                  <FiCheckCircle size={12} className="shrink-0 text-success/75" />
+                  <span className="truncate">{taskStatusLabel}</span>
                 </div>
               </section>
             </div>

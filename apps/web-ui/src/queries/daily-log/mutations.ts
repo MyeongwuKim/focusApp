@@ -604,36 +604,73 @@ export function useUpsertDailyLogMemoMutation(dateKey: string) {
   return useMutation({
     mutationFn: (memo: string) => upsertDailyLogMemo({ dateKey, memo }),
     onSuccess: (data) => {
-      queryClient.setQueryData(dailyLogMemoQueryKey(dateKey), data ? { ...data } : null);
-      queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), (prev: any) => {
+      const updatedDateKey = data.dateKey;
+      const updatedMemo = data.memo ?? null;
+      const monthKey = updatedDateKey.slice(0, 7);
+
+      queryClient.setQueryData(dailyLogMemoQueryKey(updatedDateKey), { ...data });
+      queryClient.setQueryData(dailyLogByDateQueryKey(updatedDateKey), (prev: DailyLogDetail | null | undefined) => {
         if (!prev) {
           return prev;
         }
         return {
           ...prev,
-          memo: data?.memo ?? null,
+          memo: updatedMemo,
+        };
+      });
+      queryClient.setQueryData(statsDailyDetailQueryKey(updatedDateKey), (prev: DailyLogDetail | null | undefined) => {
+        if (!prev) {
+          return prev;
+        }
+        return {
+          ...prev,
+          memo: updatedMemo,
         };
       });
 
       queryClient.setQueriesData(
         {
-          queryKey: ["daily-logs"],
+          queryKey: dailyLogsByMonthQueryKey(monthKey),
           exact: false,
         },
-        (prev: any) => {
+        (prev: MonthlyLogSnapshot[] | undefined) => {
           if (!Array.isArray(prev)) {
             return prev;
           }
-          return prev.map((log) =>
-            log?.dateKey === dateKey
+
+          const targetIndex = prev.findIndex((log) => log.dateKey === updatedDateKey);
+          if (targetIndex < 0) {
+            return [
+              ...prev,
+              {
+                id: `daily-log-${updatedDateKey}`,
+                userId: "",
+                dateKey: updatedDateKey,
+                monthKey,
+                memo: updatedMemo,
+                todoCount: 0,
+                doneCount: 0,
+                previewTodos: [],
+                todos: [],
+              },
+            ].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+          }
+
+          return prev.map((log, index) =>
+            index === targetIndex
               ? {
                   ...log,
-                  memo: data?.memo ?? null,
+                  memo: updatedMemo,
                 }
               : log
           );
         }
       );
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogsByMonthQueryKey(monthKey),
+        exact: false,
+        refetchType: "active",
+      });
       void queryClient.invalidateQueries({
         queryKey: dailyLogsWithMemoBaseQueryKey,
         exact: false,

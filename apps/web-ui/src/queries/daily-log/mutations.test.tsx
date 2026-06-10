@@ -11,8 +11,14 @@ import {
   useResetTodoFromDailyLogMutation,
   useResumeTodoFromDailyLogMutation,
   useStartTodoFromDailyLogMutation,
+  useUpsertDailyLogMemoMutation,
 } from "./mutations";
-import { dailyLogByDateQueryKey, dailyLogsByMonthQueryKey, statsDailyDetailQueryKey } from "./queries";
+import {
+  dailyLogByDateQueryKey,
+  dailyLogMemoQueryKey,
+  dailyLogsByMonthQueryKey,
+  statsDailyDetailQueryKey,
+} from "./queries";
 
 type DailyLogApiModule = typeof import("../../api/dailyLogApi");
 
@@ -135,6 +141,46 @@ afterEach(() => {
 });
 
 describe("daily-log mutations optimistic cache flow", () => {
+  it("메모 저장 시 월간 캐시에 없는 날짜도 미리보기 스냅샷으로 추가한다", async () => {
+    const dateKey = "2026-04-26";
+    const monthKey = "2026-04";
+    const memo = "<p>새 메모</p>";
+
+    vi.mocked(dailyLogApi.upsertDailyLogMemo).mockResolvedValueOnce({
+      dateKey,
+      memo,
+    });
+
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(dailyLogsByMonthQueryKey(monthKey), []);
+
+    const { result } = renderHook(() => useUpsertDailyLogMemoMutation(dateKey), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await result.current.mutateAsync(memo);
+
+    const memoCache = queryClient.getQueryData<{ dateKey: string; memo: string | null }>(
+      dailyLogMemoQueryKey(dateKey)
+    );
+    const monthCache = queryClient.getQueryData<MonthlyLogSnapshot[]>(dailyLogsByMonthQueryKey(monthKey));
+
+    expect(memoCache).toEqual({ dateKey, memo });
+    expect(monthCache).toEqual([
+      {
+        id: `daily-log-${dateKey}`,
+        userId: "",
+        dateKey,
+        monthKey,
+        memo,
+        todoCount: 0,
+        doneCount: 0,
+        previewTodos: [],
+        todos: [],
+      },
+    ]);
+  });
+
   it("완료 처리 시 서버 응답 전에도 낙관적 캐시를 반영한다", async () => {
     const dateKey = "2026-04-25";
     const monthKey = "2026-04";
