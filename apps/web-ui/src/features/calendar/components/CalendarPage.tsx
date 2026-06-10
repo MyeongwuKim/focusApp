@@ -59,14 +59,23 @@ function getSelectedRowIndex(cells: ReturnType<typeof buildCalendarCells>, selec
   return Math.floor(foundIndex / 7);
 }
 
-function buildRowTemplate(selectedRowIndex: number | null) {
+function getCalendarRowCount(cells: ReturnType<typeof buildCalendarCells>) {
+  return Math.max(1, Math.ceil(cells.length / 7));
+}
+
+function buildRowTemplate(cells: ReturnType<typeof buildCalendarCells>, selectedRowIndex: number | null) {
+  const rowCount = getCalendarRowCount(cells);
   if (selectedRowIndex === null) {
-    return "1fr 1fr 1fr 1fr 1fr 1fr";
+    return Array.from({ length: rowCount }, () => "minmax(0, 1fr)").join(" ");
   }
 
-  // 합계를 6fr로 유지해서 전체 높이는 고정, 선택된 행만 강조
-  const rows = [0, 1, 2, 3, 4, 5].map((rowIndex) => (rowIndex === selectedRowIndex ? 1.35 : 0.93));
-  return rows.map((value) => `${value}fr`).join(" ");
+  // 전체 높이는 유지하고, 선택된 행만 필요한 만큼 강조
+  const selectedWeight = rowCount <= 5 ? 1.28 : 1.35;
+  const otherWeight = rowCount > 1 ? (rowCount - selectedWeight) / (rowCount - 1) : 1;
+  const rows = Array.from({ length: rowCount }, (_, rowIndex) =>
+    rowIndex === selectedRowIndex ? selectedWeight : otherWeight
+  );
+  return rows.map((value) => `minmax(0, ${value}fr)`).join(" ");
 }
 
 function normalizeDateRange(first: string, second: string) {
@@ -163,10 +172,10 @@ export function CalendarPage({
       { month: viewMonth, cells: currentCells },
       { month: nextMonth, cells: nextCells },
     ];
-    const baseTemplate = buildRowTemplate(null);
-    const currentMonthTemplate = buildRowTemplate(getSelectedRowIndex(currentCells, selectedDateKey));
+    const currentMonthTemplate = buildRowTemplate(currentCells, getSelectedRowIndex(currentCells, selectedDateKey));
 
     return panelInputs.map(({ month, cells }, panelIndex) => {
+      const baseTemplate = buildRowTemplate(cells, null);
       if (isMonthSwipeActive) {
         return {
           key: toMonthPanelKey(month),
@@ -179,7 +188,7 @@ export function CalendarPage({
       return {
         key: toMonthPanelKey(month),
         cells,
-        rowTemplate: buildRowTemplate(getSelectedRowIndex(cells, selectedDateKey)),
+        rowTemplate: buildRowTemplate(cells, getSelectedRowIndex(cells, selectedDateKey)),
       };
     });
   }, [currentCells, isMonthSwipeActive, nextCells, nextMonth, prevCells, prevMonth, selectedDateKey, viewMonth]);

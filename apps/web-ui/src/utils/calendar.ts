@@ -28,7 +28,7 @@ export function buildCalendarCells(viewMonth: Date): CalendarCell[] {
     });
   }
 
-  while (cells.length < 42) {
+  while (cells.length < 35 || cells.length % 7 !== 0) {
     const nextDay = cells.length - (startWeekday + daysInMonth) + 1;
     cells.push({
       date: new Date(year, month + 1, nextDay),

@@ -1155,7 +1155,7 @@ export default function WebViewScreen() {
     const iconCircleWidthPx = iconSizePx + iconPaddingPx * 2 + 2;
     const iconSlotSingleWidthPx = Math.round(clamp(iconCircleWidthPx + 1, 9, 12));
     const iconSlotDoubleWidthPx = Math.round(clamp(iconCircleWidthPx * 2 + iconGapPx + 1, 18, 24));
-    const cellMinHeightRem = clamp(5.15 + (normalizedFontScale - 1) * 0.75, 5.15, 5.8);
+    const cellMinHeightRem = 0;
     const topRowHeightRem = clamp(1.08 + (normalizedFontScale - 1) * 0.24, 1.08, 1.24);
     const numberFontRem = clamp(estimatedCellWidthPx / 66, 0.74, 0.9);
     const dateSlotWidthCh = estimatedCellWidthPx < 46 ? 1.75 : 2;

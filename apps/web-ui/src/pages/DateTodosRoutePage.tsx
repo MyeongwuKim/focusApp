@@ -19,6 +19,7 @@ type DateTodosRoutePageProps = {
   forcedPathname?: string;
   forcedSearch?: string;
   isActive?: boolean;
+  isEmbeddedInSheet?: boolean;
   onShiftDateKey?: (nextDateKey: string) => void;
   onOpenTaskPickerPage?: () => void;
   onOpenMemoPage?: () => void;
@@ -30,6 +31,7 @@ export function DateTodosRoutePage({
   forcedPathname,
   forcedSearch,
   isActive = true,
+  isEmbeddedInSheet = false,
   onShiftDateKey,
   onOpenTaskPickerPage,
   onOpenMemoPage,
@@ -196,7 +198,12 @@ export function DateTodosRoutePage({
       onOpenRoutineCreate={openRoutineCreateRoute}
     >
       <section
-        className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4"
+        className={[
+          "relative flex min-h-0 flex-1 flex-col overflow-hidden",
+          isEmbeddedInSheet
+            ? "rounded-none border-0 bg-transparent px-2.5 py-2"
+            : "rounded-2xl border border-base-300 bg-base-200/40 p-4",
+        ].join(" ")}
         data-disable-overlay-swipe-back="true"
       >
         <DateTodosBoard dateKey={resolvedDateKey} onShiftDate={handleShiftDate} />

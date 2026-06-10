@@ -529,6 +529,7 @@ export function DateTasksBottomSheet({
             forcedPathname="/date-tasks"
             forcedSearch={forcedSearch}
             isActive={isVisible}
+            isEmbeddedInSheet
             onShiftDateKey={handleShiftDateKeyInSheet}
             onOpenTaskPickerPage={() => openLocalOverlayLayer("task-picker")}
             onOpenMemoPage={() => openLocalOverlayLayer("memo")}

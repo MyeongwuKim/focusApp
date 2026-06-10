@@ -61,13 +61,13 @@ export const CalendarDateCell = memo(function CalendarDateCell({
       data-calendar-date-key={dateKey}
       data-calendar-current-month={inCurrentMonth ? "true" : "false"}
       className={[
-        "calendar-date-cell relative z-0 flex h-full flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition-[border-color,box-shadow] duration-220 ease-out",
+        "calendar-date-cell relative z-0 flex h-full min-h-0 flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition-[border-color,box-shadow] duration-220 ease-out",
         outOfMonthCellClass,
         rangeSelectedClass,
         rangeBoundaryClass,
         selectedCellClass,
       ].join(" ")}
-      style={{ minHeight: "var(--calendar-cell-min-h, 5.15rem)" }}
+      style={{ minHeight: "var(--calendar-cell-min-h, 0px)" }}
     >
       <div
         className="grid min-w-0 grid-cols-[var(--calendar-date-slot-w,2ch)_minmax(0,1fr)] items-center gap-[2px]"
