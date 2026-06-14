@@ -23,6 +23,8 @@ EXPO_PUBLIC_NAVER_URL_SCHEME=
 EXPO_PUBLIC_WEBUI_CHANNEL=dev
 EXPO_PUBLIC_WEBUI_MANIFEST_URL=
 EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY=false
+EXPO_PUBLIC_IOS_APP_STORE_URL=
+EXPO_PUBLIC_ANDROID_PLAY_STORE_URL=
 ```
 
 - `EXPO_PUBLIC_API_ORIGIN`: 모바일에서 호출할 API 서버 주소
@@ -33,6 +35,8 @@ EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY=false
 - `EXPO_PUBLIC_WEBUI_CHANNEL`: 웹UI 채널 선택값 (`dev`/`prod`/`none`, `none`은 원격 버전 체크 비활성화)
 - `EXPO_PUBLIC_WEBUI_MANIFEST_URL`: 현재 환경에서 사용할 최신 manifest URL
 - `EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY`: `true`면 스플래시 애니메이션 오버레이 고정 표시
+- `EXPO_PUBLIC_IOS_APP_STORE_URL`: 강제 업데이트 시 이동할 iOS App Store URL
+- `EXPO_PUBLIC_ANDROID_PLAY_STORE_URL`: 강제 업데이트 시 이동할 Android Play Store URL
 
 ## 3) 주요 스크립트
 
@@ -54,9 +58,16 @@ pnpm -C apps/mobile lint
 - prod iOS `buildNumber`, Android `versionCode`는 EAS remote와 `production.autoIncrement`로 관리
 - test 버전은 `native-version.config.json`의 `test.ios`, `test.android` 값을 기준으로 관리
 - test 빌드 번호는 직접 관리하기 위해 `development.autoIncrement` 비활성화
+- 웹UI가 요구하는 최소 네이티브 버전은 `native-version.config.json`의 `webUi.minimumNativeVersion` 기준으로 R2 manifest에 포함
 
 ```json
 {
+  "webUi": {
+    "minimumNativeVersion": {
+      "ios": "1.0.0",
+      "android": "1.0.0"
+    }
+  },
   "test": {
     "ios": {
       "version": "1.0.0",
@@ -71,6 +82,8 @@ pnpm -C apps/mobile lint
 ```
 
 Expo/EAS 빌드는 `app.config.ts`가 `native-version.config.json`을 읽어 test 버전을 반영합니다.
+
+R2 웹UI 배포 workflow는 같은 파일의 `webUi.minimumNativeVersion`을 읽어 `manifest.json`에 포함합니다. 앱은 시작 시 manifest의 최소 네이티브 버전을 현재 앱 버전과 비교하고, 미달이면 웹 번들 적용을 막습니다.
 
 Xcode와 Android Studio는 `native-version.config.json`을 직접 읽지 않기 때문에, 로컬 네이티브 프로젝트를 직접 열기 전에는 아래 명령으로 값을 동기화합니다.
 

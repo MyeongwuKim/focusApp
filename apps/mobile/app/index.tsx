@@ -31,6 +31,9 @@ import {
   PermissionIntroModal,
 } from "../src/features/permissions/components/PermissionIntroModal";
 import {
+  NativeUpdateRequiredModal,
+} from "../src/features/version/components/NativeUpdateRequiredModal";
+import {
   applyNativeWeatherSettings,
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
@@ -111,6 +114,8 @@ const NAVER_NATIVE_APP_NAME =
   process.env.EXPO_PUBLIC_NAVER_APP_NAME?.trim() ??
   (Constants.expoConfig?.name?.trim() || "focus-hybrid");
 const NAVER_DISABLE_APP_AUTH_IOS = process.env.EXPO_PUBLIC_NAVER_DISABLE_APP_AUTH_IOS === "true";
+const IOS_APP_STORE_URL = process.env.EXPO_PUBLIC_IOS_APP_STORE_URL?.trim() ?? "";
+const ANDROID_PLAY_STORE_URL = process.env.EXPO_PUBLIC_ANDROID_PLAY_STORE_URL?.trim() ?? "";
 let isNaverLoginInitialized = false;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorCode: string): Promise<T> {
@@ -220,7 +225,45 @@ function resolveWebUiStartupErrorMessage(error: unknown) {
     return "웹 번들 다운로드에 실패했습니다. 다시 실행해주세요.";
   }
 
+  if (code.startsWith("WEB_UI_NATIVE_VERSION_UNSUPPORTED")) {
+    return "앱 업데이트가 필요합니다. 최신 버전으로 업데이트한 뒤 다시 실행해주세요.";
+  }
+
   return "앱 시작에 실패했습니다. 다시 실행해주세요.";
+}
+
+function isNativeVersionUnsupportedStartupError(error: unknown) {
+  return resolveWebUiStartupErrorCode(error).startsWith("WEB_UI_NATIVE_VERSION_UNSUPPORTED");
+}
+
+function resolveAndroidPackageName() {
+  const androidPackage = Constants.expoConfig?.android?.package;
+  if (typeof androidPackage === "string" && androidPackage.trim()) {
+    return androidPackage.trim();
+  }
+
+  return "com.myeongwu.focushybrid";
+}
+
+async function openNativeAppMarket() {
+  if (Platform.OS === "android") {
+    const packageName = resolveAndroidPackageName();
+    const primaryUrl = ANDROID_PLAY_STORE_URL || `market://details?id=${packageName}`;
+    const fallbackUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
+
+    try {
+      await Linking.openURL(primaryUrl);
+      return;
+    } catch {
+      await Linking.openURL(fallbackUrl);
+      return;
+    }
+  }
+
+  if (Platform.OS === "ios") {
+    const storeUrl = IOS_APP_STORE_URL || "itms-apps://itunes.apple.com";
+    await Linking.openURL(storeUrl);
+  }
 }
 
 function closeAppFromFatalStartupError() {
@@ -251,6 +294,20 @@ function closeAppFromFatalStartupError() {
   }
 
   exitAndroidApp();
+}
+
+function showWebUiStartupErrorAlert(error: unknown) {
+  Alert.alert(
+    "앱 시작 오류",
+    resolveWebUiStartupErrorMessage(error),
+    [
+      {
+        text: "확인",
+        onPress: closeAppFromFatalStartupError,
+      },
+    ],
+    { cancelable: false }
+  );
 }
 
 function isNativeLoginCancelledError(error: unknown) {
@@ -985,6 +1042,7 @@ export default function WebViewScreen() {
   const [isPermissionIntroReady, setIsPermissionIntroReady] = useState(false);
   const [isPermissionIntroVisible, setIsPermissionIntroVisible] = useState(false);
   const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
+  const [isNativeUpdateRequired, setIsNativeUpdateRequired] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const nativeTodoViewRef = useRef<NativeTodoViewSnapshot>({
     isViewingTodayTodoSurface: false,
@@ -1357,15 +1415,14 @@ export default function WebViewScreen() {
     const prepareLocalHtmlFile = async () => {
       try {
         setLaunchStatusMessage("초기 번들 준비중...");
-        const fallbackCurrentVersion =
-          Constants.expoConfig?.version?.trim() ||
-          Constants.manifest2?.extra?.expoClient?.version ||
-          "1.0.0";
+        const nativeAppVersion = resolveNativeAppVersion() ?? "1.0.0";
         const prepared = await prepareWebUiBundleVersion({
           embeddedFiles: embeddedWebUiFiles,
           releaseChannel: webUiReleaseChannel,
           manifestUrl: webUiManifestUrl,
-          fallbackCurrentVersion,
+          fallbackCurrentVersion: nativeAppVersion,
+          nativeAppVersion,
+          nativePlatform: Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown",
           onProgress: setLaunchStatusMessage,
         });
 
@@ -1377,18 +1434,11 @@ export default function WebViewScreen() {
         console.log("Failed to prepare local web-ui file:", error);
         if (!hasShownFatalStartupAlertRef.current) {
           hasShownFatalStartupAlertRef.current = true;
-          const errorMessage = resolveWebUiStartupErrorMessage(error);
-          Alert.alert(
-            "앱 시작 오류",
-            errorMessage,
-            [
-              {
-                text: "확인",
-                onPress: closeAppFromFatalStartupError,
-              },
-            ],
-            { cancelable: false }
-          );
+          if (isNativeVersionUnsupportedStartupError(error)) {
+            setIsNativeUpdateRequired(true);
+          } else {
+            showWebUiStartupErrorAlert(error);
+          }
         }
       } finally {
         setIsPreparingLocalFile(false);
@@ -1539,8 +1589,8 @@ export default function WebViewScreen() {
     };
   }, []);
 
-  const showPermissionIntro = isPermissionIntroReady && isPermissionIntroVisible;
-  const isLaunchDestinationReady = showPermissionIntro || hasInitialWebViewLoaded;
+  const showPermissionIntro = !isNativeUpdateRequired && isPermissionIntroReady && isPermissionIntroVisible;
+  const isLaunchDestinationReady = isNativeUpdateRequired || showPermissionIntro || hasInitialWebViewLoaded;
   const launchProgressPercent = useMemo(
     () => resolveLaunchProgressPercent(launchStatusMessage),
     [launchStatusMessage]
@@ -1556,7 +1606,7 @@ export default function WebViewScreen() {
       {shouldShowLaunchOverlay ? (
         <FocusLaunchOverlay statusMessage={launchStatusMessage} progressPercent={launchProgressPercent} />
       ) : null}
-      {source && !showPermissionIntro ? (
+      {source && !showPermissionIntro && !isNativeUpdateRequired ? (
         <View style={styles.webViewContainer}>
           <View
             pointerEvents="none"
@@ -1656,6 +1706,15 @@ export default function WebViewScreen() {
         <PermissionIntroModal
           isRequestingNotificationPermission={isRequestingNotificationPermission}
           onRequestNotificationPermission={handleRequestNotificationPermission}
+        />
+      ) : null}
+      {isNativeUpdateRequired ? (
+        <NativeUpdateRequiredModal
+          onUpdatePress={() => {
+            void openNativeAppMarket().catch((openError) => {
+              console.log("Failed to open app market:", openError);
+            });
+          }}
         />
       ) : null}
     </SafeAreaView>
