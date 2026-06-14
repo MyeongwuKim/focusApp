@@ -81,14 +81,14 @@ function syncIos(version, iosConfig) {
   plistContent = replaceRequired(
     plistContent,
     /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+(<\/string>)/,
-    `$1${version}$2`,
+    "$1$(MARKETING_VERSION)$2",
     "iOS CFBundleShortVersionString"
   );
   if (buildNumber) {
     plistContent = replaceRequired(
       plistContent,
       /(<key>CFBundleVersion<\/key>\s*<string>)[^<]+(<\/string>)/,
-      `$1${buildNumber}$2`,
+      "$1$(CURRENT_PROJECT_VERSION)$2",
       "iOS CFBundleVersion"
     );
   }

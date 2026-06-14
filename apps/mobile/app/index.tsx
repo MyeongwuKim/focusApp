@@ -107,6 +107,7 @@ type NativeNaverAuthResult = {
   token: string;
   userId: string;
 };
+type AuthProvider = "kakao" | "naver";
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
 const NAVER_NATIVE_URL_SCHEME = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim() ?? "";
@@ -643,6 +644,27 @@ function readCallbackValue(url: URL, key: string) {
   return null;
 }
 
+function buildAuthCallbackHash(input: {
+  token: string;
+  userId?: string | null;
+  provider?: AuthProvider | null;
+  error?: string | null;
+}) {
+  const params = new URLSearchParams();
+  params.set("token", input.token);
+  if (input.userId) {
+    params.set("userId", input.userId);
+  }
+  if (input.provider) {
+    params.set("provider", input.provider);
+  }
+  if (input.error) {
+    params.set("error", input.error);
+  }
+
+  return `#/auth/callback?${params.toString()}`;
+}
+
 function resolveAuthCallbackHashFromUrl(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
@@ -661,20 +683,29 @@ function resolveAuthCallbackHashFromUrl(rawUrl: string): string | null {
     }
 
     const userId = readCallbackValue(parsed, "userId");
+    const rawProvider = readCallbackValue(parsed, "provider");
+    const provider = rawProvider === "kakao" || rawProvider === "naver" ? rawProvider : null;
     const error = readCallbackValue(parsed, "error");
-    const params = new URLSearchParams();
-    params.set("token", token);
-    if (userId) {
-      params.set("userId", userId);
-    }
-    if (error) {
-      params.set("error", error);
-    }
 
-    return `#/auth/callback?${params.toString()}`;
+    return buildAuthCallbackHash({
+      token,
+      userId,
+      provider,
+      error,
+    });
   } catch {
     return null;
   }
+}
+
+function resolveProviderFromBridgeLoginResultType(type: string): AuthProvider | null {
+  if (type === "REST_AUTH_KAKAO_LOGIN_RESULT") {
+    return "kakao";
+  }
+  if (type === "REST_AUTH_NAVER_LOGIN_RESULT") {
+    return "naver";
+  }
+  return null;
 }
 
 async function hasSeenNativePermissionIntro(fileUri: string) {
@@ -1035,6 +1066,7 @@ function FocusLaunchOverlay({
 
 export default function WebViewScreen() {
   const pendingNotificationPathRef = useRef<string | null>(null);
+  const pendingAuthCallbackHashRef = useRef<string | null>(null);
   const isWebViewReadyRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -1052,6 +1084,25 @@ export default function WebViewScreen() {
   });
   const pendingWeatherSnapshotRef = useRef<NativeWeatherSnapshot | null>(null);
   const hasShownFatalStartupAlertRef = useRef(false);
+  const [localFileUri, setLocalFileUri] = useState<string | null>(null);
+  const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
+  const [webViewUri, setWebViewUri] = useState<string | null>(null);
+
+  const navigateWebViewToAuthCallbackHash = useCallback(
+    (callbackHash: string) => {
+      const activeEntryUri = webUiEntryUri ?? localFileUri;
+      if (!activeEntryUri) {
+        pendingAuthCallbackHashRef.current = callbackHash;
+        return false;
+      }
+
+      pendingAuthCallbackHashRef.current = null;
+      const nextUri = buildWebUiUriWithHash(activeEntryUri, callbackHash);
+      setWebViewUri((prev) => (prev === nextUri ? prev : nextUri));
+      return true;
+    },
+    [localFileUri, webUiEntryUri]
+  );
 
   const navigateWebViewByTargetPath = (targetPath: string) => {
     if (!targetPath.startsWith("/")) {
@@ -1095,6 +1146,20 @@ export default function WebViewScreen() {
   );
   const sendBridgeResult = useCallback(
     (message: { type: string; requestId?: string | null; payload?: unknown }) => {
+      const loginProvider = resolveProviderFromBridgeLoginResultType(message.type);
+      const payload = readUnknownRecord(message.payload);
+      const token = readUnknownString(payload?.token);
+      if (loginProvider && token) {
+        const userId = readUnknownString(payload?.userId);
+        navigateWebViewToAuthCallbackHash(
+          buildAuthCallbackHash({
+            token,
+            userId: userId || null,
+            provider: loginProvider,
+          })
+        );
+      }
+
       if (!webViewRef.current) {
         return;
       }
@@ -1104,7 +1169,7 @@ export default function WebViewScreen() {
         )} })); true;`
       );
     },
-    []
+    [navigateWebViewToAuthCallbackHash]
   );
 
   const dispatchPendingWeatherSnapshot = useCallback(() => {
@@ -1169,9 +1234,6 @@ export default function WebViewScreen() {
     onNavigate: navigateWebViewByTargetPath,
     shouldInlineTodoPromptInForeground,
   });
-  const [localFileUri, setLocalFileUri] = useState<string | null>(null);
-  const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
-  const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
   const [launchStatusMessage, setLaunchStatusMessage] = useState<WebUiVersionProgress>(
     "초기 번들 준비중..."
@@ -1488,6 +1550,41 @@ export default function WebViewScreen() {
   }, [dispatchNativeBridgeEvent]);
 
   useEffect(() => {
+    const callbackHash = pendingAuthCallbackHashRef.current;
+    if (!callbackHash) {
+      return;
+    }
+
+    navigateWebViewToAuthCallbackHash(callbackHash);
+  }, [localFileUri, navigateWebViewToAuthCallbackHash, webUiEntryUri]);
+
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      const callbackHash = resolveAuthCallbackHashFromUrl(event.url);
+      if (!callbackHash) {
+        return;
+      }
+
+      navigateWebViewToAuthCallbackHash(callbackHash);
+    };
+
+    const subscription = Linking.addEventListener("url", handleDeepLink);
+    void Linking.getInitialURL()
+      .then((url) => {
+        if (url) {
+          handleDeepLink({ url });
+        }
+      })
+      .catch((error) => {
+        console.log("Failed to read initial auth callback URL:", error);
+      });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [navigateWebViewToAuthCallbackHash]);
+
+  useEffect(() => {
     if (!webUiEntryUri || !webViewRef.current) {
       return;
     }
@@ -1630,13 +1727,11 @@ export default function WebViewScreen() {
             allowUniversalAccessFromFileURLs
             onShouldStartLoadWithRequest={(request) => {
               console.log("WebView should start request:", request.url);
-              const activeEntryUri = webUiEntryUri ?? localFileUri;
 
               if (request.url.startsWith("mobile://")) {
                 const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
-                if (callbackHash && activeEntryUri) {
-                  const nextUri = buildWebUiUriWithHash(activeEntryUri, callbackHash);
-                  setWebViewUri(nextUri);
+                if (callbackHash) {
+                  navigateWebViewToAuthCallbackHash(callbackHash);
                 }
                 return false;
               }
@@ -1646,12 +1741,11 @@ export default function WebViewScreen() {
               }
 
               const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
-              if (!callbackHash || !activeEntryUri) {
+              if (!callbackHash) {
                 return true;
               }
 
-              const nextUri = buildWebUiUriWithHash(activeEntryUri, callbackHash);
-              setWebViewUri(nextUri);
+              navigateWebViewToAuthCallbackHash(callbackHash);
               return false;
             }}
             onLoadStart={() => {
@@ -1695,6 +1789,11 @@ export default function WebViewScreen() {
             }}
             onError={(event) => {
               const msg = event.nativeEvent.description || "Unknown WebView error";
+              const callbackHash = resolveAuthCallbackHashFromUrl(event.nativeEvent.url ?? "");
+              if (callbackHash) {
+                navigateWebViewToAuthCallbackHash(callbackHash);
+                return;
+              }
               console.log("WebView error:", msg);
               setHasInitialWebViewLoaded(true);
               Alert.alert("WebView Error", msg);

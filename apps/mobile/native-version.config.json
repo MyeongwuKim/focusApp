@@ -8,7 +8,7 @@
   "test": {
     "ios": {
       "version": "1.0.0",
-      "buildNumber": "3"
+      "buildNumber": "8"
     },
     "android": {
       "version": "1.0.0",

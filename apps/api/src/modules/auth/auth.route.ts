@@ -12,6 +12,10 @@ interface ProviderProfile {
   name: string | null;
 }
 
+interface OAuthSignInLogger {
+  info: (payload: Record<string, unknown>, message: string) => void;
+}
+
 interface OAuthStatePayload {
   provider: OAuthProvider;
   redirectTo: string;
@@ -217,6 +221,11 @@ function buildSyntheticEmail(provider: OAuthProvider, providerUserId: string): s
   return `${provider}-${providerUserId}@oauth.local`;
 }
 
+function normalizeEmail(email: string | null | undefined): string | null {
+  const normalizedEmail = email?.trim().toLowerCase() ?? "";
+  return normalizedEmail || null;
+}
+
 async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const json = (await response.json()) as T | { error?: unknown };
@@ -277,6 +286,8 @@ async function fetchKakaoProfile(code: string, redirectUriOverride?: string): Pr
     id: number;
     kakao_account?: {
       email?: string;
+      is_email_valid?: boolean;
+      is_email_verified?: boolean;
       profile?: {
         nickname?: string;
       };
@@ -286,11 +297,14 @@ async function fetchKakaoProfile(code: string, redirectUriOverride?: string): Pr
       Authorization: `Bearer ${tokenResponse.access_token}`,
     },
   });
+  const account = profile.kakao_account;
+  const email = normalizeEmail(account?.email);
+  const canUseEmail = !!email && account?.is_email_valid === true && account?.is_email_verified === true;
 
   return {
     providerUserId: String(profile.id),
-    email: profile.kakao_account?.email ?? null,
-    name: profile.kakao_account?.profile?.nickname ?? null,
+    email: canUseEmail ? email : null,
+    name: account?.profile?.nickname ?? null,
   };
 }
 
@@ -299,6 +313,8 @@ async function fetchKakaoProfileFromAccessToken(accessToken: string): Promise<Pr
     id: number;
     kakao_account?: {
       email?: string;
+      is_email_valid?: boolean;
+      is_email_verified?: boolean;
       profile?: {
         nickname?: string;
       };
@@ -308,11 +324,14 @@ async function fetchKakaoProfileFromAccessToken(accessToken: string): Promise<Pr
       Authorization: `Bearer ${accessToken}`,
     },
   });
+  const account = profile.kakao_account;
+  const email = normalizeEmail(account?.email);
+  const canUseEmail = !!email && account?.is_email_valid === true && account?.is_email_verified === true;
 
   return {
     providerUserId: String(profile.id),
-    email: profile.kakao_account?.email ?? null,
-    name: profile.kakao_account?.profile?.nickname ?? null,
+    email: canUseEmail ? email : null,
+    name: account?.profile?.nickname ?? null,
   };
 }
 
@@ -350,7 +369,7 @@ async function fetchNaverProfile(code: string, state: string): Promise<ProviderP
 
   return {
     providerUserId: response.id,
-    email: response.email ?? null,
+    email: normalizeEmail(response.email),
     name: response.name ?? response.nickname ?? null,
   };
 }
@@ -376,20 +395,21 @@ async function fetchNaverProfileFromAccessToken(accessToken: string): Promise<Pr
 
   return {
     providerUserId: response.id,
-    email: response.email ?? null,
+    email: normalizeEmail(response.email),
     name: response.name ?? response.nickname ?? null,
   };
 }
 
 async function signInWithProvider(
   provider: OAuthProvider,
-  profile: ProviderProfile
+  profile: ProviderProfile,
+  logger?: OAuthSignInLogger
 ): Promise<{ sessionToken: string; userId: string }> {
   if (!profile.providerUserId) {
     throw new Error("OAUTH_PROFILE_MISSING_ID");
   }
 
-  const user = await prisma.$transaction(async (tx) => {
+  const signInResult = await prisma.$transaction(async (tx) => {
     const existingAccount = await tx.account.findUnique({
       where: {
         provider_providerUserId: {
@@ -404,7 +424,7 @@ async function signInWithProvider(
 
     if (existingAccount) {
       const shouldUpdateName = !!profile.name && profile.name !== existingAccount.user.name;
-      const requestedEmail = profile.email?.trim() ?? "";
+      const requestedEmail = normalizeEmail(profile.email) ?? "";
       const requestedEmailOwner = requestedEmail
         ? await tx.user.findUnique({
             where: { email: requestedEmail },
@@ -424,9 +444,18 @@ async function signInWithProvider(
           },
         });
 
-        return tx.user.findUniqueOrThrow({
+        const relinkedUser = await tx.user.findUniqueOrThrow({
           where: { id: requestedEmailOwner.id },
         });
+
+        return {
+          user: relinkedUser,
+          linkedAccount: {
+            provider,
+            userId: requestedEmailOwner.id,
+            reason: "synthetic_email_relink",
+          },
+        };
       }
 
       const canAdoptRequestedEmail =
@@ -447,16 +476,22 @@ async function signInWithProvider(
           updateData.email = requestedEmail;
         }
 
-        return tx.user.update({
+        const updatedUser = await tx.user.update({
           where: { id: existingAccount.user.id },
           data: updateData,
         });
+
+        return {
+          user: updatedUser,
+        };
       }
 
-      return existingAccount.user;
+      return {
+        user: existingAccount.user,
+      };
     }
 
-    const requestedEmail = profile.email?.trim() ?? "";
+    const requestedEmail = normalizeEmail(profile.email) ?? "";
     const requestedEmailOwner = requestedEmail
       ? await tx.user.findUnique({
           where: {
@@ -474,7 +509,14 @@ async function signInWithProvider(
         },
       });
 
-      return requestedEmailOwner;
+      return {
+        user: requestedEmailOwner,
+        linkedAccount: {
+          provider,
+          userId: requestedEmailOwner.id,
+          reason: "matching_email",
+        },
+      };
     }
 
     const targetUser = await tx.user.create({
@@ -492,8 +534,15 @@ async function signInWithProvider(
       },
     });
 
-    return targetUser;
+    return {
+      user: targetUser,
+    };
   });
+  const user = signInResult.user;
+
+  if (signInResult.linkedAccount) {
+    logger?.info(signInResult.linkedAccount, "oauth_account_auto_linked");
+  }
 
   const sessionToken = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + env.AUTH_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -594,7 +643,7 @@ function registerProviderCallbackRoute(app: FastifyInstance, provider: OAuthProv
           ? await fetchKakaoProfile(query.code, parsedState.oauthRedirectUri)
           : await fetchNaverProfile(query.code, query.state);
 
-      const authResult = await signInWithProvider(provider, profile);
+      const authResult = await signInWithProvider(provider, profile, request.log);
       const redirectUrl = new URL(parsedState.redirectTo);
 
       if (redirectUrl.protocol === "file:") {
@@ -662,7 +711,7 @@ export async function registerAuthRoute(app: FastifyInstance) {
       }
 
       const profile = await fetchKakaoProfileFromAccessToken(accessToken);
-      const authResult = await signInWithProvider("kakao", profile);
+      const authResult = await signInWithProvider("kakao", profile, request.log);
 
       return reply.send({
         token: authResult.sessionToken,
@@ -686,7 +735,7 @@ export async function registerAuthRoute(app: FastifyInstance) {
       }
 
       const profile = await fetchNaverProfileFromAccessToken(accessToken);
-      const authResult = await signInWithProvider("naver", profile);
+      const authResult = await signInWithProvider("naver", profile, request.log);
 
       return reply.send({
         token: authResult.sessionToken,

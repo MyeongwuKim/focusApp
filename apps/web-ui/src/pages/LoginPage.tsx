@@ -147,7 +147,8 @@ export function LoginPage() {
         console.log(`Native ${provider} login cancelled by user.`);
         return;
       }
-      console.warn(`Native ${provider} login failed. Keep login page without web OAuth fallback.`, error);
+      console.warn(`Native ${provider} login failed. Fall back to web OAuth.`, error);
+      window.location.assign(buildOAuthStartUrl(provider));
       return;
     } finally {
       if (provider === "kakao") {
