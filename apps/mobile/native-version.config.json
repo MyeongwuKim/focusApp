@@ -1,0 +1,23 @@
+{
+  "test": {
+    "ios": {
+      "version": "1.0.0",
+      "buildNumber": "3"
+    },
+    "android": {
+      "version": "1.0.0",
+      "versionCode": 1
+    }
+  },
+  "prod": {
+    "versionSource": "expo",
+    "ios": {
+      "versionSource": "expo",
+      "buildNumberSource": "eas-remote"
+    },
+    "android": {
+      "versionSource": "expo",
+      "versionCodeSource": "eas-remote"
+    }
+  }
+}

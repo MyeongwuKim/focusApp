@@ -5,6 +5,9 @@
   "scripts": {
     "start": "expo start",
     "hybrid": "expo start -c --dev-client --host lan --port 8081",
+    "native:version:sync": "node ./scripts/sync-native-version.js",
+    "native:version:sync:prod": "node ./scripts/sync-native-version.js prod",
+    "native:version:sync:test": "node ./scripts/sync-native-version.js test",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
