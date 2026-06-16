@@ -34,6 +34,21 @@ const envSchema = z.object({
   AUTH_SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
   AUTH_SESSION_REFRESH_WINDOW_DAYS: z.coerce.number().int().positive().default(7),
   OAUTH_STATE_SECRET: z.string().min(1).default("dev-oauth-state-secret"),
+  OAUTH_NATIVE_REDIRECT_SCHEMES: z
+    .string()
+    .default("mobile,mobile-test")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((scheme) =>
+          scheme
+            .trim()
+            .replace(/:\/\/.*$/, "")
+            .replace(/:$/, "")
+            .toLowerCase()
+        )
+        .filter((scheme) => scheme.length > 0)
+    ),
   KAKAO_CLIENT_ID: z.string().min(1).optional(),
   KAKAO_CLIENT_SECRET: z.string().min(1).optional(),
   KAKAO_REDIRECT_URI: z.url().optional(),

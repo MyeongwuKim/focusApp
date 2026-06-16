@@ -38,7 +38,6 @@ import { fetchMe } from "./api/userApi";
 import { getUserFacingErrorMessage } from "./utils/errorMessage";
 import { queryClient } from "./queryClient";
 import {
-  fetchWithBackendStatus,
   getBackendConnectivityState,
   isLikelyBackendOfflineError,
   markBackendOffline,
@@ -46,7 +45,7 @@ import {
   subscribeAuthExpired,
   subscribeBackendConnectivity,
 } from "./api/backendConnectivity";
-import { getApiOrigin } from "./api/graphqlEndpoint";
+import { getApiSessionScope } from "./api/graphqlEndpoint";
 import { useEdgeSwipeClose } from "./hooks/useEdgeSwipeClose";
 import { isNativeWebViewRuntime } from "./utils/runtimeEnvironment";
 import { formatDateKey } from "./utils/holidays";
@@ -150,6 +149,14 @@ function markSettingsGuidePromptSeen(userId: string) {
   } catch {
     // ignore local storage failures
   }
+}
+
+function isLocalDevelopmentHost() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
 function isOverlaySwipeBackBlockedTarget(target: EventTarget | null) {
@@ -300,9 +307,12 @@ function App() {
   const navigate = useNavigate();
   const activeRoute = getRouteFromPath(location.pathname);
   const authToken = useAuthStore((state) => state.token);
+  const authApiOrigin = useAuthStore((state) => state.apiOrigin);
   const isLoggedIn = useAuthStore(selectIsLoggedIn);
   const setAuthToken = useAuthStore((state) => state.setAuthToken);
   const setAuthProvider = useAuthStore((state) => state.setAuthProvider);
+  const setAuthApiOrigin = useAuthStore((state) => state.setAuthApiOrigin);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
   const [isAuthHydrated, setIsAuthHydrated] = useState(() => useAuthStore.persist.hasHydrated());
   const isLoginRoute = location.pathname === LOGIN_ROUTE_PATH;
   const isAuthCallbackRoute = location.pathname === AUTH_CALLBACK_ROUTE_PATH;
@@ -345,6 +355,17 @@ function App() {
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
+  const hasAuthSessionScopeMismatch = useMemo(() => {
+    if (!authToken) {
+      return false;
+    }
+
+    if (!authApiOrigin) {
+      return isLocalDevelopmentHost();
+    }
+
+    return authApiOrigin !== getApiSessionScope();
+  }, [authApiOrigin, authToken]);
 
   useEffect(() => {
     const unsubscribeOnHydrate = useAuthStore.persist.onHydrate(() => {
@@ -384,8 +405,21 @@ function App() {
   }, [authToken]);
 
   useEffect(() => {
+    if (!isAuthHydrated || !hasAuthSessionScopeMismatch) {
+      return;
+    }
+
+    clearAuth();
+    queryClient.clear();
+  }, [clearAuth, hasAuthSessionScopeMismatch, isAuthHydrated]);
+
+  useEffect(() => {
     if (!authToken) {
       hasShownLoginMotivationThisLaunchRef.current = false;
+      return;
+    }
+
+    if (hasAuthSessionScopeMismatch) {
       return;
     }
 
@@ -424,7 +458,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [authToken]);
+  }, [authToken, hasAuthSessionScopeMismatch]);
 
   useEffect(() => {
     if (isAuthCallbackRoute) {
@@ -432,6 +466,7 @@ function App() {
       if (token) {
         const provider = parseAuthProvider(getCallbackParam("provider", location.search));
         setAuthToken(token);
+        setAuthApiOrigin(getApiSessionScope());
         setAuthProvider(provider);
         if (window.location.protocol === "file:") {
           window.history.replaceState(null, "", "#/calendar");
@@ -482,12 +517,13 @@ function App() {
     location.pathname,
     navigate,
     isAuthHydrated,
+    setAuthApiOrigin,
     setAuthProvider,
     setAuthToken,
   ]);
 
   useEffect(() => {
-    if (!isAuthenticatedAppRoute) {
+    if (!isAuthenticatedAppRoute || hasAuthSessionScopeMismatch) {
       dispatchBackendBoot({ type: "reset" });
       return;
     }
@@ -510,6 +546,7 @@ function App() {
           setAuthToken(null);
           return;
         }
+        setAuthApiOrigin(getApiSessionScope());
         dispatchBackendBoot({ type: "ready" });
         markBackendOnline();
       } catch (error) {
@@ -533,7 +570,13 @@ function App() {
       window.clearTimeout(timeoutId);
       abortController.abort();
     };
-  }, [backendBootRetryKey, isAuthenticatedAppRoute, setAuthToken]);
+  }, [
+    backendBootRetryKey,
+    hasAuthSessionScopeMismatch,
+    isAuthenticatedAppRoute,
+    setAuthApiOrigin,
+    setAuthToken,
+  ]);
 
   useEffect(() => {
     return subscribeAuthExpired(() => {
@@ -542,23 +585,13 @@ function App() {
         return;
       }
 
-      const apiOrigin = getApiOrigin();
-      const logoutUrl = apiOrigin ? `${apiOrigin}/auth/logout` : "/auth/logout";
-      void fetchWithBackendStatus(logoutUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }).catch(() => null);
-
       clearAuth();
       toast.error("세션이 만료되어 로그아웃되었어요. 다시 로그인해 주세요.", "세션 만료");
     });
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticatedAppRoute) {
+    if (!isAuthenticatedAppRoute || hasAuthSessionScopeMismatch) {
       return;
     }
 
@@ -605,6 +638,7 @@ function App() {
           setAuthToken(null);
           return;
         }
+        setAuthApiOrigin(getApiSessionScope());
         markBackendOnline();
       } catch (error) {
         if (cancelled) {
@@ -628,7 +662,13 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [backendBootState, isAuthenticatedAppRoute, setAuthToken]);
+  }, [
+    backendBootState,
+    hasAuthSessionScopeMismatch,
+    isAuthenticatedAppRoute,
+    setAuthApiOrigin,
+    setAuthToken,
+  ]);
 
   useEffect(() => {
     let cancelled = false;

@@ -12,12 +12,14 @@ type AuthState = {
   token: string | null;
   user: AuthUser | null;
   provider: AuthProvider | null;
+  apiOrigin: string | null;
 };
 
 type AuthActions = {
   setAuthToken: (token: string | null) => void;
   setAuthUser: (user: AuthUser | null) => void;
   setAuthProvider: (provider: AuthProvider | null) => void;
+  setAuthApiOrigin: (apiOrigin: string | null) => void;
   clearAuth: () => void;
 };
 
@@ -29,12 +31,14 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       user: null,
       provider: null,
+      apiOrigin: null,
       setAuthToken: (token) => {
         const nextToken = token?.trim() || null;
         set((state) => ({
           token: nextToken,
           user: state.token === nextToken ? state.user : null,
           provider: state.token === nextToken ? state.provider : null,
+          apiOrigin: nextToken ? state.apiOrigin : null,
         }));
       },
       setAuthUser: (user) => {
@@ -43,11 +47,15 @@ export const useAuthStore = create<AuthStore>()(
       setAuthProvider: (provider) => {
         set({ provider });
       },
+      setAuthApiOrigin: (apiOrigin) => {
+        set({ apiOrigin: apiOrigin?.trim() || null });
+      },
       clearAuth: () => {
         set({
           token: null,
           user: null,
           provider: null,
+          apiOrigin: null,
         });
       },
     }),
@@ -57,6 +65,7 @@ export const useAuthStore = create<AuthStore>()(
         token: state.token,
         user: state.user,
         provider: state.provider,
+        apiOrigin: state.apiOrigin,
       }),
     }
   )

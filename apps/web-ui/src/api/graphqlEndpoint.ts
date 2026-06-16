@@ -28,6 +28,19 @@ export function getApiOrigin() {
   return "";
 }
 
+export function getApiSessionScope() {
+  const apiOrigin = getApiOrigin();
+  if (apiOrigin) {
+    return apiOrigin;
+  }
+
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.location.origin;
+}
+
 export function getGraphqlEndpoint() {
   if (typeof window === "undefined") {
     return GRAPHQL_PATH;

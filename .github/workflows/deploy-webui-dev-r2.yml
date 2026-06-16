@@ -8,7 +8,7 @@ on:
       - "apps/web-ui/**"
       - "package.json"
       - "pnpm-lock.yaml"
-      - "apps/mobile/native-version.config.json"
+      - "apps/mobile/native.config.json"
       - ".github/workflows/deploy-webui-dev-r2.yml"
   workflow_dispatch:
 
@@ -109,10 +109,10 @@ jobs:
           MANIFEST_PATH="$RELEASE_DIR/manifest.json"
           node - <<NODE
           const fs = require("node:fs");
-          const nativeVersionConfig = JSON.parse(
-            fs.readFileSync("apps/mobile/native-version.config.json", "utf8")
+          const nativeConfig = JSON.parse(
+            fs.readFileSync("apps/mobile/native.config.json", "utf8")
           );
-          const minimumNativeVersion = nativeVersionConfig?.webUi?.minimumNativeVersion ?? {
+          const minimumNativeVersion = nativeConfig?.webUi?.minimumNativeVersion ?? {
             ios: "1.0.0",
             android: "1.0.0"
           };

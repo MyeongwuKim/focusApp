@@ -119,7 +119,6 @@ export async function logout() {
   const { token, clearAuth } = useAuthStore.getState();
 
   clearAuth();
-  void runProviderUnlinkInBackground();
   void postAuthAction("/auth/logout", token, { requireAuth: false }).catch(() => null);
 }
 

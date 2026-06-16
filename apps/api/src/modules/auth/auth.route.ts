@@ -62,13 +62,28 @@ function resolveAllowedRedirectOrigins() {
 }
 
 const ALLOWED_REDIRECT_ORIGINS = resolveAllowedRedirectOrigins();
+const ALLOWED_NATIVE_REDIRECT_PROTOCOLS = new Set(
+  env.OAUTH_NATIVE_REDIRECT_SCHEMES.map((scheme) => `${scheme}:`)
+);
+
+function isNativeRedirectProtocol(protocol: string) {
+  return ALLOWED_NATIVE_REDIRECT_PROTOCOLS.has(protocol.trim().toLowerCase());
+}
+
+function isNativeRedirectUrl(rawUrl: string) {
+  try {
+    return isNativeRedirectProtocol(new URL(rawUrl).protocol);
+  } catch {
+    return false;
+  }
+}
 
 function resolveKakaoRedirectUriForRequest(
   defaultRedirectUri: string,
   redirectTo: string,
   requestHost?: string
 ) {
-  if (!redirectTo.startsWith("mobile:") || !requestHost) {
+  if (!isNativeRedirectUrl(redirectTo) || !requestHost) {
     return defaultRedirectUri;
   }
 
@@ -134,7 +149,7 @@ function resolveRedirectTo(rawRedirectTo: unknown): string {
     ? new URL(rawRedirectTo, env.WEB_UI_ORIGIN)
     : new URL(rawRedirectTo);
 
-  if (parsed.protocol === "file:" || parsed.protocol === "mobile:") {
+  if (parsed.protocol === "file:" || isNativeRedirectProtocol(parsed.protocol)) {
     return parsed.toString();
   }
 

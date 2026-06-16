@@ -6,22 +6,30 @@
     }
   },
   "test": {
+    "appName": "타임스택 (T)",
+    "appScheme": "mobile-test",
     "ios": {
+      "bundleIdentifier": "com.myeongwu.focushybrid.t",
       "version": "1.0.0",
-      "buildNumber": "8"
+      "buildNumber": "9"
     },
     "android": {
+      "package": "com.myeongwu.focushybrid.t",
       "version": "1.0.0",
       "versionCode": 1
     }
   },
   "prod": {
+    "appName": "타임스택",
+    "appScheme": "mobile",
     "versionSource": "expo",
     "ios": {
+      "bundleIdentifier": "com.myeongwu.focushybrid",
       "versionSource": "expo",
       "buildNumberSource": "eas-remote"
     },
     "android": {
+      "package": "com.myeongwu.focushybrid",
       "versionSource": "expo",
       "versionCodeSource": "eas-remote"
     }

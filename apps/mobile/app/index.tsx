@@ -60,6 +60,7 @@ const LAUNCH_ANIMATION_CHECK_DURATION_MS = 280;
 const LAUNCH_ANIMATION_PAUSE_MS = 280;
 const LAUNCH_OVERLAY_MIN_VISIBLE_MS = 800;
 const LAUNCH_PROGRESS_BAR_WIDTH = 196;
+const DEFAULT_NATIVE_APP_SCHEME = "mobile";
 const FORCE_LAUNCH_OVERLAY_FOR_TEST = process.env.EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY === "true";
 
 type NativePermissionState = "granted" | "denied" | "undetermined";
@@ -244,6 +245,45 @@ function resolveAndroidPackageName() {
   }
 
   return "com.myeongwu.focushybrid";
+}
+
+function normalizeNativeAppScheme(rawScheme: unknown) {
+  if (typeof rawScheme !== "string") {
+    return "";
+  }
+
+  const scheme = rawScheme
+    .trim()
+    .replace(/:\/\/.*$/, "")
+    .replace(/:$/, "")
+    .toLowerCase();
+  return /^[a-z][a-z0-9+.-]*$/.test(scheme) ? scheme : "";
+}
+
+function resolveNativeAppScheme() {
+  const expoScheme = Constants.expoConfig?.scheme;
+  if (Array.isArray(expoScheme)) {
+    const firstScheme = expoScheme.map(normalizeNativeAppScheme).find(Boolean);
+    if (firstScheme) {
+      return firstScheme;
+    }
+  }
+
+  const normalizedExpoScheme = normalizeNativeAppScheme(expoScheme);
+  if (normalizedExpoScheme) {
+    return normalizedExpoScheme;
+  }
+
+  return normalizeNativeAppScheme(process.env.EXPO_PUBLIC_APP_SCHEME) || DEFAULT_NATIVE_APP_SCHEME;
+}
+
+function hasNativeAppProtocol(rawUrl: string, nativeAppScheme: string) {
+  try {
+    const parsed = new URL(rawUrl);
+    return normalizeNativeAppScheme(parsed.protocol) === nativeAppScheme;
+  } catch {
+    return false;
+  }
 }
 
 async function openNativeAppMarket() {
@@ -665,11 +705,11 @@ function buildAuthCallbackHash(input: {
   return `#/auth/callback?${params.toString()}`;
 }
 
-function resolveAuthCallbackHashFromUrl(rawUrl: string): string | null {
+function resolveAuthCallbackHashFromUrl(rawUrl: string, nativeAppScheme: string): string | null {
   try {
     const parsed = new URL(rawUrl);
     const looksLikeAuthCallback =
-      parsed.protocol === "mobile:" ||
+      normalizeNativeAppScheme(parsed.protocol) === nativeAppScheme ||
       rawUrl.includes("/auth/callback") ||
       parsed.hash.includes("/auth/callback") ||
       (parsed.protocol === "file:" && parsed.pathname.endsWith("/index.html"));
@@ -1087,6 +1127,7 @@ export default function WebViewScreen() {
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
   const [webViewUri, setWebViewUri] = useState<string | null>(null);
+  const nativeAppScheme = useMemo(() => resolveNativeAppScheme(), []);
 
   const navigateWebViewToAuthCallbackHash = useCallback(
     (callbackHash: string) => {
@@ -1380,10 +1421,11 @@ export default function WebViewScreen() {
       wrap('log');
       wrap('warn');
       wrap('error');
-      window.__HYBRID_API_ORIGIN__ = '${hybridApiOrigin}';
-      post('bridge-ready', { href: location.href });
+      window.__HYBRID_API_ORIGIN__ = ${JSON.stringify(hybridApiOrigin)};
+      window.__HYBRID_APP_SCHEME__ = ${JSON.stringify(nativeAppScheme)};
+      post('bridge-ready', { href: location.href, appScheme: window.__HYBRID_APP_SCHEME__ });
     })(); true;`,
-    [hybridApiOrigin]
+    [hybridApiOrigin, nativeAppScheme]
   );
   const injectedBeforeContentLoaded = useMemo(
     () => `${webDebugBridgeScript}\n${applyScaleScript}`,
@@ -1560,7 +1602,7 @@ export default function WebViewScreen() {
 
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
-      const callbackHash = resolveAuthCallbackHashFromUrl(event.url);
+      const callbackHash = resolveAuthCallbackHashFromUrl(event.url, nativeAppScheme);
       if (!callbackHash) {
         return;
       }
@@ -1582,7 +1624,7 @@ export default function WebViewScreen() {
     return () => {
       subscription.remove();
     };
-  }, [navigateWebViewToAuthCallbackHash]);
+  }, [nativeAppScheme, navigateWebViewToAuthCallbackHash]);
 
   useEffect(() => {
     if (!webUiEntryUri || !webViewRef.current) {
@@ -1728,8 +1770,8 @@ export default function WebViewScreen() {
             onShouldStartLoadWithRequest={(request) => {
               console.log("WebView should start request:", request.url);
 
-              if (request.url.startsWith("mobile://")) {
-                const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
+              if (hasNativeAppProtocol(request.url, nativeAppScheme)) {
+                const callbackHash = resolveAuthCallbackHashFromUrl(request.url, nativeAppScheme);
                 if (callbackHash) {
                   navigateWebViewToAuthCallbackHash(callbackHash);
                 }
@@ -1740,7 +1782,7 @@ export default function WebViewScreen() {
                 return true;
               }
 
-              const callbackHash = resolveAuthCallbackHashFromUrl(request.url);
+              const callbackHash = resolveAuthCallbackHashFromUrl(request.url, nativeAppScheme);
               if (!callbackHash) {
                 return true;
               }
@@ -1789,7 +1831,10 @@ export default function WebViewScreen() {
             }}
             onError={(event) => {
               const msg = event.nativeEvent.description || "Unknown WebView error";
-              const callbackHash = resolveAuthCallbackHashFromUrl(event.nativeEvent.url ?? "");
+              const callbackHash = resolveAuthCallbackHashFromUrl(
+                event.nativeEvent.url ?? "",
+                nativeAppScheme
+              );
               if (callbackHash) {
                 navigateWebViewToAuthCallbackHash(callbackHash);
                 return;

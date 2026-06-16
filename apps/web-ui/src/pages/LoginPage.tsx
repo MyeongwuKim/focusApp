@@ -1,14 +1,20 @@
 import { useState, type MouseEvent } from "react";
 import { getApiOrigin } from "../api/graphqlEndpoint";
 import { SiKakaotalk, SiNaver } from "react-icons/si";
-import { getNativeWebViewBridge, isNativeWebViewRuntime } from "../utils/runtimeEnvironment";
+import {
+  getNativeAppScheme,
+  getNativeWebViewBridge,
+  isNativeWebViewRuntime,
+} from "../utils/runtimeEnvironment";
 
 type AuthProvider = "kakao" | "naver";
 
 function buildOAuthStartUrl(provider: AuthProvider) {
   const apiOrigin = getApiOrigin();
   const redirectTo =
-    isNativeWebViewRuntime() ? "mobile://auth/callback" : `${window.location.origin}/#/auth/callback`;
+    isNativeWebViewRuntime()
+      ? `${getNativeAppScheme()}://auth/callback`
+      : `${window.location.origin}/#/auth/callback`;
   const authStartPath = apiOrigin ? `${apiOrigin}/auth/${provider}/start` : `/auth/${provider}/start`;
   const url = new URL(authStartPath, window.location.origin);
   url.searchParams.set("redirectTo", redirectTo);

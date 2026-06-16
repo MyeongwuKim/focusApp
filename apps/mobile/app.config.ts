@@ -11,19 +11,37 @@ const PROD_BUNDLE_ID = "com.myeongwu.focushybrid";
 const TEST_BUNDLE_ID = "com.myeongwu.focushybrid.t";
 const PROD_ANDROID_PACKAGE = "com.myeongwu.focushybrid";
 const TEST_ANDROID_PACKAGE = "com.myeongwu.focushybrid.t";
-const NATIVE_VERSION_CONFIG_FILE = join(APP_ROOT, "native-version.config.json");
+const PROD_APP_SCHEME = "mobile";
+const TEST_APP_SCHEME = "mobile-test";
+const NATIVE_CONFIG_FILE = join(APP_ROOT, "native.config.json");
 
-type NativeVersionConfig = {
+type NativePlatformConfig = {
+  versionSource?: string;
+  version?: string;
+  buildNumberSource?: string;
+  buildNumber?: string;
+  versionCodeSource?: string;
+  versionCode?: number;
+  bundleIdentifier?: string;
+  package?: string;
+};
+
+type NativeVariantConfig = {
+  appName?: string;
+  appScheme?: string;
+  versionSource?: string;
+  ios?: NativePlatformConfig;
+  android?: NativePlatformConfig;
+};
+
+type NativeConfig = {
   test?: {
-    ios?: {
-      version?: string;
-      buildNumber?: string;
-    };
-    android?: {
-      version?: string;
-      versionCode?: number;
-    };
+    appName?: string;
+    appScheme?: string;
+    ios?: NativePlatformConfig;
+    android?: NativePlatformConfig;
   };
+  prod?: NativeVariantConfig;
 };
 
 function loadMobileEnvFiles() {
@@ -42,16 +60,20 @@ function loadMobileEnvFiles() {
 
 loadMobileEnvFiles();
 
-function loadNativeVersionConfig(): NativeVersionConfig {
-  if (!existsSync(NATIVE_VERSION_CONFIG_FILE)) {
+function loadNativeConfig(): NativeConfig {
+  if (!existsSync(NATIVE_CONFIG_FILE)) {
     return {};
   }
 
   try {
-    return JSON.parse(readFileSync(NATIVE_VERSION_CONFIG_FILE, "utf8")) as NativeVersionConfig;
+    return JSON.parse(readFileSync(NATIVE_CONFIG_FILE, "utf8")) as NativeConfig;
   } catch {
     return {};
   }
+}
+
+function readConfigString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function resolveTestExpoVersion(input: {
@@ -104,11 +126,21 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const naverConsumerSecret = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim();
   const naverUrlScheme = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim();
   const plugins = [...(config.plugins ?? [])];
-  const appName = isTestVariant ? TEST_APP_NAME : PROD_APP_NAME;
-  const iosBundleIdentifier = isTestVariant ? TEST_BUNDLE_ID : PROD_BUNDLE_ID;
-  const androidPackage = isTestVariant ? TEST_ANDROID_PACKAGE : PROD_ANDROID_PACKAGE;
-  const nativeVersionConfig = loadNativeVersionConfig();
-  const testVersionConfig = isTestVariant ? nativeVersionConfig.test : undefined;
+  const nativeConfig = loadNativeConfig();
+  const variantConfig = isTestVariant ? nativeConfig.test : nativeConfig.prod;
+  const appName =
+    readConfigString(variantConfig?.appName) || (isTestVariant ? TEST_APP_NAME : PROD_APP_NAME);
+  const iosBundleIdentifier =
+    readConfigString(variantConfig?.ios?.bundleIdentifier) ||
+    (isTestVariant ? TEST_BUNDLE_ID : PROD_BUNDLE_ID);
+  const androidPackage =
+    readConfigString(variantConfig?.android?.package) ||
+    (isTestVariant ? TEST_ANDROID_PACKAGE : PROD_ANDROID_PACKAGE);
+  const appScheme =
+    process.env.EXPO_PUBLIC_APP_SCHEME?.trim() ||
+    readConfigString(variantConfig?.appScheme) ||
+    (isTestVariant ? TEST_APP_SCHEME : PROD_APP_SCHEME);
+  const testVersionConfig = isTestVariant ? nativeConfig.test : undefined;
   const testVersion = resolveTestExpoVersion({
     iosVersion: testVersionConfig?.ios?.version,
     androidVersion: testVersionConfig?.android?.version,
@@ -188,6 +220,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
     name: appName,
+    scheme: appScheme,
     version: testVersion || config.version,
     ios: {
       ...(config.ios ?? {}),
