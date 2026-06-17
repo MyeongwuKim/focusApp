@@ -51,6 +51,7 @@ import { isNativeWebViewRuntime } from "./utils/runtimeEnvironment";
 import { formatDateKey } from "./utils/holidays";
 
 const BACKEND_RECHECK_MS = 3000;
+const BACKEND_BOOT_TIMEOUT_MS = 25000;
 const LOGIN_ROUTE_PATH = "/login";
 const AUTH_CALLBACK_ROUTE_PATH = "/auth/callback";
 const SETTINGS_GUIDE_PROMPTED_KEY_PREFIX = "focus-settings-guide-prompted-v1";
@@ -468,11 +469,6 @@ function App() {
         setAuthToken(token);
         setAuthApiOrigin(getApiSessionScope());
         setAuthProvider(provider);
-        if (window.location.protocol === "file:") {
-          window.history.replaceState(null, "", "#/calendar");
-        } else {
-          window.history.replaceState(null, "", `${window.location.origin}/#/calendar`);
-        }
         navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
         return;
       }
@@ -515,6 +511,7 @@ function App() {
     isLoggedIn,
     isLoginRoute,
     location.pathname,
+    location.search,
     navigate,
     isAuthHydrated,
     setAuthApiOrigin,
@@ -532,7 +529,7 @@ function App() {
     const abortController = new AbortController();
     const timeoutId = window.setTimeout(() => {
       abortController.abort();
-    }, 7000);
+    }, BACKEND_BOOT_TIMEOUT_MS);
 
     dispatchBackendBoot({ type: "checking" });
 
@@ -597,6 +594,9 @@ function App() {
 
     const unsubscribe = subscribeBackendConnectivity((next, previous) => {
       if (next === "offline") {
+        if (backendBootState === "checking") {
+          return;
+        }
         dispatchBackendBoot({ type: "error", error: "서버 연결에 실패했어요." });
         return;
       }
@@ -609,14 +609,14 @@ function App() {
       }
     });
 
-    if (getBackendConnectivityState() === "offline") {
+    if (backendBootState !== "checking" && getBackendConnectivityState() === "offline") {
       dispatchBackendBoot({ type: "error", error: "서버 연결에 실패했어요." });
     }
 
     return () => {
       unsubscribe();
     };
-  }, [isAuthenticatedAppRoute]);
+  }, [backendBootState, hasAuthSessionScopeMismatch, isAuthenticatedAppRoute]);
 
   useEffect(() => {
     if (!isAuthenticatedAppRoute) {
