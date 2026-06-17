@@ -1,6 +1,8 @@
 export type BackendConnectivityState = "online" | "offline";
 const AUTH_EXPIRED_EVENT_NAME = "focus-hybrid-auth-expired";
 const AUTH_EXPIRED_NOTIFY_COOLDOWN_MS = 1200;
+const BACKEND_OFFLINE_CONFIRMATION_COUNT = 5;
+const BACKEND_OFFLINE_CONFIRMATION_WINDOW_MS = 60000;
 
 type BackendConnectivityListener = (
   next: BackendConnectivityState,
@@ -10,6 +12,8 @@ type BackendConnectivityListener = (
 let backendConnectivityState: BackendConnectivityState = "online";
 const listeners = new Set<BackendConnectivityListener>();
 let lastAuthExpiredNotifiedAt = 0;
+let backendFailureCount = 0;
+let firstBackendFailureAt = 0;
 
 function updateBackendConnectivityState(next: BackendConnectivityState) {
   if (backendConnectivityState === next) {
@@ -33,10 +37,22 @@ export function subscribeBackendConnectivity(listener: BackendConnectivityListen
 }
 
 export function markBackendOffline() {
-  updateBackendConnectivityState("offline");
+  const now = Date.now();
+  if (!firstBackendFailureAt || now - firstBackendFailureAt > BACKEND_OFFLINE_CONFIRMATION_WINDOW_MS) {
+    firstBackendFailureAt = now;
+    backendFailureCount = 1;
+  } else {
+    backendFailureCount += 1;
+  }
+
+  if (backendFailureCount >= BACKEND_OFFLINE_CONFIRMATION_COUNT) {
+    updateBackendConnectivityState("offline");
+  }
 }
 
 export function markBackendOnline() {
+  backendFailureCount = 0;
+  firstBackendFailureAt = 0;
   updateBackendConnectivityState("online");
 }
 
@@ -94,6 +110,42 @@ export function isLikelyBackendOfflineError(error: unknown) {
   ].some((token) => message.includes(token));
 }
 
+function isBackendAvailabilityStatus(status: number) {
+  return status === 502 || status === 503 || status === 504;
+}
+
+function extractStatusCodeFromError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const matched = error.message.match(/\b([1-5]\d{2})\b/);
+  if (!matched?.[1]) {
+    return null;
+  }
+
+  const parsed = Number(matched[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function isBackendAvailabilityError(error: unknown) {
+  if (isLikelyBackendOfflineError(error)) {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    if (error.name === "AbortError") {
+      return true;
+    }
+    if (/timeout|timed out/i.test(error.message)) {
+      return true;
+    }
+  }
+
+  const statusCode = extractStatusCodeFromError(error);
+  return statusCode !== null && isBackendAvailabilityStatus(statusCode);
+}
+
 export async function fetchWithBackendStatus(input: RequestInfo | URL, init?: RequestInit) {
   try {
     const response = await fetch(input, init);
@@ -104,7 +156,7 @@ export async function fetchWithBackendStatus(input: RequestInfo | URL, init?: Re
       return response;
     }
 
-    if (response.status >= 500) {
+    if (isBackendAvailabilityStatus(response.status)) {
       markBackendOffline();
     } else {
       markBackendOnline();

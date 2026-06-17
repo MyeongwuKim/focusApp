@@ -2,6 +2,7 @@ import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { toast, useAuthStore } from "./stores";
 import { getUserFacingErrorMessage } from "./utils/errorMessage";
 import { getSentryEnabled, Sentry } from "./sentry";
+import { isBackendAvailabilityError } from "./api/backendConnectivity";
 
 type GlobalErrorMeta = {
   skipGlobalErrorToast?: boolean;
@@ -32,6 +33,9 @@ function captureFrontendError(error: unknown, context: { source: "query" | "muta
   if (isAuthExpiredLikeError(error) || isExpectedClientInputError(error)) {
     return;
   }
+  if (isBackendAvailabilityError(error)) {
+    return;
+  }
 
   Sentry.withScope((scope) => {
     scope.setTag("error_source", context.source);
@@ -54,6 +58,9 @@ export const queryClient = new QueryClient({
       if (isAuthExpiredLikeError(error)) {
         return;
       }
+      if (isBackendAvailabilityError(error)) {
+        return;
+      }
       if (!useAuthStore.getState().token) {
         return;
       }
@@ -69,6 +76,9 @@ export const queryClient = new QueryClient({
         return;
       }
       if (isAuthExpiredLikeError(error)) {
+        return;
+      }
+      if (isBackendAvailabilityError(error)) {
         return;
       }
       if (!useAuthStore.getState().token) {

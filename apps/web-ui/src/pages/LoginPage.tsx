@@ -9,6 +9,8 @@ import {
 
 type AuthProvider = "kakao" | "naver";
 
+const NATIVE_PROVIDER_LOGIN_SESSION_TIMEOUT_MS = 60000;
+
 function buildOAuthStartUrl(provider: AuthProvider) {
   const apiOrigin = getApiOrigin();
   const redirectTo =
@@ -56,7 +58,7 @@ async function requestNativeProviderLoginSession(provider: AuthProvider) {
       settled = true;
       cleanUp();
       reject(new Error(timeoutErrorCode));
-    }, 20000);
+    }, NATIVE_PROVIDER_LOGIN_SESSION_TIMEOUT_MS);
 
     const handleBridgeEvent = (
       event: CustomEvent<{ type?: string; requestId?: string; payload?: NativeLoginResultPayload }>

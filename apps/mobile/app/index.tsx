@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
+import * as ExpoLocation from "expo-location";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -52,6 +53,8 @@ const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
 const MAX_SCALE = 1.08;
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
+const NATIVE_PROVIDER_LOGIN_TIMEOUT_MS = 35000;
+const NATIVE_SESSION_EXCHANGE_TIMEOUT_MS = 30000;
 const NOTIFICATION_PERMISSION_INTRO_FILE_URI = `${
   FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
 }native-notification-permission-intro-v1.json`;
@@ -538,7 +541,11 @@ function resolveNativeAppVersion() {
 
 async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
   try {
-    return await withTimeout(loginWithKakaoTalk(), 25000, "KAKAO_NATIVE_TALK_LOGIN_TIMEOUT");
+    return await withTimeout(
+      loginWithKakaoTalk(),
+      NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
+      "KAKAO_NATIVE_TALK_LOGIN_TIMEOUT"
+    );
   } catch (talkError) {
     if (isNativeLoginCancelledError(talkError)) {
       throw new Error("KAKAO_NATIVE_LOGIN_CANCELLED");
@@ -570,7 +577,7 @@ async function requestNativeNaverAccessToken(): Promise<string> {
   initializeNaverLoginSdk();
   const loginResult = await withTimeout(
     NaverLogin.login(),
-    25000,
+    NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
     "NAVER_NATIVE_LOGIN_TIMEOUT"
   );
   if (loginResult.isSuccess) {
@@ -602,7 +609,7 @@ async function exchangeKakaoAccessTokenForSession(input: {
         accessToken: input.accessToken,
       }),
     }),
-    12000,
+    NATIVE_SESSION_EXCHANGE_TIMEOUT_MS,
     "KAKAO_NATIVE_EXCHANGE_TIMEOUT"
   );
 
@@ -638,7 +645,7 @@ async function exchangeNaverAccessTokenForSession(input: {
         accessToken: input.accessToken,
       }),
     }),
-    12000,
+    NATIVE_SESSION_EXCHANGE_TIMEOUT_MS,
     "NAVER_NATIVE_EXCHANGE_TIMEOUT"
   );
 
@@ -770,16 +777,7 @@ async function markNativePermissionIntroAsSeen(fileUri: string) {
 }
 
 function loadExpoLocationModule() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const loadedModule = require("expo-location") as {
-      getForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
-      requestForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
-    };
-    return loadedModule;
-  } catch {
-    return null;
-  }
+  return ExpoLocation;
 }
 
 async function getLocationPermissionState(): Promise<NativePermissionState> {
@@ -1132,13 +1130,21 @@ export default function WebViewScreen() {
   const navigateWebViewToAuthCallbackHash = useCallback(
     (callbackHash: string) => {
       const activeEntryUri = webUiEntryUri ?? localFileUri;
+      const normalizedHash = callbackHash.startsWith("#") ? callbackHash : `#${callbackHash}`;
       if (!activeEntryUri) {
-        pendingAuthCallbackHashRef.current = callbackHash;
+        pendingAuthCallbackHashRef.current = normalizedHash;
         return false;
       }
 
       pendingAuthCallbackHashRef.current = null;
-      const nextUri = buildWebUiUriWithHash(activeEntryUri, callbackHash);
+      if (webViewRef.current && isWebViewReadyRef.current) {
+        webViewRef.current.injectJavaScript(
+          `(() => { window.location.hash = ${JSON.stringify(normalizedHash)}; })(); true;`
+        );
+        return true;
+      }
+
+      const nextUri = buildWebUiUriWithHash(activeEntryUri, normalizedHash);
       setWebViewUri((prev) => (prev === nextUri ? prev : nextUri));
       return true;
     },
@@ -1190,24 +1196,39 @@ export default function WebViewScreen() {
       const loginProvider = resolveProviderFromBridgeLoginResultType(message.type);
       const payload = readUnknownRecord(message.payload);
       const token = readUnknownString(payload?.token);
-      if (loginProvider && token) {
-        const userId = readUnknownString(payload?.userId);
-        navigateWebViewToAuthCallbackHash(
-          buildAuthCallbackHash({
-            token,
-            userId: userId || null,
-            provider: loginProvider,
-          })
-        );
-      }
+      const userId = readUnknownString(payload?.userId);
+      const authCallbackHash =
+        loginProvider && token
+          ? buildAuthCallbackHash({
+              token,
+              userId: userId || null,
+              provider: loginProvider,
+            })
+          : null;
 
       if (!webViewRef.current) {
+        if (authCallbackHash) {
+          navigateWebViewToAuthCallbackHash(authCallbackHash);
+        }
         return;
       }
+
+      const bridgeMessage = JSON.stringify(message);
+      const fallbackAuthCallbackHash = JSON.stringify(authCallbackHash);
       webViewRef.current.injectJavaScript(
-        `window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${JSON.stringify(
-          message
-        )} })); true;`
+        `(() => {
+          const initialHash = window.location.hash;
+          window.dispatchEvent(new CustomEvent('focus-hybrid-native-bridge', { detail: ${bridgeMessage} }));
+          const fallbackHash = ${fallbackAuthCallbackHash};
+          if (fallbackHash) {
+            window.setTimeout(() => {
+              const currentHash = window.location.hash || '';
+              if (currentHash === initialHash || currentHash.includes('/login')) {
+                window.location.hash = fallbackHash;
+              }
+            }, 300);
+          }
+        })(); true;`
       );
     },
     [navigateWebViewToAuthCallbackHash]
@@ -1236,7 +1257,7 @@ export default function WebViewScreen() {
     }
 
     try {
-      const [_, rawSearch = ""] = targetPath.split("?", 2);
+      const rawSearch = targetPath.split("?", 2)[1] ?? "";
       const params = new URLSearchParams(rawSearch);
       const targetDateKey = params.get("date") ?? formatLocalDateKey(new Date());
       if (targetDateKey !== formatLocalDateKey(new Date())) {
@@ -1332,7 +1353,7 @@ export default function WebViewScreen() {
       topRowHeightRem,
       numberFontRem,
     };
-  }, [fontScale, uiScale]);
+  }, [fontScale, width]);
 
   const applyScaleScript = useMemo(
     () =>

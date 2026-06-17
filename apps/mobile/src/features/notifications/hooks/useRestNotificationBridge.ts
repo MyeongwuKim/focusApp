@@ -207,7 +207,7 @@ export function useRestNotificationBridge({
       return null;
     }
 
-    const [_, rawSearch = ""] = targetPath.split("?", 2);
+    const rawSearch = targetPath.split("?", 2)[1] ?? "";
     const params = new URLSearchParams(rawSearch);
     if (params.get("startTodoPrompt") === "1") {
       return "start_todo" as const;

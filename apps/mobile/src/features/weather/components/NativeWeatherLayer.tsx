@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as ExpoLocation from 'expo-location';
 import {
   Animated,
   AppState,
@@ -190,15 +191,7 @@ function weatherCodeToEffect(code: number): WeatherEffect {
 }
 
 function loadExpoLocationModule() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const loadedModule = require('expo-location') as {
-      getForegroundPermissionsAsync?: () => Promise<{ status?: string; granted?: boolean }>;
-    };
-    return loadedModule;
-  } catch {
-    return null;
-  }
+  return ExpoLocation;
 }
 
 async function hasLocationPermissionGranted(): Promise<boolean> {
