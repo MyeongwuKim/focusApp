@@ -1,0 +1,9 @@
+mutation RegisterPushDeviceToken($input: RegisterPushDeviceTokenInput!) {
+  registerPushDeviceToken(input: $input) {
+    id
+    pushToken
+    platform
+    isActive
+    updatedAt
+  }
+}

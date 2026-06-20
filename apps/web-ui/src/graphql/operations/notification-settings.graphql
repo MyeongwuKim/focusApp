@@ -1,0 +1,29 @@
+fragment NotificationSettingsFields on NotificationSettings {
+  id
+  userId
+  pushEnabled
+  intervalMinutes
+  activeStartTime
+  activeEndTime
+  dayMode
+  typeRestEnd
+  typeIncomplete
+  typeFocusStart
+  tone
+  systemPermission
+  lastEmptyTodoReminderDate
+  createdAt
+  updatedAt
+}
+
+query NotificationSettings {
+  notificationSettings {
+    ...NotificationSettingsFields
+  }
+}
+
+mutation UpdateNotificationSettings($input: UpdateNotificationSettingsInput!) {
+  updateNotificationSettings(input: $input) {
+    ...NotificationSettingsFields
+  }
+}

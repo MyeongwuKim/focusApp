@@ -1,0 +1,61 @@
+fragment RoutineTemplateFields on RoutineTemplate {
+  id
+  userId
+  name
+  items {
+    id
+    taskId
+    titleSnapshot
+    content
+    order
+    scheduledTimeHHmm
+  }
+  createdAt
+  updatedAt
+}
+
+fragment RoutineTemplateWeekdayAssignmentFields on RoutineTemplateWeekdayAssignment {
+  id
+  userId
+  weekday
+  routineTemplateId
+  routineTemplate {
+    ...RoutineTemplateFields
+  }
+  createdAt
+  updatedAt
+}
+
+query RoutineTemplates {
+  routineTemplates {
+    ...RoutineTemplateFields
+  }
+}
+
+query RoutineTemplateWeekdayAssignments {
+  routineTemplateWeekdayAssignments {
+    ...RoutineTemplateWeekdayAssignmentFields
+  }
+}
+
+mutation CreateRoutineTemplate($input: CreateRoutineTemplateInput!) {
+  createRoutineTemplate(input: $input) {
+    ...RoutineTemplateFields
+  }
+}
+
+mutation UpdateRoutineTemplate($input: UpdateRoutineTemplateInput!) {
+  updateRoutineTemplate(input: $input) {
+    ...RoutineTemplateFields
+  }
+}
+
+mutation DeleteRoutineTemplate($input: DeleteRoutineTemplateInput!) {
+  deleteRoutineTemplate(input: $input)
+}
+
+mutation UpdateRoutineTemplateWeekdayAssignments($input: UpdateRoutineTemplateWeekdayAssignmentsInput!) {
+  updateRoutineTemplateWeekdayAssignments(input: $input) {
+    ...RoutineTemplateWeekdayAssignmentFields
+  }
+}

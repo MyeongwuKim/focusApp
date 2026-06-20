@@ -1,0 +1,48 @@
+query AchievementProgressList {
+  achievementProgressList {
+    id
+    badgeId
+    title
+    description
+    icon
+    category
+    scope
+    tier
+    goal
+    currentValue
+    isAchieved
+    achievedCount
+    lastAchievedAt
+    lastAchievedWeekKey
+    weeklyStreak
+    bestWeeklyStreak
+    updatedAt
+  }
+}
+
+query AchievementHistory($limit: Int, $offset: Int) {
+  achievementHistory(limit: $limit, offset: $offset) {
+    id
+    badgeId
+    title
+    description
+    icon
+    category
+    scope
+    tier
+    goal
+    currentValue
+    cycleIndex
+    weekKey
+    weeklyStreak
+    achievedAt
+  }
+}
+
+mutation SyncAchievements {
+  syncAchievements {
+    progressCount
+    newEventCount
+    syncedAt
+  }
+}

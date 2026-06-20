@@ -1,0 +1,186 @@
+fragment DailyLogTodoFields on TodoItem {
+  id
+  taskId
+  titleSnapshot
+  content
+  done
+  order
+  startedAt
+  scheduledStartAt
+  targetFocusMinutes
+  pausedAt
+  completedAt
+  deviationSeconds
+  resumeCount
+  actualFocusSeconds
+  muteReminderDateKey
+}
+
+fragment DailyLogDetailFields on DailyLog {
+  dateKey
+  memo
+  restAccumulatedSeconds
+  restStartedAt
+  todos {
+    ...DailyLogTodoFields
+  }
+}
+
+query DailyLogsByMonth($monthKey: String!) {
+  dailyLogsByMonth(monthKey: $monthKey) {
+    id
+    userId
+    dateKey
+    monthKey
+    memo
+    todoCount
+    doneCount
+    previewTodos
+    todos {
+      id
+      taskId
+      titleSnapshot
+      content
+      done
+      order
+    }
+  }
+}
+
+query DailyLogsWithMemo(
+  $limit: Int
+  $cursorDateKey: String
+  $monthKey: String
+  $search: String
+  $sortOrder: String
+) {
+  dailyLogsWithMemo(
+    limit: $limit
+    cursorDateKey: $cursorDateKey
+    monthKey: $monthKey
+    search: $search
+    sortOrder: $sortOrder
+  ) {
+    items {
+      id
+      dateKey
+      monthKey
+      memo
+      todoCount
+      doneCount
+      previewTodos
+    }
+    nextCursorDateKey
+    hasNextPage
+  }
+}
+
+query DailyLog($dateKey: String!) {
+  dailyLog(dateKey: $dateKey) {
+    dateKey
+    memo
+  }
+}
+
+mutation UpsertDailyLog($input: UpsertDailyLogInput!) {
+  upsertDailyLog(input: $input) {
+    dateKey
+    memo
+  }
+}
+
+query DailyLogByDate($dateKey: String!) {
+  dailyLog(dateKey: $dateKey) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation AddTodos($input: AddTodosInput!) {
+  addTodos(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation DeleteTodo($input: TodoActionInput!) {
+  deleteTodo(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation StartTodo($input: TodoActionInput!) {
+  startTodo(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation PauseTodo($input: TodoActionInput!) {
+  pauseTodo(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation ResumeTodo($input: TodoActionInput!) {
+  resumeTodo(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation CompleteTodo($input: TodoActionInput!) {
+  completeTodo(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation ResetTodo($input: TodoActionInput!) {
+  resetTodo(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation ReorderTodos($input: ReorderTodosInput!) {
+  reorderTodos(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation UpdateTodoActualFocus($input: UpdateTodoActualFocusInput!) {
+  updateTodoActualFocus(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation UpdateTodoSchedule($input: UpdateTodoScheduleInput!) {
+  updateTodoSchedule(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation UpdateTodoTargetFocus($input: UpdateTodoTargetFocusInput!) {
+  updateTodoTargetFocus(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation MuteTodoReminderToday($input: TodoActionInput!) {
+  muteTodoReminderToday(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation UnmuteTodoReminder($input: TodoActionInput!) {
+  unmuteTodoReminder(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation StartRestSession($input: RestSessionInput!) {
+  startRestSession(input: $input) {
+    ...DailyLogDetailFields
+  }
+}
+
+mutation StopRestSession($input: RestSessionInput!) {
+  stopRestSession(input: $input) {
+    ...DailyLogDetailFields
+  }
+}

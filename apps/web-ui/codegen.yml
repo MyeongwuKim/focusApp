@@ -4,8 +4,13 @@ schema:
   - ../api/src/modules/**/*.resolver.ts
 documents:
   - src/**/*.{ts,tsx,graphql,gql}
+  - "!src/graphql/generated.ts"
 generates:
   src/graphql/generated.ts:
     plugins:
       - typescript
       - typescript-operations
+      - typed-document-node
+    config:
+      documentMode: string
+      useTypeImports: true

@@ -1,7 +1,12 @@
-import { buildAuthHeaders } from "./authHeaders";
-import { fetchWithBackendStatus } from "./backendConnectivity";
-import { getGraphqlEndpoint } from "./graphqlEndpoint";
-import type { GraphQLResponse } from "./graphqlResponse";
+import {
+  CreateRoutineTemplateDocument,
+  DeleteRoutineTemplateDocument,
+  RoutineTemplateWeekdayAssignmentsDocument,
+  RoutineTemplatesDocument,
+  UpdateRoutineTemplateDocument,
+  UpdateRoutineTemplateWeekdayAssignmentsDocument,
+} from "../graphql/generated";
+import { requestGraphql } from "./graphqlClient";
 
 export type RoutineTemplateItem = {
   id: string;
@@ -40,195 +45,22 @@ export type RoutineTemplateItemInput = {
   scheduledTimeHHmm?: string | null;
 };
 
-const ROUTINE_TEMPLATES_QUERY = /* GraphQL */ `
-  query RoutineTemplates {
-    routineTemplates {
-      id
-      userId
-      name
-      items {
-        id
-        taskId
-        titleSnapshot
-        content
-        order
-        scheduledTimeHHmm
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-const ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_QUERY = /* GraphQL */ `
-  query RoutineTemplateWeekdayAssignments {
-    routineTemplateWeekdayAssignments {
-      id
-      userId
-      weekday
-      routineTemplateId
-      routineTemplate {
-        id
-        userId
-        name
-        items {
-          id
-          taskId
-          titleSnapshot
-          content
-          order
-          scheduledTimeHHmm
-        }
-        createdAt
-        updatedAt
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-const CREATE_ROUTINE_TEMPLATE_MUTATION = /* GraphQL */ `
-  mutation CreateRoutineTemplate($input: CreateRoutineTemplateInput!) {
-    createRoutineTemplate(input: $input) {
-      id
-      userId
-      name
-      items {
-        id
-        taskId
-        titleSnapshot
-        content
-        order
-        scheduledTimeHHmm
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-const UPDATE_ROUTINE_TEMPLATE_MUTATION = /* GraphQL */ `
-  mutation UpdateRoutineTemplate($input: UpdateRoutineTemplateInput!) {
-    updateRoutineTemplate(input: $input) {
-      id
-      userId
-      name
-      items {
-        id
-        taskId
-        titleSnapshot
-        content
-        order
-        scheduledTimeHHmm
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-const DELETE_ROUTINE_TEMPLATE_MUTATION = /* GraphQL */ `
-  mutation DeleteRoutineTemplate($input: DeleteRoutineTemplateInput!) {
-    deleteRoutineTemplate(input: $input)
-  }
-`;
-
-const UPDATE_ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_MUTATION = /* GraphQL */ `
-  mutation UpdateRoutineTemplateWeekdayAssignments($input: UpdateRoutineTemplateWeekdayAssignmentsInput!) {
-    updateRoutineTemplateWeekdayAssignments(input: $input) {
-      id
-      userId
-      weekday
-      routineTemplateId
-      routineTemplate {
-        id
-        userId
-        name
-        items {
-          id
-          taskId
-          titleSnapshot
-          content
-          order
-          scheduledTimeHHmm
-        }
-        createdAt
-        updatedAt
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-type RoutineTemplatesQueryResponse = {
-  routineTemplates: RoutineTemplate[];
-};
-
-type RoutineTemplateWeekdayAssignmentsQueryResponse = {
-  routineTemplateWeekdayAssignments: RoutineTemplateWeekdayAssignment[];
-};
-
-type CreateRoutineTemplateMutationResponse = {
-  createRoutineTemplate: RoutineTemplate;
-};
-
-type UpdateRoutineTemplateMutationResponse = {
-  updateRoutineTemplate: RoutineTemplate;
-};
-
-type DeleteRoutineTemplateMutationResponse = {
-  deleteRoutineTemplate: boolean;
-};
-
-type UpdateRoutineTemplateWeekdayAssignmentsMutationResponse = {
-  updateRoutineTemplateWeekdayAssignments: RoutineTemplateWeekdayAssignment[];
-};
-
-async function postGraphql<T>(query: string, variables?: Record<string, unknown>) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({ query, variables }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Routine template request failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<T>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "Routine template GraphQL request failed");
-  }
-
-  return result.data;
-}
-
 export async function fetchRoutineTemplates() {
-  const data = await postGraphql<RoutineTemplatesQueryResponse>(ROUTINE_TEMPLATES_QUERY);
-  return data?.routineTemplates ?? [];
+  const data = await requestGraphql(RoutineTemplatesDocument);
+  return data.routineTemplates as RoutineTemplate[];
 }
 
 export async function fetchRoutineTemplateWeekdayAssignments() {
-  const data = await postGraphql<RoutineTemplateWeekdayAssignmentsQueryResponse>(
-    ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_QUERY
-  );
-  return data?.routineTemplateWeekdayAssignments ?? [];
+  const data = await requestGraphql(RoutineTemplateWeekdayAssignmentsDocument);
+  return data.routineTemplateWeekdayAssignments as RoutineTemplateWeekdayAssignment[];
 }
 
 export async function createRoutineTemplate(input: {
   name: string;
   items: RoutineTemplateItemInput[];
 }) {
-  const data = await postGraphql<CreateRoutineTemplateMutationResponse>(
-    CREATE_ROUTINE_TEMPLATE_MUTATION,
-    { input }
-  );
-  if (!data?.createRoutineTemplate) {
-    throw new Error("GraphQL createRoutineTemplate failed");
-  }
-  return data.createRoutineTemplate;
+  const data = await requestGraphql(CreateRoutineTemplateDocument, { input });
+  return data.createRoutineTemplate as RoutineTemplate;
 }
 
 export async function updateRoutineTemplate(input: {
@@ -236,22 +68,13 @@ export async function updateRoutineTemplate(input: {
   name?: string;
   items?: RoutineTemplateItemInput[];
 }) {
-  const data = await postGraphql<UpdateRoutineTemplateMutationResponse>(
-    UPDATE_ROUTINE_TEMPLATE_MUTATION,
-    { input }
-  );
-  if (!data?.updateRoutineTemplate) {
-    throw new Error("GraphQL updateRoutineTemplate failed");
-  }
-  return data.updateRoutineTemplate;
+  const data = await requestGraphql(UpdateRoutineTemplateDocument, { input });
+  return data.updateRoutineTemplate as RoutineTemplate;
 }
 
 export async function deleteRoutineTemplate(input: { routineTemplateId: string }) {
-  const data = await postGraphql<DeleteRoutineTemplateMutationResponse>(
-    DELETE_ROUTINE_TEMPLATE_MUTATION,
-    { input }
-  );
-  return data?.deleteRoutineTemplate ?? false;
+  const data = await requestGraphql(DeleteRoutineTemplateDocument, { input });
+  return data.deleteRoutineTemplate;
 }
 
 export async function updateRoutineTemplateWeekdayAssignments(input: {
@@ -260,9 +83,6 @@ export async function updateRoutineTemplateWeekdayAssignments(input: {
     routineTemplateId?: string | null;
   }>;
 }) {
-  const data = await postGraphql<UpdateRoutineTemplateWeekdayAssignmentsMutationResponse>(
-    UPDATE_ROUTINE_TEMPLATE_WEEKDAY_ASSIGNMENTS_MUTATION,
-    { input }
-  );
-  return data?.updateRoutineTemplateWeekdayAssignments ?? [];
+  const data = await requestGraphql(UpdateRoutineTemplateWeekdayAssignmentsDocument, { input });
+  return data.updateRoutineTemplateWeekdayAssignments as RoutineTemplateWeekdayAssignment[];
 }

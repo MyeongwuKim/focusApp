@@ -1,0 +1,94 @@
+query TaskCollections {
+  taskCollections {
+    id
+    name
+    order
+    createdAt
+    updatedAt
+    tasks {
+      id
+      userId
+      collectionId
+      title
+      isFavorite
+      isArchived
+      order
+      lastUsedAt
+      createdAt
+      updatedAt
+    }
+  }
+}
+
+mutation AddTask($input: AddTaskInput!) {
+  addTask(input: $input) {
+    id
+    collectionId
+    title
+    order
+    lastUsedAt
+  }
+}
+
+mutation CreateTaskCollection($input: CreateTaskCollectionInput!) {
+  createTaskCollection(input: $input) {
+    id
+    name
+    order
+  }
+}
+
+mutation DeleteTask($input: DeleteTaskInput!) {
+  deleteTask(input: $input)
+}
+
+mutation MoveTaskToCollection($input: MoveTaskToCollectionInput!) {
+  moveTaskToCollection(input: $input) {
+    id
+    collectionId
+    title
+    order
+    lastUsedAt
+  }
+}
+
+mutation ReorderTaskCollections($input: ReorderTaskCollectionsInput!) {
+  reorderTaskCollections(input: $input)
+}
+
+mutation ReorderTasks($input: ReorderTasksInput!) {
+  reorderTasks(input: $input)
+}
+
+mutation RenameTask($input: RenameTaskInput!) {
+  renameTask(input: $input) {
+    id
+    collectionId
+    title
+    order
+    lastUsedAt
+  }
+}
+
+mutation RenameTaskCollection($input: RenameTaskCollectionInput!) {
+  renameTaskCollection(input: $input) {
+    id
+    name
+    order
+  }
+}
+
+mutation DeleteTaskCollection($input: DeleteTaskCollectionInput!) {
+  deleteTaskCollection(input: $input)
+}
+
+mutation SetTaskFavorite($input: SetTaskFavoriteInput!) {
+  setTaskFavorite(input: $input) {
+    id
+    collectionId
+    title
+    isFavorite
+    order
+    lastUsedAt
+  }
+}

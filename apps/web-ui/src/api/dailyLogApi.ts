@@ -1,526 +1,34 @@
-import { buildAuthHeaders } from "./authHeaders";
-import { fetchWithBackendStatus } from "./backendConnectivity";
-import { getGraphqlEndpoint } from "./graphqlEndpoint";
-import type { GraphQLResponse } from "./graphqlResponse";
-
-const DAILY_LOGS_BY_MONTH_QUERY = /* GraphQL */ `
-  query DailyLogsByMonth($monthKey: String!) {
-    dailyLogsByMonth(monthKey: $monthKey) {
-      id
-      userId
-      dateKey
-      monthKey
-      memo
-      todoCount
-      doneCount
-      previewTodos
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-      }
-    }
-  }
-`;
-
-const DAILY_LOGS_WITH_MEMO_QUERY = /* GraphQL */ `
-  query DailyLogsWithMemo(
-    $limit: Int
-    $cursorDateKey: String
-    $monthKey: String
-    $search: String
-    $sortOrder: String
-  ) {
-    dailyLogsWithMemo(
-      limit: $limit
-      cursorDateKey: $cursorDateKey
-      monthKey: $monthKey
-      search: $search
-      sortOrder: $sortOrder
-    ) {
-      items {
-        id
-        dateKey
-        monthKey
-        memo
-        todoCount
-        doneCount
-        previewTodos
-      }
-      nextCursorDateKey
-      hasNextPage
-    }
-  }
-`;
-
-const DAILY_LOG_QUERY = /* GraphQL */ `
-  query DailyLog($dateKey: String!) {
-    dailyLog(dateKey: $dateKey) {
-      dateKey
-      memo
-    }
-  }
-`;
-
-const UPSERT_DAILY_LOG_QUERY = /* GraphQL */ `
-  mutation UpsertDailyLog($input: UpsertDailyLogInput!) {
-    upsertDailyLog(input: $input) {
-      dateKey
-      memo
-    }
-  }
-`;
-
-const DAILY_LOG_BY_DATE_QUERY = /* GraphQL */ `
-  query DailyLogByDate($dateKey: String!) {
-    dailyLog(dateKey: $dateKey) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const ADD_TODOS_QUERY = /* GraphQL */ `
-  mutation AddTodos($input: AddTodosInput!) {
-    addTodos(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const DELETE_TODO_QUERY = /* GraphQL */ `
-  mutation DeleteTodo($input: TodoActionInput!) {
-    deleteTodo(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const START_TODO_QUERY = /* GraphQL */ `
-  mutation StartTodo($input: TodoActionInput!) {
-    startTodo(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const PAUSE_TODO_QUERY = /* GraphQL */ `
-  mutation PauseTodo($input: TodoActionInput!) {
-    pauseTodo(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const RESUME_TODO_QUERY = /* GraphQL */ `
-  mutation ResumeTodo($input: TodoActionInput!) {
-    resumeTodo(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const COMPLETE_TODO_QUERY = /* GraphQL */ `
-  mutation CompleteTodo($input: TodoActionInput!) {
-    completeTodo(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const RESET_TODO_QUERY = /* GraphQL */ `
-  mutation ResetTodo($input: TodoActionInput!) {
-    resetTodo(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const REORDER_TODOS_QUERY = /* GraphQL */ `
-  mutation ReorderTodos($input: ReorderTodosInput!) {
-    reorderTodos(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const UPDATE_TODO_ACTUAL_FOCUS_QUERY = /* GraphQL */ `
-  mutation UpdateTodoActualFocus($input: UpdateTodoActualFocusInput!) {
-    updateTodoActualFocus(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const UPDATE_TODO_SCHEDULE_QUERY = /* GraphQL */ `
-  mutation UpdateTodoSchedule($input: UpdateTodoScheduleInput!) {
-    updateTodoSchedule(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const UPDATE_TODO_TARGET_FOCUS_QUERY = /* GraphQL */ `
-  mutation UpdateTodoTargetFocus($input: UpdateTodoTargetFocusInput!) {
-    updateTodoTargetFocus(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const MUTE_TODO_REMINDER_TODAY_QUERY = /* GraphQL */ `
-  mutation MuteTodoReminderToday($input: TodoActionInput!) {
-    muteTodoReminderToday(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const UNMUTE_TODO_REMINDER_QUERY = /* GraphQL */ `
-  mutation UnmuteTodoReminder($input: TodoActionInput!) {
-    unmuteTodoReminder(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const START_REST_SESSION_QUERY = /* GraphQL */ `
-  mutation StartRestSession($input: RestSessionInput!) {
-    startRestSession(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
-
-const STOP_REST_SESSION_QUERY = /* GraphQL */ `
-  mutation StopRestSession($input: RestSessionInput!) {
-    stopRestSession(input: $input) {
-      dateKey
-      memo
-      restAccumulatedSeconds
-      restStartedAt
-      todos {
-        id
-        taskId
-        titleSnapshot
-        content
-        done
-        order
-        startedAt
-        scheduledStartAt
-        targetFocusMinutes
-        pausedAt
-        completedAt
-        deviationSeconds
-        resumeCount
-        actualFocusSeconds
-        muteReminderDateKey
-      }
-    }
-  }
-`;
+import {
+  AddTodosDocument,
+  CompleteTodoDocument,
+  DailyLogByDateDocument,
+  DailyLogDocument,
+  DailyLogsByMonthDocument,
+  DailyLogsWithMemoDocument,
+  DeleteTodoDocument,
+  MuteTodoReminderTodayDocument,
+  PauseTodoDocument,
+  ReorderTodosDocument,
+  ResetTodoDocument,
+  ResumeTodoDocument,
+  StartRestSessionDocument,
+  StartTodoDocument,
+  StopRestSessionDocument,
+  UnmuteTodoReminderDocument,
+  UpdateTodoActualFocusDocument,
+  UpdateTodoScheduleDocument,
+  UpdateTodoTargetFocusDocument,
+  UpsertDailyLogDocument,
+  type AddTodosInput,
+  type ReorderTodosInput,
+  type RestSessionInput,
+  type TodoActionInput,
+  type UpdateTodoActualFocusInput,
+  type UpdateTodoScheduleInput,
+  type UpdateTodoTargetFocusInput,
+  type UpsertDailyLogInput,
+} from "../graphql/generated";
+import { requestGraphql } from "./graphqlClient";
 
 type DailyLogTodo = {
   id: string;
@@ -548,140 +56,47 @@ type DailyLogPayload = {
   todos: DailyLogTodo[];
 };
 
-type DailyLogsByMonthQuery = {
-  dailyLogsByMonth: Array<{
+type DailyLogsByMonthItem = {
+  id: string;
+  userId: string;
+  dateKey: string;
+  monthKey: string;
+  memo: string | null;
+  todoCount: number;
+  doneCount: number;
+  previewTodos: string[];
+  todos: Array<{
     id: string;
-    userId: string;
+    taskId: string | null;
+    titleSnapshot: string | null;
+    content: string;
+    done: boolean;
+    order: number;
+  }>;
+};
+
+type DailyLogMemo = {
+  dateKey: string;
+  memo: string | null;
+};
+
+type DailyLogsWithMemoResult = {
+  items: Array<{
+    id: string;
     dateKey: string;
     monthKey: string;
     memo: string | null;
     todoCount: number;
     doneCount: number;
     previewTodos: string[];
-    todos: Array<{
-      id: string;
-      taskId: string | null;
-      titleSnapshot: string | null;
-      content: string;
-      done: boolean;
-      order: number;
-    }>;
   }>;
-};
-
-type DailyLogsWithMemoQuery = {
-  dailyLogsWithMemo: {
-    items: Array<{
-      id: string;
-      dateKey: string;
-      monthKey: string;
-      memo: string | null;
-      todoCount: number;
-      doneCount: number;
-      previewTodos: string[];
-    }>;
-    nextCursorDateKey: string | null;
-    hasNextPage: boolean;
-  };
-};
-
-type DailyLogMemoQuery = {
-  dailyLog: {
-    dateKey: string;
-    memo: string | null;
-  } | null;
-};
-
-type UpsertDailyLogMemoMutation = {
-  upsertDailyLog: {
-    dateKey: string;
-    memo: string | null;
-  };
-};
-
-type DailyLogByDateQuery = {
-  dailyLog: DailyLogPayload | null;
-};
-
-type AddTodosMutation = {
-  addTodos: DailyLogPayload;
-};
-
-type DeleteTodoMutation = {
-  deleteTodo: DailyLogPayload;
-};
-
-type StartTodoMutation = {
-  startTodo: DailyLogPayload;
-};
-
-type PauseTodoMutation = {
-  pauseTodo: DailyLogPayload;
-};
-
-type ResumeTodoMutation = {
-  resumeTodo: DailyLogPayload;
-};
-
-type CompleteTodoMutation = {
-  completeTodo: DailyLogPayload;
-};
-
-type ResetTodoMutation = {
-  resetTodo: DailyLogPayload;
-};
-
-type ReorderTodosMutation = {
-  reorderTodos: DailyLogPayload;
-};
-
-type UpdateTodoActualFocusMutation = {
-  updateTodoActualFocus: DailyLogPayload;
-};
-
-type UpdateTodoScheduleMutation = {
-  updateTodoSchedule: DailyLogPayload;
-};
-
-type UpdateTodoTargetFocusMutation = {
-  updateTodoTargetFocus: DailyLogPayload;
-};
-
-type MuteTodoReminderTodayMutation = {
-  muteTodoReminderToday: DailyLogPayload;
-};
-
-type UnmuteTodoReminderMutation = {
-  unmuteTodoReminder: DailyLogPayload;
-};
-
-type StartRestSessionMutation = {
-  startRestSession: DailyLogPayload;
-};
-
-type StopRestSessionMutation = {
-  stopRestSession: DailyLogPayload;
+  nextCursorDateKey: string | null;
+  hasNextPage: boolean;
 };
 
 export async function fetchDailyLogsByMonth(monthKey: string) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: DAILY_LOGS_BY_MONTH_QUERY,
-      variables: { monthKey },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Daily logs fetch failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<DailyLogsByMonthQuery>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL dailyLogsByMonth failed");
-  }
-  return result.data?.dailyLogsByMonth ?? [];
+  const data = await requestGraphql(DailyLogsByMonthDocument, { monthKey });
+  return data.dailyLogsByMonth as DailyLogsByMonthItem[];
 }
 
 export type FetchDailyLogsWithMemoInput = {
@@ -693,511 +108,107 @@ export type FetchDailyLogsWithMemoInput = {
 };
 
 export async function fetchDailyLogsWithMemo(input: FetchDailyLogsWithMemoInput = {}) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: DAILY_LOGS_WITH_MEMO_QUERY,
-      variables: {
-        limit: input.limit ?? 30,
-        cursorDateKey: input.cursorDateKey ?? null,
-        monthKey: input.monthKey ?? null,
-        search: input.search ?? null,
-        sortOrder: input.sortOrder ?? "desc",
-      },
-    }),
+  const data = await requestGraphql(DailyLogsWithMemoDocument, {
+    limit: input.limit ?? 30,
+    cursorDateKey: input.cursorDateKey ?? null,
+    monthKey: input.monthKey ?? null,
+    search: input.search ?? null,
+    sortOrder: input.sortOrder ?? "desc",
   });
 
-  if (!response.ok) {
-    throw new Error(`Daily memo logs fetch failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<DailyLogsWithMemoQuery>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL dailyLogsWithMemo failed");
-  }
-  return result.data?.dailyLogsWithMemo ?? { items: [], nextCursorDateKey: null, hasNextPage: false };
+  return (data.dailyLogsWithMemo ?? {
+    items: [],
+    nextCursorDateKey: null,
+    hasNextPage: false,
+  }) as DailyLogsWithMemoResult;
 }
 
 export async function fetchDailyLogMemo(dateKey: string) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: DAILY_LOG_QUERY,
-      variables: { dateKey },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Daily log fetch failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<DailyLogMemoQuery>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL dailyLog failed");
-  }
-
-  return result.data?.dailyLog ?? null;
+  const data = await requestGraphql(DailyLogDocument, { dateKey });
+  return (data.dailyLog ?? null) as DailyLogMemo | null;
 }
 
-export async function upsertDailyLogMemo(input: { dateKey: string; memo: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: UPSERT_DAILY_LOG_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Daily log upsert failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<UpsertDailyLogMemoMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL upsertDailyLog failed");
-  }
-
-  const next = result.data?.upsertDailyLog;
-  if (!next) {
-    throw new Error("GraphQL upsertDailyLog failed");
-  }
-  return next;
+export async function upsertDailyLogMemo(input: UpsertDailyLogInput & { memo: string }) {
+  const data = await requestGraphql(UpsertDailyLogDocument, { input });
+  return data.upsertDailyLog as DailyLogMemo;
 }
 
 export async function fetchDailyLogByDate(dateKey: string) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: DAILY_LOG_BY_DATE_QUERY,
-      variables: { dateKey },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Daily log fetch failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<DailyLogByDateQuery>;
-
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL dailyLogByDate failed");
-  }
-
-  return result.data?.dailyLog ?? null;
+  const data = await requestGraphql(DailyLogByDateDocument, { dateKey });
+  return (data.dailyLog ?? null) as DailyLogPayload | null;
 }
 
-export async function addTodosToDailyLog(input: {
-  dateKey: string;
-  items: Array<{
-    content: string;
-    taskId?: string | null;
-    scheduledStartAt?: string | null;
-  }>;
-}) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: ADD_TODOS_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Add todos failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<AddTodosMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL addTodos failed");
-  }
-
-  const next = result.data?.addTodos;
-  if (!next) {
-    throw new Error("GraphQL addTodos failed");
-  }
-  return next;
+export async function addTodosToDailyLog(input: AddTodosInput) {
+  const data = await requestGraphql(AddTodosDocument, { input });
+  return data.addTodos as DailyLogPayload;
 }
 
-export async function deleteTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: DELETE_TODO_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Delete todo failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<DeleteTodoMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL deleteTodo failed");
-  }
-
-  const next = result.data?.deleteTodo;
-  if (!next) {
-    throw new Error("GraphQL deleteTodo failed");
-  }
-  return next;
+export async function deleteTodoFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(DeleteTodoDocument, { input });
+  return data.deleteTodo as DailyLogPayload;
 }
 
-export async function startTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: START_TODO_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Start todo failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<StartTodoMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL startTodo failed");
-  }
-
-  const next = result.data?.startTodo;
-  if (!next) {
-    throw new Error("GraphQL startTodo failed");
-  }
-  return next;
+export async function startTodoFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(StartTodoDocument, { input });
+  return data.startTodo as DailyLogPayload;
 }
 
-export async function pauseTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: PAUSE_TODO_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Pause todo failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<PauseTodoMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL pauseTodo failed");
-  }
-
-  const next = result.data?.pauseTodo;
-  if (!next) {
-    throw new Error("GraphQL pauseTodo failed");
-  }
-  return next;
+export async function pauseTodoFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(PauseTodoDocument, { input });
+  return data.pauseTodo as DailyLogPayload;
 }
 
-export async function resumeTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: RESUME_TODO_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Resume todo failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<ResumeTodoMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL resumeTodo failed");
-  }
-
-  const next = result.data?.resumeTodo;
-  if (!next) {
-    throw new Error("GraphQL resumeTodo failed");
-  }
-  return next;
+export async function resumeTodoFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(ResumeTodoDocument, { input });
+  return data.resumeTodo as DailyLogPayload;
 }
 
-export async function completeTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: COMPLETE_TODO_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Complete todo failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<CompleteTodoMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL completeTodo failed");
-  }
-
-  const next = result.data?.completeTodo;
-  if (!next) {
-    throw new Error("GraphQL completeTodo failed");
-  }
-  return next;
+export async function completeTodoFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(CompleteTodoDocument, { input });
+  return data.completeTodo as DailyLogPayload;
 }
 
-export async function resetTodoFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: RESET_TODO_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Reset todo failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<ResetTodoMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL resetTodo failed");
-  }
-
-  const next = result.data?.resetTodo;
-  if (!next) {
-    throw new Error("GraphQL resetTodo failed");
-  }
-  return next;
+export async function resetTodoFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(ResetTodoDocument, { input });
+  return data.resetTodo as DailyLogPayload;
 }
 
-export async function reorderTodosFromDailyLog(input: {
-  dateKey: string;
-  todoIds: string[];
-}) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: REORDER_TODOS_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Reorder todos failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<ReorderTodosMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL reorderTodos failed");
-  }
-
-  const next = result.data?.reorderTodos;
-  if (!next) {
-    throw new Error("GraphQL reorderTodos failed");
-  }
-  return next;
+export async function reorderTodosFromDailyLog(input: ReorderTodosInput) {
+  const data = await requestGraphql(ReorderTodosDocument, { input });
+  return data.reorderTodos as DailyLogPayload;
 }
 
-export async function updateTodoActualFocusFromDailyLog(input: {
-  dateKey: string;
-  todoId: string;
-  actualFocusSeconds: number;
-}) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: UPDATE_TODO_ACTUAL_FOCUS_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Update actual focus failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<UpdateTodoActualFocusMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL updateTodoActualFocus failed");
-  }
-
-  const next = result.data?.updateTodoActualFocus;
-  if (!next) {
-    throw new Error("GraphQL updateTodoActualFocus failed");
-  }
-  return next;
+export async function updateTodoActualFocusFromDailyLog(input: UpdateTodoActualFocusInput) {
+  const data = await requestGraphql(UpdateTodoActualFocusDocument, { input });
+  return data.updateTodoActualFocus as DailyLogPayload;
 }
 
-export async function updateTodoScheduleFromDailyLog(input: {
-  dateKey: string;
-  todoId: string;
-  scheduledStartAt: string | null;
-}) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: UPDATE_TODO_SCHEDULE_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Update todo schedule failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<UpdateTodoScheduleMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL updateTodoSchedule failed");
-  }
-
-  const next = result.data?.updateTodoSchedule;
-  if (!next) {
-    throw new Error("GraphQL updateTodoSchedule failed");
-  }
-  return next;
+export async function updateTodoScheduleFromDailyLog(input: UpdateTodoScheduleInput) {
+  const data = await requestGraphql(UpdateTodoScheduleDocument, { input });
+  return data.updateTodoSchedule as DailyLogPayload;
 }
 
-export async function updateTodoTargetFocusFromDailyLog(input: {
-  dateKey: string;
-  todoId: string;
-  targetFocusMinutes: number | null;
-}) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: UPDATE_TODO_TARGET_FOCUS_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Update todo target focus failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<UpdateTodoTargetFocusMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL updateTodoTargetFocus failed");
-  }
-
-  const next = result.data?.updateTodoTargetFocus;
-  if (!next) {
-    throw new Error("GraphQL updateTodoTargetFocus failed");
-  }
-  return next;
+export async function updateTodoTargetFocusFromDailyLog(input: UpdateTodoTargetFocusInput) {
+  const data = await requestGraphql(UpdateTodoTargetFocusDocument, { input });
+  return data.updateTodoTargetFocus as DailyLogPayload;
 }
 
-export async function muteTodoReminderTodayFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: MUTE_TODO_REMINDER_TODAY_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Mute todo reminder failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<MuteTodoReminderTodayMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL muteTodoReminderToday failed");
-  }
-
-  const next = result.data?.muteTodoReminderToday;
-  if (!next) {
-    throw new Error("GraphQL muteTodoReminderToday failed");
-  }
-  return next;
+export async function muteTodoReminderTodayFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(MuteTodoReminderTodayDocument, { input });
+  return data.muteTodoReminderToday as DailyLogPayload;
 }
 
-export async function unmuteTodoReminderFromDailyLog(input: { dateKey: string; todoId: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: UNMUTE_TODO_REMINDER_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Unmute todo reminder failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<UnmuteTodoReminderMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL unmuteTodoReminder failed");
-  }
-
-  const next = result.data?.unmuteTodoReminder;
-  if (!next) {
-    throw new Error("GraphQL unmuteTodoReminder failed");
-  }
-  return next;
+export async function unmuteTodoReminderFromDailyLog(input: TodoActionInput) {
+  const data = await requestGraphql(UnmuteTodoReminderDocument, { input });
+  return data.unmuteTodoReminder as DailyLogPayload;
 }
 
-export async function startRestSession(input: { dateKey: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: START_REST_SESSION_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Start rest session failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<StartRestSessionMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL startRestSession failed");
-  }
-
-  const next = result.data?.startRestSession;
-  if (!next) {
-    throw new Error("GraphQL startRestSession failed");
-  }
-  return next;
+export async function startRestSession(input: RestSessionInput) {
+  const data = await requestGraphql(StartRestSessionDocument, { input });
+  return data.startRestSession as DailyLogPayload;
 }
 
-export async function stopRestSession(input: { dateKey: string }) {
-  const response = await fetchWithBackendStatus(getGraphqlEndpoint(), {
-    method: "POST",
-    headers: buildAuthHeaders(),
-    body: JSON.stringify({
-      query: STOP_REST_SESSION_QUERY,
-      variables: { input },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Stop rest session failed: ${response.status}`);
-  }
-
-  const result = (await response.json()) as GraphQLResponse<StopRestSessionMutation>;
-  if (result.errors?.length) {
-    throw new Error(result.errors[0]?.message ?? "GraphQL stopRestSession failed");
-  }
-
-  const next = result.data?.stopRestSession;
-  if (!next) {
-    throw new Error("GraphQL stopRestSession failed");
-  }
-  return next;
+export async function stopRestSession(input: RestSessionInput) {
+  const data = await requestGraphql(StopRestSessionDocument, { input });
+  return data.stopRestSession as DailyLogPayload;
 }
