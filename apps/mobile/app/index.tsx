@@ -19,7 +19,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import {
   login as loginWithKakaoTalk,
@@ -1303,6 +1303,7 @@ export default function WebViewScreen() {
   const [hasInitialWebViewLoaded, setHasInitialWebViewLoaded] = useState(false);
   const [hasLaunchOverlayMinElapsed, setHasLaunchOverlayMinElapsed] = useState(false);
   const { width, fontScale } = useWindowDimensions();
+  const safeAreaInsets = useSafeAreaInsets();
   const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
   const webUiReleaseChannel = useMemo(
     () =>
@@ -1326,6 +1327,8 @@ export default function WebViewScreen() {
     const rawScale = effectiveWidth / BASE_WIDTH;
     return clamp(rawScale, MIN_SCALE, MAX_SCALE);
   }, [fontScale, width]);
+  const nativeSafeAreaBottomPx = Math.max(0, Math.round(safeAreaInsets.bottom));
+  const nativeSafeAreaTopPx = Math.max(0, Math.round(safeAreaInsets.top));
 
   const calendarLayoutVars = useMemo(() => {
     const normalizedFontScale = clamp(fontScale, 1, 1.2);
@@ -1363,6 +1366,8 @@ export default function WebViewScreen() {
         }
         const root = document.documentElement;
         root.style.setProperty('--ui-scale', '${uiScale.toFixed(3)}');
+        root.style.setProperty('--native-safe-area-inset-bottom', '${nativeSafeAreaBottomPx}px');
+        root.style.setProperty('--native-safe-area-inset-top', '${nativeSafeAreaTopPx}px');
         root.style.setProperty('--calendar-cell-min-h', '${calendarLayoutVars.cellMinHeightRem.toFixed(
           3
         )}rem');
@@ -1398,7 +1403,7 @@ export default function WebViewScreen() {
           document.head?.appendChild(styleEl);
         }
       })(); true;`,
-    [calendarLayoutVars, uiScale]
+    [calendarLayoutVars, nativeSafeAreaBottomPx, nativeSafeAreaTopPx, uiScale]
   );
   const webDebugBridgeScript = useMemo(
     () => `(() => {

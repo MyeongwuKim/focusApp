@@ -202,7 +202,7 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <PageHeader route={MAIN_ROUTE} />
-      <div className="flex min-h-0 flex-1 flex-col pb-[calc(12rem+env(safe-area-inset-bottom))]">
+      <div className="flex min-h-0 flex-1 flex-col pb-[calc(12rem+var(--app-safe-area-bottom))]">
         <CalendarPage
           logsByDate={logsByDate}
           onRequestOpenDateTasksSheet={openDateTasksSheet}

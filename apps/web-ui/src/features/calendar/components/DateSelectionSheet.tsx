@@ -140,7 +140,7 @@ export function DateSelectionSheet({
   return (
     <div
       className="pointer-events-none absolute inset-x-0 z-30"
-      style={{ bottom: "calc(-5.5rem - env(safe-area-inset-bottom))" }}
+      style={{ bottom: "calc(-5.5rem - var(--app-safe-area-bottom))" }}
     >
       <div
         className={[

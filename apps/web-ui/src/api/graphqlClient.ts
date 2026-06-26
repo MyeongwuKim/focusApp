@@ -8,7 +8,7 @@ type RequestGraphqlOptions = {
   signal?: AbortSignal;
 };
 
-type RequestVariables<TVariables> = {} extends TVariables
+type RequestVariables<TVariables> = Record<string, never> extends TVariables
   ? [] | [TVariables] | [TVariables | undefined, RequestGraphqlOptions]
   : [TVariables] | [TVariables, RequestGraphqlOptions];
 

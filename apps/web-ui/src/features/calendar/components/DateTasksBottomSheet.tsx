@@ -37,7 +37,12 @@ function getViewportHeight() {
   if (typeof window === "undefined") {
     return 844;
   }
-  return window.innerHeight || 844;
+  return Math.round(window.visualViewport?.height || window.innerHeight || 844);
+}
+
+function getMeasuredHeight(element: HTMLElement | null) {
+  const nextHeight = Math.round(element?.getBoundingClientRect().height ?? 0);
+  return Number.isFinite(nextHeight) && nextHeight > 0 ? nextHeight : null;
 }
 
 function applyDragResistance(delta: number) {
@@ -153,6 +158,20 @@ export function DateTasksBottomSheet({
   const isSheetHeaderDragEnabled = !isLocalOverlayOpen;
   const bridgeOpacity = isBridgeDragHandleEnabled || (!isExpanded && isHeaderDragging) ? 1 : 0;
 
+  const measureSheetContainerHeight = useCallback(() => {
+    const nextHeight = getMeasuredHeight(sheetContainerRef.current);
+    if (nextHeight !== null) {
+      setSheetContainerHeight(nextHeight);
+    }
+  }, []);
+
+  const measureBarHeight = useCallback(() => {
+    const nextHeight = getMeasuredHeight(barRef.current);
+    if (nextHeight !== null) {
+      setBarHeight(nextHeight);
+    }
+  }, []);
+
   const setLocalOverlayLayerState = useCallback((nextLayer: LocalOverlayLayer) => {
     localOverlayLayerRef.current = nextLayer;
     setLocalOverlayLayer(nextLayer);
@@ -196,24 +215,18 @@ export function DateTasksBottomSheet({
   }, [setLocalOverlayLayerState]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (!isVisible || typeof window === "undefined") {
       return;
     }
     const handleResize = () => {
       setViewportHeight(getViewportHeight());
-      const nextHeight = Math.round(sheetContainerRef.current?.getBoundingClientRect().height ?? 0);
-      if (Number.isFinite(nextHeight) && nextHeight > 0) {
-        setSheetContainerHeight(nextHeight);
-      }
+      measureSheetContainerHeight();
     };
 
     const resizeObserver =
       typeof ResizeObserver !== "undefined" && sheetContainerRef.current
         ? new ResizeObserver(() => {
-            const nextHeight = Math.round(sheetContainerRef.current?.getBoundingClientRect().height ?? 0);
-            if (Number.isFinite(nextHeight) && nextHeight > 0) {
-              setSheetContainerHeight(nextHeight);
-            }
+            measureSheetContainerHeight();
           })
         : null;
     if (resizeObserver && sheetContainerRef.current) {
@@ -225,13 +238,15 @@ export function DateTasksBottomSheet({
     visualViewport?.addEventListener("resize", handleResize);
 
     handleResize();
+    const rafId = window.requestAnimationFrame(handleResize);
 
     return () => {
+      window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", handleResize);
       visualViewport?.removeEventListener("resize", handleResize);
       resizeObserver?.disconnect();
     };
-  }, []);
+  }, [isVisible, measureSheetContainerHeight]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -252,14 +267,31 @@ export function DateTasksBottomSheet({
   }, [setLocalOverlayLayerState]);
 
   useEffect(() => {
-    if (!isVisible) {
+    if (!isVisible || typeof window === "undefined") {
       return;
     }
-    const nextBarHeight = Math.round(barRef.current?.getBoundingClientRect().height ?? 94);
-    if (Number.isFinite(nextBarHeight) && nextBarHeight > 0) {
-      setBarHeight(nextBarHeight);
+
+    measureBarHeight();
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" && barRef.current
+        ? new ResizeObserver(() => {
+            measureBarHeight();
+          })
+        : null;
+    if (resizeObserver && barRef.current) {
+      resizeObserver.observe(barRef.current);
     }
-  }, [isExpanded, isVisible, selectedDateLabel, selectedMemoPreview, selectedTasks.length]);
+
+    const rafId = window.requestAnimationFrame(measureBarHeight);
+    const timeoutId = window.setTimeout(measureBarHeight, 320);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [isExpanded, isVisible, measureBarHeight, selectedDateLabel, selectedMemoPreview, selectedTasks.length]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -480,7 +512,7 @@ export function DateTasksBottomSheet({
           </div>
 
           {!isExpanded ? (
-            <div className="border-t border-base-300/55 bg-base-100/92 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2">
+            <div className="border-t border-base-300/55 bg-base-100/92 px-4 pb-[calc(0.75rem+var(--app-safe-area-bottom))] pt-2">
               <section className="rounded-xl border border-info/18 bg-info/7 px-3 py-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <FiFileText

@@ -50,7 +50,7 @@ export function FooterBar({ onGoToday, onOpenDateSheet }: FooterBarProps) {
 
   return (
     <footer
-      className="mt-0 shrink-0 border-t border-base-300/70 bg-base-200/75 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+      className="mt-0 shrink-0 border-t border-base-300/70 bg-base-200/75 px-3 pt-2 pb-[calc(0.5rem+var(--app-safe-area-bottom))]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
