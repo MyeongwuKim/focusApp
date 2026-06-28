@@ -43,29 +43,100 @@ const requestSchema = z.object({
 type StatsCommentaryRequest = z.infer<typeof requestSchema>;
 type ServiceErrorCode = "OPENAI_KEY_MISSING" | "OPENAI_REQUEST_FAILED" | "OPENAI_EMPTY_RESPONSE";
 
+const structuredCommentarySchema = z.object({
+  summary: z.string().min(1),
+  goodPoint: z.string().min(1).nullable(),
+  weakPoint: z.string().min(1).nullable(),
+  advice: z.string().min(1),
+});
+
+type StructuredCommentaryResponse = z.infer<typeof structuredCommentarySchema>;
+
 function pickCoachVoice(payload: StatsCommentaryRequest) {
   const daySeed = Number(payload.period.end.replaceAll("-", "")) || payload.period.days;
   const variants = ["담백한 코치", "전략형 플래너", "차분한 파트너"] as const;
   return variants[daySeed % variants.length];
 }
 
-function normalizeCommentaryTone(text: string) {
-  return text
-    .replaceAll("해봅시다", "해볼까요?")
-    .replaceAll("해보시죠", "해볼까요?")
-    .replaceAll("합시다", "해볼까요?")
-    .replaceAll("하세요.", "해요.")
-    .replaceAll("하세요!", "해요!")
-    .replaceAll("흐름이에요.", "흐름이었어요.")
-    .replaceAll("흐름이에요", "흐름이었어요")
-    .replaceAll("살펴봐요.", "살펴봤어요.")
-    .replaceAll("정리해요.", "정리했어요.")
-    .replace(/(\d+)분간/g, "$1분 동안")
-    .replaceAll("작업 중", "작업할 때");
+function normalizeCommentaryText(text: string) {
+  return text.replaceAll("할일", "할 일").replaceAll("리액트", "React").trim();
+}
+
+function normalizeCommentaryBody(text: string) {
+  return normalizeCommentaryText(text).replace(/\s+/g, " ").trim();
 }
 
 const COMMENTARY_LABELS = ["요약", "잘한점", "아쉬운점", "플래너조언"] as const;
 type CommentaryLabel = (typeof COMMENTARY_LABELS)[number];
+
+const COMMENTARY_RESPONSE_FORMAT = {
+  type: "json_schema",
+  name: "stats_commentary",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      summary: {
+        type: "string",
+        description: "요약 섹션의 자연스러운 한국어 한 문장",
+      },
+      goodPoint: {
+        type: ["string", "null"],
+        description: "잘한점 섹션의 자연스러운 한국어 한 문장. 작성하지 않는 경우 null",
+      },
+      weakPoint: {
+        type: ["string", "null"],
+        description: "아쉬운점 섹션의 자연스러운 한국어 한 문장. 작성하지 않는 경우 null",
+      },
+      advice: {
+        type: "string",
+        description: "플래너조언 섹션의 자연스러운 한국어 한 문장",
+      },
+    },
+    required: ["summary", "goodPoint", "weakPoint", "advice"],
+  },
+} as const;
+
+const UNNATURAL_COMMENTARY_PATTERNS = [
+  /작업\s*완결/,
+  /시간을\s*투자/,
+  /주요\s*작업/,
+  /반복되어/,
+  /확인했어요/,
+  /완료\s*\d+개를\s*남겨/,
+  /완료한\s*기록을\s*\d+개\s*남겨/,
+  /작게라도/,
+  /누적됐어요/,
+  /\d+일\s*중\s*\d+일\s*동안/,
+  /미완료(?:가|는)?\s*\d+일(?:이나)?\s*(?:발생|기록)/,
+  /\d+일에\s*(?:발생|기록)/,
+  /관련\s*작업에서\s*어려움/,
+  /끝나지\s*않아/,
+  /아쉬움(?:이|은)?\s*(?:있었|남았)/,
+  /(?:합시다|해봅시다|해보시죠|하십시오|하세요[.!]?|할게요)/,
+  /(?:흐름|패턴)이에요/,
+  /(?:살펴봐요|정리해요)/,
+];
+
+function hasMeaningfulGoodPoint(payload: StatsCommentaryRequest) {
+  return payload.totals.doneCount > 0 || payload.totals.focusMinutes > 0;
+}
+
+function hasMeaningfulWeakPoint(payload: StatsCommentaryRequest) {
+  const totalTodos = payload.totals.doneCount + payload.totals.incompleteCount;
+  const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
+  return payload.totals.incompleteCount > 0 || (totalTodos > 0 && resumePerTodo >= 1);
+}
+
+function getEnabledCommentaryLabels(payload: StatsCommentaryRequest): CommentaryLabel[] {
+  return [
+    "요약",
+    ...(hasMeaningfulGoodPoint(payload) ? (["잘한점"] as const) : []),
+    ...(hasMeaningfulWeakPoint(payload) ? (["아쉬운점"] as const) : []),
+    "플래너조언",
+  ];
+}
 
 function resolvePeriodLabel(period: StatsCommentaryRequest["period"]) {
   const preset = period.preset.toLowerCase();
@@ -73,7 +144,7 @@ function resolvePeriodLabel(period: StatsCommentaryRequest["period"]) {
     return "일주일";
   }
   if (preset.includes("month")) {
-    return "한달";
+    return "한 달";
   }
   if (preset.includes("year")) {
     return "1년";
@@ -91,32 +162,39 @@ function buildDeterministicCommentary(payload: StatsCommentaryRequest): Record<C
   const totalTodos = doneCount + incompleteCount;
   const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
   const activePhrase = activeDays === 1 ? `${periodLabel} 중 하루만 진행했고` : `${periodLabel} 동안 ${activeDays}일 진행했고`;
+  const topIncompleteTask = payload.frequentIncompleteTasks[0];
 
   const summary =
     totalTodos === 0 && focusMinutes === 0
-      ? `${activePhrase} 할일과 집중 기록은 거의 없었어요.`
+      ? `${activePhrase} 할 일과 집중 기록은 거의 없었어요.`
       : totalTodos === 0
-      ? `${activePhrase} 할일 완료는 0개였고 집중은 ${focusMinutes}분이었어요.`
+      ? `${activePhrase} 할 일 완료는 0개였고 집중은 ${focusMinutes}분이었어요.`
       : `${activePhrase} 완료 ${doneCount}개, 미완료 ${incompleteCount}개로 완료율 ${completionRate}%였고 집중은 ${focusMinutes}분이었어요.`;
 
   const goodPoint =
     Number(payload.rates.completionRate) >= 70
-      ? `완료율이 ${completionRate}%로 유지돼서 할일 마무리 흐름이 안정적이었어요.`
+      ? `완료율이 ${completionRate}%로 유지돼서 할 일 마무리 흐름이 안정적이었어요.`
+      : doneCount > 0
+      ? `${doneCount}개를 완료해 마무리한 기록이 있었어요.`
       : payload.meta.daysWithFocus > 0
       ? `집중 기록일이 ${payload.meta.daysWithFocus}일이라 최소한의 실행 리듬은 이어졌어요.`
-      : `활동 기록일이 ${activeDays}일이라 기록 흐름이 끊기지 않았어요.`;
+      : topIncompleteTask
+      ? `${topIncompleteTask.label} 기록이 ${topIncompleteTask.count}번 남아 우선 정리할 작업이 분명해졌어요.`
+      : activeDays > 0
+      ? `${activeDays}일 동안 기록을 남겨서 다음 계획을 세울 단서가 생겼어요.`
+      : "이번 기간은 기록이 적어서 다음 계획을 세울 출발점만 확인했어요.";
 
   const weakPoint =
     incompleteCount > 0
-      ? `미완료가 ${incompleteCount}개라 완료 전에 멈춘 작업이 누적됐어요.`
+      ? `끝내지 못한 일이 ${incompleteCount}개 남았어요.`
       : resumePerTodo >= 1
-      ? `할일당 재개가 ${resumePerTodo.toFixed(2)}회라 한 번에 끝내기 어려운 구간이 있었어요.`
+      ? `할 일당 재개가 ${resumePerTodo.toFixed(2)}회라 한 번에 끝내기 어려운 구간이 있었어요.`
       : `기록일 대비 완료량 편차가 있어 일정한 마무리 흐름은 조금 아쉬웠어요.`;
 
   const advice =
     incompleteCount > 0
       ? "미완료가 많은 항목부터 오늘 완료 기준을 한 줄로 정하고 같은 유형을 묶어서 처리해보면 좋아요."
-      : "하루 시작할 때 가장 오래 걸리는 할일 1개를 먼저 고정해서 완료 흐름을 만들어보면 좋아요.";
+      : "하루 시작할 때 가장 오래 걸리는 할 일 1개를 먼저 고정해서 완료 흐름을 만들어보면 좋아요.";
 
   return {
     요약: summary,
@@ -126,7 +204,10 @@ function buildDeterministicCommentary(payload: StatsCommentaryRequest): Record<C
   };
 }
 
-function extractCommentarySections(text: string): Partial<Record<CommentaryLabel, string>> {
+function extractCommentarySections(
+  text: string,
+  fallbackLabelOrder: readonly CommentaryLabel[] = COMMENTARY_LABELS
+): Partial<Record<CommentaryLabel, string>> {
   const lines = text
     .split("\n")
     .map((line) => line.trim())
@@ -154,7 +235,7 @@ function extractCommentarySections(text: string): Partial<Record<CommentaryLabel
     }
   }
 
-  for (const label of COMMENTARY_LABELS) {
+  for (const label of fallbackLabelOrder) {
     if (!sections[label] && unlabeledBodies.length > 0) {
       sections[label] = unlabeledBodies.shift();
     }
@@ -163,38 +244,83 @@ function extractCommentarySections(text: string): Partial<Record<CommentaryLabel
   return sections;
 }
 
-function finalizeCommentary(text: string, payload: StatsCommentaryRequest) {
-  const normalized = normalizeCommentaryTone(text);
-  const parsed = extractCommentarySections(normalized);
+function hasUnnaturalCommentaryPhrase(body: string) {
+  return UNNATURAL_COMMENTARY_PATTERNS.some((pattern) => pattern.test(body));
+}
+
+function shouldRejectCommentaryBody(body: string, requireMetric: boolean) {
+  const hasPlaceholderLikeText =
+    body.includes("기록이 적어서") ||
+    body.includes("기록이 많지 않아") ||
+    body.includes("관찰된 내용만") ||
+    body.includes("최근 활동 기준으로만");
+  if (hasPlaceholderLikeText) {
+    return true;
+  }
+  if (requireMetric && !/\d/.test(body)) {
+    return true;
+  }
+  if (hasUnnaturalCommentaryPhrase(body)) {
+    return true;
+  }
+  return body.length < 6;
+}
+
+function finalizeCommentarySections(
+  sections: Partial<Record<CommentaryLabel, string>>,
+  payload: StatsCommentaryRequest
+) {
+  const enabledLabels = getEnabledCommentaryLabels(payload);
   const fallback = buildDeterministicCommentary(payload);
 
-  const shouldReject = (body: string, requireMetric: boolean) => {
-    const hasPlaceholderLikeText =
-      body.includes("기록이 적어서") ||
-      body.includes("기록이 많지 않아") ||
-      body.includes("관찰된 내용만") ||
-      body.includes("최근 활동 기준으로만");
-    if (hasPlaceholderLikeText) {
-      return true;
-    }
-    if (requireMetric && !/\d/.test(body)) {
-      return true;
-    }
-    return body.length < 6;
-  };
-
-  const lines = COMMENTARY_LABELS.map((label) => {
-    const candidate = parsed[label]?.trim();
+  const lines = enabledLabels.map((label) => {
+    const candidate = sections[label]?.trim();
     const requireMetric = label === "요약" || label === "잘한점";
-    const body = candidate && !shouldReject(candidate, requireMetric) ? candidate : fallback[label];
+    const normalizedCandidate = candidate ? normalizeCommentaryBody(candidate) : undefined;
+    const body =
+      normalizedCandidate && !shouldRejectCommentaryBody(normalizedCandidate, requireMetric)
+        ? normalizedCandidate
+        : fallback[label];
     return `${label}: ${body}`;
   });
 
-  if (lines.length !== COMMENTARY_LABELS.length) {
-    return COMMENTARY_LABELS.map((label) => `${label}: ${fallback[label]}`).join("\n");
+  if (lines.length !== enabledLabels.length) {
+    return enabledLabels.map((label) => `${label}: ${fallback[label]}`).join("\n");
   }
 
   return lines.join("\n");
+}
+
+function finalizeCommentary(text: string, payload: StatsCommentaryRequest) {
+  const normalized = normalizeCommentaryText(text);
+  const enabledLabels = getEnabledCommentaryLabels(payload);
+  const parsed = extractCommentarySections(normalized, enabledLabels);
+  return finalizeCommentarySections(parsed, payload);
+}
+
+function parseStructuredCommentary(text: string) {
+  try {
+    const parsedJson = JSON.parse(text) as unknown;
+    const parsed = structuredCommentarySchema.safeParse(parsedJson);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function finalizeStructuredCommentary(
+  response: StructuredCommentaryResponse,
+  payload: StatsCommentaryRequest
+) {
+  return finalizeCommentarySections(
+    {
+      요약: response.summary,
+      잘한점: response.goodPoint ?? undefined,
+      아쉬운점: response.weakPoint ?? undefined,
+      플래너조언: response.advice,
+    },
+    payload
+  );
 }
 
 function buildPrompt(payload: StatsCommentaryRequest) {
@@ -202,106 +328,110 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     payload.frequentIncompleteTasks.length > 0
       ? payload.frequentIncompleteTasks.map((item) => `${item.label}(${item.count}회)`).join(", ")
       : "없음";
-  const periodDays = payload.period.days;
-  const periodMode =
-    periodDays <= 1
-      ? "daily"
-      : periodDays <= 14
-      ? "weekly"
-      : periodDays <= 45
-      ? "monthly"
-      : periodDays <= 400
-      ? "yearly"
-      : "longterm";
-  const sparseData = payload.meta.activeDays <= 3 || payload.meta.dataCoverageRate < 12;
-  const lowData = payload.meta.activeDays <= 7 || payload.meta.dataCoverageRate < 25;
   const totalTodos = payload.totals.doneCount + payload.totals.incompleteCount;
   const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
-  const primaryLens =
-    payload.rates.completionRate >= 75 && resumePerTodo <= 0.5
-      ? "execution"
-      : payload.rates.incompleteRate >= 45
-      ? "unfinished"
-      : resumePerTodo >= 1.5
-      ? "rhythm"
-      : payload.meta.dataCoverageRate >= 60
-      ? "consistency"
-      : "sampling";
-  const periodToneHint =
-    periodMode === "daily"
-      ? "오늘 기준 관찰만 말하고 장기 판단은 금지"
-      : periodMode === "weekly"
-      ? "이번 주 반복 패턴 1개와 다음 주 유지 포인트 1개 제안"
-      : periodMode === "monthly"
-      ? "이번 달 흐름의 변화와 유지/정비 포인트 제안"
-      : "넓은 기간이더라도 실제 기록된 활동일 기준으로만 판단";
   const coachVoice = pickCoachVoice(payload);
-  const sparseToneHint = sparseData
-    ? "기록이 적으면 판단 경고를 딱딱하게 쓰지 말고, 부드러운 관찰 문장으로 짧게 안내"
-    : lowData
-    ? "표본이 충분하지 않다면 결론 단정 대신 최근 관찰 중심으로 정리"
-    : "기록 근거를 바탕으로 간결하게 요약";
+  const enabledLabels = getEnabledCommentaryLabels(payload);
+  const draft = buildDeterministicCommentary(payload);
+  const draftFormat = enabledLabels.map((label) => `${label}: ${draft[label]}`);
+  const disabledLabels = COMMENTARY_LABELS.filter((label) => !enabledLabels.includes(label));
+  const enabledFieldNames = enabledLabels
+    .map((label) =>
+      label === "요약"
+        ? "summary"
+        : label === "잘한점"
+        ? "goodPoint"
+        : label === "아쉬운점"
+        ? "weakPoint"
+        : "advice"
+    )
+    .join(", ");
+  const disabledFieldNames = disabledLabels
+    .map((label) => (label === "잘한점" ? "goodPoint" : label === "아쉬운점" ? "weakPoint" : null))
+    .filter((label): label is "goodPoint" | "weakPoint" => label !== null)
+    .join(", ");
 
   return [
-    "너는 실무형 생산성 코치다.",
-    "입력 데이터만 근거로 자연스럽고 짧은 요약을 작성한다.",
-    `이번 응답의 말투 페르소나: ${coachVoice}`,
-    "절대 규칙:",
-    "- 반드시 한국어로 작성한다.",
-    "- 반드시 아래 4줄 형식을 정확히 지킨다(순서/제목 고정).",
-    "- 각 줄은 1문장으로 작성하고 전체는 4문장으로 끝낸다.",
-    "- 비난, 훈계, 과장, 반말, 근거 없는 단정 금지.",
-    "- 어색한 메타 표현 금지(예: '추세 판단은 조심해야 합니다').",
-    "- 같은 표현 반복 금지.",
-    "- 문체는 반드시 부드러운 해요체로 작성한다.",
-    "- 종결 어미는 '~했어요', '~였어요' 중심으로 사용한다.",
-    "- '~합시다', '~해봅시다', '~하십시오', '~할게요' 같은 말투는 금지한다.",
-    "- '~흐름이에요', '~패턴이에요' 같은 명사형 종결 문장은 금지한다.",
-    "- 문장은 짧고 직관적으로 작성한다.",
+    "너는 모바일 생산성 앱에 들어갈 짧은 한국어 문장을 교정하는 카피 에디터다.",
+    `이번 편집 톤: ${coachVoice}`,
+    "새 분석을 하지 않는다. 기준 초안의 숫자, 판단, 의도만 유지한다.",
     "",
-    "출력 형식(그대로):",
-    "요약: 기간 핵심을 한 문장으로 정리",
-    "잘한점: 데이터 근거 1개를 넣어 정리",
-    "아쉬운점: 부족했던 지점을 한 문장으로 정리",
-    "플래너조언: 바로 적용 가능한 조정 1개 제안",
+    "작업 방식:",
+    "- 초안이 충분히 자연스러우면 그대로 사용한다.",
+    "- 어색한 표현만 최소한으로 바꾼다.",
+    "- 숫자, 기간, 완료/미완료 의미를 바꾸지 않는다.",
+    "- 초안에 없는 원인, 감정, 기술명, 장기 해석을 추가하지 않는다.",
+    "- 더 자연스럽게 고칠 자신이 없으면 초안을 그대로 쓴다.",
     "",
-    "작성 기준:",
-    "- 요약과 잘한점에는 숫자 근거를 포함한다.",
-    "- 요약은 기간 단위를 명시하고 활동일/완료/미완료를 함께 정리한다.",
-    "- 예시: '일주일 중 하루만 진행했고 완료 2개, 미완료 1개였어요.'",
-    "- 완료율/재개횟수/활동일 수를 함께 보고 핵심만 정리한다.",
-    "- 데이터가 적으면 장기 판단을 하지 않는다.",
-    "- 어색한 합성어를 피하고 일상적인 표현으로 작성한다.",
+    "출력:",
+    "- JSON 객체만 반환한다.",
+    `- 작성할 필드: ${enabledFieldNames}`,
+    disabledFieldNames
+      ? `- 작성하지 않는 필드는 null로 둔다: ${disabledFieldNames}`
+      : "- 모든 필드에 문장을 작성한다.",
+    "- 각 값은 한 문장만 작성한다.",
+    "- 각 문장은 45자 이내를 목표로 한다.",
     "",
-    "금지 어휘/문장 예시:",
-    "- 추세 판단은 조심해야 합니다",
-    "- 꾸준히 잘하고 있습니다(근거 없음)",
-    "- 항상/절대/반드시",
+    "말투:",
+    "- 부드러운 해요체를 사용한다.",
+    "- 관찰 문장은 '~했어요', '~였어요', '~있었어요' 중심으로 끝낸다.",
+    "- 조언 문장은 '~해보면 좋아요' 형태로 끝낸다.",
+    "- 명령형, 훈계형, 보고서체, 번역투, 메타 표현을 쓰지 않는다.",
+    "- '합시다', '해봅시다', '하세요', '하십시오', '할게요'를 쓰지 않는다.",
+    "- '~흐름이에요', '~패턴이에요' 같은 명사형 종결을 쓰지 않는다.",
     "",
-    `이번 요청의 기간모드: ${periodMode}`,
-    `이번 요청의 초점 렌즈: ${primaryLens}`,
-    `기간 톤 힌트: ${periodToneHint}`,
-    `저표본 문장 톤 힌트: ${sparseToneHint}`,
+    "필드 기준:",
+    hasMeaningfulGoodPoint(payload)
+      ? "- summary와 goodPoint는 초안의 숫자 근거를 유지한다."
+      : "- goodPoint는 null로 둔다.",
+    hasMeaningfulGoodPoint(payload)
+      ? "- goodPoint는 사용자가 한 행동이나 얻은 단서만 다룬다."
+      : "- 완료와 집중이 모두 0이면 억지 칭찬을 만들지 않는다.",
+    hasMeaningfulWeakPoint(payload)
+      ? "- weakPoint는 초안에 있는 미완료나 재개 마찰만 구체적으로 다룬다."
+      : "- weakPoint는 null로 둔다.",
+    "- advice는 바로 적용 가능한 조정 하나만 말한다.",
     "",
+    "표현 기준:",
+    "- '할일' 대신 '할 일'로 띄어 쓴다.",
+    "- '완료 32개를 남겨'는 쓰지 않고 '32개를 완료해'처럼 쓴다.",
+    "- '미완료가 12일에 발생'처럼 날짜로 읽히는 표현은 쓰지 않는다.",
+    "- '365일 중 19일 동안'처럼 중/동안을 겹쳐 쓰지 않는다.",
+    "- 미완료 날짜 수는 '기록된 날이 12일'처럼 쓴다.",
+    "- weakPoint에서 '아쉬움'이라는 감정 표현을 반복하지 않는다.",
+    "- 작업명은 반복 횟수 이상의 원인으로 해석하지 않는다.",
+    "- 어색한 합성어보다 일상적인 표현을 쓴다.",
+    "",
+    "금지 표현:",
+    "- 작업 완결",
+    "- 시간을 투자",
+    "- 주요 작업",
+    "- 반복되어",
+    "- 확인했어요",
+    "- 작게라도",
+    "- 누적됐어요",
+    "- N일에 발생",
+    "- 아쉬움이 있었어요",
+    "",
+    "기준 초안:",
+    ...draftFormat,
+    "",
+    "참고 데이터(읽기 전용, 새 분석 금지):",
     `기간: ${payload.period.start} ~ ${payload.period.end} (${payload.period.days}일, preset=${payload.period.preset})`,
     `활동 기록일: ${payload.meta.activeDays}일 (coverage ${payload.meta.dataCoverageRate.toFixed(1)}%)`,
     `활동 기록 범위: ${payload.meta.firstActiveDate ?? "없음"} ~ ${payload.meta.lastActiveDate ?? "없음"}`,
-    `할일 기록일: ${payload.meta.daysWithTodos}일 / 집중 기록일: ${payload.meta.daysWithFocus}일 / 미완료 발생일: ${payload.meta.daysWithIncomplete}일`,
+    `할 일 기록일: ${payload.meta.daysWithTodos}일 / 집중 기록일: ${payload.meta.daysWithFocus}일 / 미완료가 기록된 날짜 수: ${payload.meta.daysWithIncomplete}일`,
     `완료: ${payload.totals.doneCount}개`,
     `미완료: ${payload.totals.incompleteCount}개`,
     `완료율: ${payload.rates.completionRate.toFixed(1)}%`,
     `미완료율: ${payload.rates.incompleteRate.toFixed(1)}%`,
     `집중: ${payload.totals.focusMinutes}분`,
     `재개: ${payload.totals.resumeCount}회`,
-    `할일당 재개: ${resumePerTodo.toFixed(2)}회`,
+    `할 일당 재개: ${resumePerTodo.toFixed(2)}회`,
     `휴식: ${payload.totals.restMinutes}분`,
     `활동일 평균 완료: ${payload.meta.avgDonePerActiveDay.toFixed(2)}개`,
     `활동일 평균 미완료: ${payload.meta.avgIncompletePerActiveDay.toFixed(2)}개`,
     `자주 미완료된 작업: ${frequentIncompleteTaskLine}`,
-    `저표본 여부: ${sparseData ? "매우 높음" : lowData ? "있음" : "낮음"}`,
-    "작성 전 체크:",
-    "- 4줄 제목이 정확한가?",
-    "- 각 줄이 자연스럽고 짧은가?",
   ].join("\n");
 }
 
@@ -321,8 +451,11 @@ async function requestCommentary(payload: StatsCommentaryRequest) {
     body: JSON.stringify({
       model: env.OPENAI_MODEL,
       input: buildPrompt(payload),
-      temperature: 0.6,
-      max_output_tokens: 240,
+      temperature: 0.25,
+      max_output_tokens: 360,
+      text: {
+        format: COMMENTARY_RESPONSE_FORMAT,
+      },
     }),
   });
 
@@ -353,7 +486,8 @@ async function requestCommentary(payload: StatsCommentaryRequest) {
     (error as Error & { code?: ServiceErrorCode }).code = "OPENAI_EMPTY_RESPONSE";
     throw error;
   }
-  return finalizeCommentary(text, payload);
+  const structured = parseStructuredCommentary(text);
+  return structured ? finalizeStructuredCommentary(structured, payload) : finalizeCommentary(text, payload);
 }
 
 export async function registerStatsCommentaryRoute(app: FastifyInstance) {

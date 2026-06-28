@@ -91,7 +91,7 @@ export function StatsAiCommentaryCard({
   }, [isVisible]);
 
   const commentaryQuery = useQuery({
-    queryKey: ["stats-commentary-v5", payload],
+    queryKey: ["stats-commentary-v12", payload],
     queryFn: () => fetchStatsCommentary(payload),
     enabled: canUseCommentary && !isDataFetching && isVisible,
     meta: { skipGlobalErrorToast: true },
