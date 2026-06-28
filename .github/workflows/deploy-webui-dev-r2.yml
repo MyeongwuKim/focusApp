@@ -164,6 +164,11 @@ jobs:
             --content-type "application/json" \
             --cache-control "no-cache"
 
+      - name: Cleanup old R2 releases
+        env:
+          WEBUI_RELEASES_TO_KEEP: 5
+        run: node scripts/prune-r2-webui-releases.mjs
+
       - name: Summary
         run: |
           echo "Deployed version: ${{ steps.version.outputs.next_version }}"
