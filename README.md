@@ -154,11 +154,15 @@
 - `latest/manifest.json` 기준으로 patch 버전 자동 증가 후 릴리즈 생성
 - R2 저장소(`releases/{version}/`)에 `web-ui.zip`, `manifest.json` 업로드
 - `latest/manifest.json`을 최신 릴리즈로 갱신
+- 배포 성공 후 오래된 R2 릴리즈를 자동 정리
 
 운영하면서 정리한 기준:
+- 문서와 코드는 `develop`에서 먼저 수정하고, 배포 시점에 `master`를 fast-forward로 맞춤
 - 트리거는 `apps/web-ui/**`, lockfile, 워크플로우 파일 변경으로 제한
 - 배포 아티팩트는 `web-ui.zip + manifest.json`만 유지
 - `dist` 원본 파일 업로드를 제거해 릴리즈 구조 단순화
+- `latest/manifest.json`은 유지하고 `releases/{version}/`만 정리
+- 롤백 여지를 위해 dev/prod 모두 최신 5개 릴리즈 유지
 
 결과:
 - 웹 변경을 앱 재설치 없이 반영 가능한 구조 확보
@@ -166,10 +170,17 @@
 - 릴리즈 버전 추적과 롤백 기준 명확화
 
 앱 실행 시 업데이트 동작:
-- 모바일 버전 워커가 앱 내 현재 번들 버전과 R2 매니페스트 버전 비교
+- 모바일 버전 워커가 앱 내 현재 WebUI 버전과 R2 매니페스트 버전 비교
 - 원격 버전이 더 높으면 기존 active 번들 디렉터리 삭제
 - 새 `web-ui.zip` 다운로드 후 staging 경로에 압축 해제
 - 검증 완료 후 staging을 active로 교체해 화면 번들 업데이트
+- `minimumNativeVersion`이 현재 앱 버전보다 높으면 웹 번들 적용 대신 업데이트 안내 표시
+
+버전 관리 기준:
+- 앱 버전은 `apps/mobile/app.json`의 `expo.version` 기준
+- WebUI 버전은 R2 `latest/manifest.json`의 `version` 기준
+- prod 앱 빌드에는 EAS production env의 `EXPO_PUBLIC_WEBUI_MANIFEST_URL` 필요
+- manifest URL이 빌드에 포함되지 않으면 원격 버전 체크 없이 내장 WebUI 버전으로 동작
 
 ## ✅ Test & Quality
 

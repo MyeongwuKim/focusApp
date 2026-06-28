@@ -40,6 +40,15 @@ EXPO_PUBLIC_ANDROID_PLAY_STORE_URL=
 - `EXPO_PUBLIC_IOS_APP_STORE_URL`: 강제 업데이트 시 이동할 iOS App Store URL
 - `EXPO_PUBLIC_ANDROID_PLAY_STORE_URL`: 강제 업데이트 시 이동할 Android Play Store URL
 
+EAS 빌드에서는 `eas.json`의 build profile에 연결된 environment 값이 사용됩니다. production 빌드가 prod R2 manifest를 읽으려면 EAS production env에 아래 값이 있어야 합니다.
+
+```bash
+EXPO_PUBLIC_WEBUI_CHANNEL=prod
+EXPO_PUBLIC_WEBUI_MANIFEST_URL=https://<prod-r2-public-base-url>/latest/manifest.json
+```
+
+`EXPO_PUBLIC_` 값은 앱 JS 번들에 빌드 시점에 포함됩니다. EAS env를 추가하거나 수정한 뒤에는 기존 앱에 바로 반영되지 않으므로 새 production 빌드가 필요합니다.
+
 ## 3) 주요 스크립트
 
 ```bash
@@ -77,12 +86,27 @@ pnpm -C apps/mobile lint
     "ios": {
       "bundleIdentifier": "com.myeongwu.focushybrid.t",
       "version": "1.0.0",
-      "buildNumber": "3"
+      "buildNumber": "9"
     },
     "android": {
       "package": "com.myeongwu.focushybrid.t",
       "version": "1.0.0",
       "versionCode": 1
+    }
+  },
+  "prod": {
+    "appName": "타임스택",
+    "appScheme": "mobile",
+    "versionSource": "expo",
+    "ios": {
+      "bundleIdentifier": "com.myeongwu.focushybrid",
+      "versionSource": "expo",
+      "buildNumberSource": "eas-remote"
+    },
+    "android": {
+      "package": "com.myeongwu.focushybrid",
+      "versionSource": "expo",
+      "versionCodeSource": "eas-remote"
     }
   }
 }
@@ -91,6 +115,16 @@ pnpm -C apps/mobile lint
 Expo/EAS 빌드는 `app.config.ts`가 `native.config.json`을 읽어 variant별 설정을 반영합니다.
 
 R2 웹UI 배포 workflow는 같은 파일의 `webUi.minimumNativeVersion`을 읽어 `manifest.json`에 포함합니다. 앱은 시작 시 manifest의 최소 네이티브 버전을 현재 앱 버전과 비교하고, 미달이면 웹 번들 적용을 막습니다.
+
+앱 버전과 WebUI 버전은 서로 다른 값입니다.
+
+- 앱 버전: `app.json`의 `expo.version` 또는 test variant의 `native.config.json` 버전
+- WebUI 버전: R2 `latest/manifest.json`의 `version`
+- 최소 네이티브 버전: R2 manifest의 `minimumNativeVersion`
+
+앱의 Drawer에 표시되는 `WebUI` 버전은 원격 manifest의 `version`을 받아 번들 설치에 성공한 뒤 저장된 값입니다. prod manifest가 올라가 있는데도 `WebUI 1.0.0`으로 보이면 production 빌드에 `EXPO_PUBLIC_WEBUI_MANIFEST_URL`이 포함되어 있는지 먼저 확인합니다.
+
+## 5) 로컬 네이티브 프로젝트 동기화
 
 Xcode와 Android Studio는 `native.config.json`을 직접 읽지 않기 때문에, 로컬 네이티브 프로젝트를 직접 열기 전에는 아래 명령으로 값을 동기화합니다.
 
@@ -114,7 +148,17 @@ pnpm -C apps/mobile native:sync:prod
 
 기존 `native:version:sync:*` 명령도 호환용 alias로 유지합니다.
 
-## 5) 테스트
+## 6) WebUI R2 릴리즈 정리
+
+WebUI 배포 workflow는 R2 업로드가 끝난 뒤 오래된 release prefix를 자동으로 정리합니다.
+
+- 정리 대상: `releases/{version}/`
+- 유지 대상: 최신 5개 semver 릴리즈
+- 제외 대상: `latest/manifest.json`
+
+유지 개수는 workflow의 `WEBUI_RELEASES_TO_KEEP` 값으로 조정합니다. 롤백을 위해 기본값은 5개로 둡니다.
+
+## 7) 테스트
 
 현재 `apps/mobile`은 별도 테스트 러너 스크립트가 없습니다.
 테스트를 추가할 경우 `package.json`에 `test` 스크립트를 먼저 정의해서 사용하면 됩니다.
