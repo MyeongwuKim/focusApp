@@ -179,8 +179,7 @@
 버전 관리 기준:
 - 앱 버전은 `apps/mobile/app.json`의 `expo.version` 기준
 - WebUI 버전은 R2 `latest/manifest.json`의 `version` 기준
-- prod 앱 빌드에는 EAS production env의 `EXPO_PUBLIC_WEBUI_MANIFEST_URL` 필요
-- manifest URL이 빌드에 포함되지 않으면 원격 버전 체크 없이 내장 WebUI 버전으로 동작
+- 모바일 빌드 환경변수는 `apps/mobile/README.md` 기준으로 관리
 
 ## ✅ Test & Quality
 
