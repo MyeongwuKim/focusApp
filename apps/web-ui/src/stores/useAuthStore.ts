@@ -6,7 +6,7 @@ type AuthUser = {
   email: string;
 };
 
-export type AuthProvider = "kakao" | "naver";
+export type AuthProvider = "apple" | "kakao" | "naver";
 
 type AuthState = {
   token: string | null;

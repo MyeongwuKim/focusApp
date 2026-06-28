@@ -55,6 +55,15 @@ const envSchema = z.object({
   NAVER_CLIENT_ID: z.string().min(1).optional(),
   NAVER_CLIENT_SECRET: z.string().min(1).optional(),
   NAVER_REDIRECT_URI: z.url().optional(),
+  APPLE_CLIENT_IDS: z
+    .string()
+    .default("com.myeongwu.focushybrid,com.myeongwu.focushybrid.t")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((clientId) => clientId.trim())
+        .filter((clientId) => clientId.length > 0)
+    ),
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
   BATCH_API_SECRET: z.string().min(1).optional(),

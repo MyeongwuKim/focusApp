@@ -14,11 +14,22 @@ type KakaoOAuthTokenLike = {
   accessToken?: string | null;
 };
 
+type AppleCredentialLike = {
+  identityToken: string;
+  fullName?: string | null;
+};
+
 export type AuthBridgeHandlerDeps = {
   sendBridgeResult: SendBridgeResult;
   hybridApiOrigin: string;
+  requestNativeAppleCredential: () => Promise<AppleCredentialLike>;
   requestNativeNaverAccessToken: () => Promise<string>;
   requestNativeKakaoOAuthToken: () => Promise<KakaoOAuthTokenLike>;
+  exchangeAppleIdentityTokenForSession: (input: {
+    apiOrigin: string;
+    identityToken: string;
+    fullName?: string | null;
+  }) => Promise<NativeSessionResult>;
   exchangeNaverAccessTokenForSession: (input: {
     apiOrigin: string;
     accessToken: string;
@@ -71,6 +82,44 @@ export async function handleAuthBridgeMessage(
         payload: {
           ok: false,
           error: deps.resolveNativeErrorCode(error, "NAVER_NATIVE_LOGIN_FAILED"),
+        },
+      });
+    }
+
+    return true;
+  }
+
+  if (messageType === "REST_AUTH_APPLE_LOGIN_REQUEST") {
+    const requestId = readBridgeRequestId(parsedData);
+    if (!requestId) {
+      return true;
+    }
+
+    try {
+      const credential = await deps.requestNativeAppleCredential();
+      const session = await deps.exchangeAppleIdentityTokenForSession({
+        apiOrigin: deps.hybridApiOrigin,
+        identityToken: credential.identityToken,
+        fullName: credential.fullName,
+      });
+
+      deps.sendBridgeResult({
+        type: "REST_AUTH_APPLE_LOGIN_RESULT",
+        requestId,
+        payload: {
+          ok: true,
+          token: session.token,
+          userId: session.userId,
+        },
+      });
+    } catch (error) {
+      console.log("Native Apple login bridge failed:", error);
+      deps.sendBridgeResult({
+        type: "REST_AUTH_APPLE_LOGIN_RESULT",
+        requestId,
+        payload: {
+          ok: false,
+          error: deps.resolveNativeErrorCode(error, "APPLE_NATIVE_LOGIN_FAILED"),
         },
       });
     }

@@ -1,17 +1,20 @@
 import { useState, type MouseEvent } from "react";
 import { getApiOrigin } from "../api/graphqlEndpoint";
+import { FaApple } from "react-icons/fa";
 import { SiKakaotalk, SiNaver } from "react-icons/si";
 import {
   getNativeAppScheme,
+  getNativePlatform,
   getNativeWebViewBridge,
   isNativeWebViewRuntime,
 } from "../utils/runtimeEnvironment";
 
-type AuthProvider = "kakao" | "naver";
+type AuthProvider = "apple" | "kakao" | "naver";
+type WebOAuthProvider = Exclude<AuthProvider, "apple">;
 
 const NATIVE_PROVIDER_LOGIN_SESSION_TIMEOUT_MS = 60000;
 
-function buildOAuthStartUrl(provider: AuthProvider) {
+function buildOAuthStartUrl(provider: WebOAuthProvider) {
   const apiOrigin = getApiOrigin();
   const redirectTo =
     isNativeWebViewRuntime()
@@ -111,16 +114,23 @@ function isNativeLoginCancelledError(provider: AuthProvider, error: unknown) {
     return code.includes("NAVER_NATIVE_LOGIN_CANCELLED") || code.includes("CANCEL");
   }
 
+  if (provider === "apple") {
+    return code.includes("APPLE_NATIVE_LOGIN_CANCELLED") || code.includes("CANCEL");
+  }
+
   return false;
 }
 
 export function LoginPage() {
-  const [isNativeKakaoLoading, setIsNativeKakaoLoading] = useState(false);
-  const [isNativeNaverLoading, setIsNativeNaverLoading] = useState(false);
+  const [nativeLoadingProvider, setNativeLoadingProvider] = useState<AuthProvider | null>(null);
+  const isAppleNativeLoginAvailable = isNativeWebViewRuntime() && getNativePlatform() === "ios";
+  const isNativeAppleLoading = nativeLoadingProvider === "apple";
+  const isNativeKakaoLoading = nativeLoadingProvider === "kakao";
+  const isNativeNaverLoading = nativeLoadingProvider === "naver";
 
   const handleNativeProviderLoginClick = async (
     provider: AuthProvider,
-    event: MouseEvent<HTMLAnchorElement>
+    event: MouseEvent<HTMLElement>
   ) => {
     const inNativeWebView = isNativeWebViewRuntime();
 
@@ -129,17 +139,16 @@ export function LoginPage() {
     }
 
     const bridge = getNativeWebViewBridge();
-    const isAlreadyLoading = provider === "kakao" ? isNativeKakaoLoading : isNativeNaverLoading;
-    if (!bridge || isAlreadyLoading) {
+    if (!bridge) {
+      return;
+    }
+    if (nativeLoadingProvider) {
+      event.preventDefault();
       return;
     }
 
     event.preventDefault();
-    if (provider === "kakao") {
-      setIsNativeKakaoLoading(true);
-    } else {
-      setIsNativeNaverLoading(true);
-    }
+    setNativeLoadingProvider(provider);
 
     try {
       const result = await requestNativeProviderLoginSession(provider);
@@ -155,15 +164,18 @@ export function LoginPage() {
         console.log(`Native ${provider} login cancelled by user.`);
         return;
       }
+      if (provider === "apple") {
+        console.warn("Native Apple login failed.", error);
+        window.alert("Apple 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
       console.warn(`Native ${provider} login failed. Fall back to web OAuth.`, error);
       window.location.assign(buildOAuthStartUrl(provider));
       return;
     } finally {
-      if (provider === "kakao") {
-        setIsNativeKakaoLoading(false);
-      } else {
-        setIsNativeNaverLoading(false);
-      }
+      setNativeLoadingProvider((currentProvider) =>
+        currentProvider === provider ? null : currentProvider
+      );
     }
   };
 
@@ -173,16 +185,32 @@ export function LoginPage() {
         <div className="w-full max-w-sm rounded-2xl border border-base-300 bg-base-100 p-6 shadow-lg">
           <h1 className="text-center text-2xl font-semibold">로그인</h1>
           <p className="mt-2 text-center text-sm text-base-content/70">
-            카카오 또는 네이버 계정으로 시작할 수 있어요.
+            {isAppleNativeLoginAvailable
+              ? "Apple, 카카오 또는 네이버 계정으로 시작할 수 있어요."
+              : "카카오 또는 네이버 계정으로 시작할 수 있어요."}
           </p>
 
           <div className="mt-6 flex flex-col gap-3">
+            {isAppleNativeLoginAvailable ? (
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-black bg-black px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={(event) => {
+                  void handleNativeProviderLoginClick("apple", event);
+                }}
+                disabled={Boolean(nativeLoadingProvider)}
+              >
+                <FaApple size={18} />
+                {isNativeAppleLoading ? "Apple 로그인 중..." : "Apple로 로그인"}
+              </button>
+            ) : null}
             <a
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#E6C200] bg-[#FEE500] px-4 py-3 text-sm font-semibold text-[#1A1A1A] transition hover:brightness-95"
               href={buildOAuthStartUrl("kakao")}
               onClick={(event) => {
                 void handleNativeProviderLoginClick("kakao", event);
               }}
+              aria-disabled={Boolean(nativeLoadingProvider)}
             >
               <SiKakaotalk size={18} />
               {isNativeKakaoLoading ? "카카오 로그인 중..." : "카카오로 로그인"}
@@ -193,6 +221,7 @@ export function LoginPage() {
               onClick={(event) => {
                 void handleNativeProviderLoginClick("naver", event);
               }}
+              aria-disabled={Boolean(nativeLoadingProvider)}
             >
               <SiNaver size={16} />
               {isNativeNaverLoading ? "네이버 로그인 중..." : "네이버로 로그인"}

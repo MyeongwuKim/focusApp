@@ -5,10 +5,12 @@ type NativeWebViewBridge = {
 declare global {
   interface Window {
     __HYBRID_APP_SCHEME__?: string;
+    __HYBRID_NATIVE_PLATFORM__?: string;
   }
 }
 
 const DEFAULT_NATIVE_APP_SCHEME = "mobile";
+type NativePlatform = "ios" | "android" | "web" | "unknown";
 
 function hasWindow() {
   return typeof window !== "undefined";
@@ -50,4 +52,17 @@ export function getNativeAppScheme() {
   }
 
   return normalizeNativeAppScheme(window.__HYBRID_APP_SCHEME__) || DEFAULT_NATIVE_APP_SCHEME;
+}
+
+export function getNativePlatform(): NativePlatform {
+  if (!hasWindow()) {
+    return "web";
+  }
+
+  const platform = window.__HYBRID_NATIVE_PLATFORM__;
+  if (platform === "ios" || platform === "android") {
+    return platform;
+  }
+
+  return isNativeWebViewRuntime() ? "unknown" : "web";
 }

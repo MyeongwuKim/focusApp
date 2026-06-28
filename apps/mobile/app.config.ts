@@ -178,6 +178,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ]);
   }
 
+  if (!hasPlugin(plugins, "expo-apple-authentication")) {
+    plugins.push("expo-apple-authentication");
+  }
+
   const expoBuildPropertiesPluginIndex = plugins.findIndex((plugin) => {
     if (!Array.isArray(plugin)) {
       return false;
@@ -225,6 +229,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ios: {
       ...(config.ios ?? {}),
       bundleIdentifier: iosBundleIdentifier,
+      usesAppleSignIn: true,
       ...(testIosBuildNumber ? { buildNumber: testIosBuildNumber } : {}),
     },
     android: {

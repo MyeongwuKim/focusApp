@@ -1,10 +1,17 @@
-import { createHmac, randomBytes } from "node:crypto";
+import {
+  createHmac,
+  createPublicKey,
+  randomBytes,
+  verify as verifySignature,
+  type JsonWebKey,
+} from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { prisma } from "../../common/prisma.js";
 import { env } from "../../config/env.js";
 import { getBearerToken, resolveUserIdFromSessionToken } from "../../common/auth/session.js";
 
-type OAuthProvider = "kakao" | "naver";
+type OAuthProvider = "apple" | "kakao" | "naver";
+type WebOAuthProvider = Exclude<OAuthProvider, "apple">;
 
 interface ProviderProfile {
   providerUserId: string;
@@ -17,7 +24,7 @@ interface OAuthSignInLogger {
 }
 
 interface OAuthStatePayload {
-  provider: OAuthProvider;
+  provider: WebOAuthProvider;
   redirectTo: string;
   oauthRedirectUri?: string;
   issuedAt: number;
@@ -36,10 +43,44 @@ interface OAuthCallbackQuery {
 
 interface OAuthNativeAuthRequestBody {
   accessToken?: string;
+  identityToken?: string;
+  fullName?: string;
 }
 
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const DEV_ALLOWED_REDIRECT_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"] as const;
+const APPLE_ISSUER = "https://appleid.apple.com";
+const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
+const APPLE_JWKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+type AppleJwtHeader = {
+  alg?: string;
+  kid?: string;
+};
+
+type AppleIdentityTokenPayload = {
+  iss?: string;
+  aud?: string | string[];
+  exp?: number;
+  sub?: string;
+  email?: string;
+  email_verified?: string | boolean;
+};
+
+type AppleJwk = JsonWebKey & {
+  kid?: string;
+  alg?: string;
+  kty?: string;
+  n?: string;
+  e?: string;
+};
+
+type AppleJwksCache = {
+  keys: AppleJwk[];
+  expiresAt: number;
+};
+
+let appleJwksCache: AppleJwksCache | null = null;
 
 function normalizeOrigin(origin: string) {
   return origin.replace(/\/+$/, "");
@@ -107,13 +148,17 @@ function fromBase64Url(input: string) {
   return Buffer.from(input, "base64url").toString("utf8");
 }
 
+function decodeBase64UrlJson<T>(input: string): T {
+  return JSON.parse(fromBase64Url(input)) as T;
+}
+
 function signOAuthState(payload: OAuthStatePayload): string {
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = createHmac("sha256", env.OAUTH_STATE_SECRET).update(encodedPayload).digest("base64url");
   return `${encodedPayload}.${signature}`;
 }
 
-function verifyOAuthState(rawState: string, expectedProvider: OAuthProvider): OAuthStatePayload {
+function verifyOAuthState(rawState: string, expectedProvider: WebOAuthProvider): OAuthStatePayload {
   const [encodedPayload, signature] = rawState.split(".");
   if (!encodedPayload || !signature) {
     throw new Error("INVALID_OAUTH_STATE");
@@ -250,6 +295,117 @@ async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
   }
 
   return json as T;
+}
+
+async function fetchAppleJwks(): Promise<AppleJwk[]> {
+  if (appleJwksCache && appleJwksCache.expiresAt > Date.now()) {
+    return appleJwksCache.keys;
+  }
+
+  const response = await fetchJson<{ keys?: AppleJwk[] }>(APPLE_JWKS_URL, {
+    method: "GET",
+  });
+  const keys = Array.isArray(response.keys) ? response.keys : [];
+  if (keys.length === 0) {
+    throw new Error("APPLE_JWKS_EMPTY");
+  }
+
+  appleJwksCache = {
+    keys,
+    expiresAt: Date.now() + APPLE_JWKS_CACHE_TTL_MS,
+  };
+  return keys;
+}
+
+function parseAppleIdentityToken(identityToken: string) {
+  const [encodedHeader, encodedPayload, encodedSignature] = identityToken.split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature) {
+    throw new Error("APPLE_IDENTITY_TOKEN_MALFORMED");
+  }
+
+  let header: AppleJwtHeader;
+  let payload: AppleIdentityTokenPayload;
+  try {
+    header = decodeBase64UrlJson<AppleJwtHeader>(encodedHeader);
+    payload = decodeBase64UrlJson<AppleIdentityTokenPayload>(encodedPayload);
+  } catch {
+    throw new Error("APPLE_IDENTITY_TOKEN_MALFORMED");
+  }
+
+  return {
+    encodedHeader,
+    encodedPayload,
+    encodedSignature,
+    header,
+    payload,
+  };
+}
+
+function isExpectedAppleAudience(audience: AppleIdentityTokenPayload["aud"]) {
+  const audiences = Array.isArray(audience) ? audience : audience ? [audience] : [];
+  return audiences.some((clientId) => env.APPLE_CLIENT_IDS.includes(clientId));
+}
+
+function isAppleEmailVerified(value: AppleIdentityTokenPayload["email_verified"]) {
+  return value === true || value === "true";
+}
+
+async function verifyAppleIdentityToken(identityToken: string): Promise<AppleIdentityTokenPayload> {
+  const parsedToken = parseAppleIdentityToken(identityToken);
+  const { header, payload } = parsedToken;
+
+  if (header.alg !== "RS256" || !header.kid) {
+    throw new Error("APPLE_IDENTITY_TOKEN_UNSUPPORTED_ALG");
+  }
+
+  if (payload.iss !== APPLE_ISSUER) {
+    throw new Error("APPLE_IDENTITY_TOKEN_INVALID_ISSUER");
+  }
+
+  if (!isExpectedAppleAudience(payload.aud)) {
+    throw new Error("APPLE_IDENTITY_TOKEN_INVALID_AUDIENCE");
+  }
+
+  if (!payload.exp || payload.exp * 1000 <= Date.now()) {
+    throw new Error("APPLE_IDENTITY_TOKEN_EXPIRED");
+  }
+
+  if (!payload.sub) {
+    throw new Error("APPLE_IDENTITY_TOKEN_MISSING_SUB");
+  }
+
+  const appleKeys = await fetchAppleJwks();
+  const jwk = appleKeys.find((key) => key.kid === header.kid);
+  if (!jwk) {
+    throw new Error("APPLE_IDENTITY_TOKEN_KEY_NOT_FOUND");
+  }
+
+  const publicKey = createPublicKey({
+    key: jwk,
+    format: "jwk",
+  });
+  const signedData = Buffer.from(`${parsedToken.encodedHeader}.${parsedToken.encodedPayload}`);
+  const signature = Buffer.from(parsedToken.encodedSignature, "base64url");
+  const isValidSignature = verifySignature("RSA-SHA256", signedData, publicKey, signature);
+  if (!isValidSignature) {
+    throw new Error("APPLE_IDENTITY_TOKEN_INVALID_SIGNATURE");
+  }
+
+  return payload;
+}
+
+async function fetchAppleProfileFromIdentityToken(
+  identityToken: string,
+  fullName?: string
+): Promise<ProviderProfile> {
+  const payload = await verifyAppleIdentityToken(identityToken);
+  const email = normalizeEmail(payload.email);
+
+  return {
+    providerUserId: payload.sub ?? "",
+    email: email && isAppleEmailVerified(payload.email_verified) ? email : null,
+    name: fullName?.trim() || null,
+  };
 }
 
 function getKakaoConfig() {
@@ -583,7 +739,7 @@ async function signInWithProvider(
   };
 }
 
-function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvider) {
+function registerProviderStartRoute(app: FastifyInstance, provider: WebOAuthProvider) {
   app.get(`/auth/${provider}/start`, async (request, reply) => {
     try {
       const query = parseOAuthStartQuery(request.query);
@@ -636,7 +792,7 @@ function registerProviderStartRoute(app: FastifyInstance, provider: OAuthProvide
   });
 }
 
-function registerProviderCallbackRoute(app: FastifyInstance, provider: OAuthProvider) {
+function registerProviderCallbackRoute(app: FastifyInstance, provider: WebOAuthProvider) {
   app.get(`/auth/${provider}/callback`, async (request, reply) => {
     const query = parseOAuthCallbackQuery(request.query);
 
@@ -691,7 +847,9 @@ function parseOAuthNativeAuthBody(body: unknown): OAuthNativeAuthRequestBody {
 
   const asRecord = body as Record<string, unknown>;
   const accessToken = readQueryValue(asRecord.accessToken);
-  return { accessToken };
+  const identityToken = readQueryValue(asRecord.identityToken);
+  const fullName = readQueryValue(asRecord.fullName);
+  return { accessToken, identityToken, fullName };
 }
 
 async function resolveAuthorizedUserId(
@@ -762,6 +920,33 @@ export async function registerAuthRoute(app: FastifyInstance) {
         return reply.code(401).send({ message: "네이버 인증 토큰이 유효하지 않아요." });
       }
       return reply.code(500).send({ message: "네이버 네이티브 로그인 처리 중 오류가 발생했어요." });
+    }
+  });
+
+  app.post("/auth/apple/native", async (request, reply) => {
+    try {
+      const body = parseOAuthNativeAuthBody(request.body);
+      const identityToken = body.identityToken?.trim();
+      if (!identityToken) {
+        return reply.code(400).send({ message: "Apple identity token이 필요해요." });
+      }
+
+      const profile = await fetchAppleProfileFromIdentityToken(identityToken, body.fullName);
+      const authResult = await signInWithProvider("apple", profile, request.log);
+
+      return reply.send({
+        token: authResult.sessionToken,
+        userId: authResult.userId,
+      });
+    } catch (error) {
+      request.log.error({ error }, "[auth] apple native login failed");
+      if (error instanceof Error && error.message.startsWith("APPLE_")) {
+        return reply.code(401).send({ message: "Apple 인증 토큰이 유효하지 않아요." });
+      }
+      if (error instanceof Error && error.message.startsWith("OAUTH_HTTP_")) {
+        return reply.code(401).send({ message: "Apple 인증 정보를 확인할 수 없어요." });
+      }
+      return reply.code(500).send({ message: "Apple 네이티브 로그인 처리 중 오류가 발생했어요." });
     }
   });
 

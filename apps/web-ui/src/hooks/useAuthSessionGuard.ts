@@ -97,7 +97,7 @@ function getCallbackParam(name: string, routeSearch: string): string | null {
 }
 
 function parseAuthProvider(rawValue: string | null) {
-  if (rawValue === "kakao" || rawValue === "naver") {
+  if (rawValue === "apple" || rawValue === "kakao" || rawValue === "naver") {
     return rawValue;
   }
   return null;

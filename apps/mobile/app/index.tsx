@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ExpoLocation from "expo-location";
 import { Feather } from "@expo/vector-icons";
@@ -111,7 +112,15 @@ type NativeNaverAuthResult = {
   token: string;
   userId: string;
 };
-type AuthProvider = "kakao" | "naver";
+type NativeAppleCredential = {
+  identityToken: string;
+  fullName: string | null;
+};
+type NativeAppleAuthResult = {
+  token: string;
+  userId: string;
+};
+type AuthProvider = "apple" | "kakao" | "naver";
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
 const NAVER_NATIVE_URL_SCHEME = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim() ?? "";
@@ -278,6 +287,10 @@ function resolveNativeAppScheme() {
   }
 
   return normalizeNativeAppScheme(process.env.EXPO_PUBLIC_APP_SCHEME) || DEFAULT_NATIVE_APP_SCHEME;
+}
+
+function resolveNativePlatform() {
+  return Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown";
 }
 
 function hasNativeAppProtocol(rawUrl: string, nativeAppScheme: string) {
@@ -539,6 +552,63 @@ function resolveNativeAppVersion() {
   return null;
 }
 
+function formatAppleFullName(fullName: unknown) {
+  const fullNameRecord = readUnknownRecord(fullName);
+  if (!fullNameRecord) {
+    return null;
+  }
+
+  const nickname = readUnknownString(fullNameRecord.nickname);
+  if (nickname) {
+    return nickname;
+  }
+
+  const parts = [
+    readUnknownString(fullNameRecord.givenName),
+    readUnknownString(fullNameRecord.middleName),
+    readUnknownString(fullNameRecord.familyName),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+async function requestNativeAppleCredential(): Promise<NativeAppleCredential> {
+  if (Platform.OS !== "ios") {
+    throw new Error("APPLE_NATIVE_UNSUPPORTED_PLATFORM");
+  }
+
+  const isAvailable = await AppleAuthentication.isAvailableAsync();
+  if (!isAvailable) {
+    throw new Error("APPLE_NATIVE_UNAVAILABLE");
+  }
+
+  try {
+    const credential = await withTimeout(
+      AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      }),
+      NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
+      "APPLE_NATIVE_LOGIN_TIMEOUT"
+    );
+    const identityToken = credential.identityToken?.trim();
+    if (!identityToken) {
+      throw new Error("APPLE_NATIVE_IDENTITY_TOKEN_MISSING");
+    }
+
+    return {
+      identityToken,
+      fullName: formatAppleFullName(credential.fullName),
+    };
+  } catch (error) {
+    if (isNativeLoginCancelledError(error)) {
+      throw new Error("APPLE_NATIVE_LOGIN_CANCELLED");
+    }
+    throw error;
+  }
+}
+
 async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
   try {
     return await withTimeout(
@@ -593,6 +663,44 @@ async function requestNativeNaverAccessToken(): Promise<string> {
     throw new Error("NAVER_NATIVE_LOGIN_CANCELLED");
   }
   throw new Error(failureMessage || "NAVER_NATIVE_LOGIN_FAILED");
+}
+
+async function exchangeAppleIdentityTokenForSession(input: {
+  apiOrigin: string;
+  identityToken: string;
+  fullName?: string | null;
+}): Promise<NativeAppleAuthResult> {
+  const response = await withTimeout(
+    fetch(`${input.apiOrigin}/auth/apple/native`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        identityToken: input.identityToken,
+        fullName: input.fullName,
+      }),
+    }),
+    NATIVE_SESSION_EXCHANGE_TIMEOUT_MS,
+    "APPLE_NATIVE_EXCHANGE_TIMEOUT"
+  );
+
+  if (!response.ok) {
+    throw new Error(`APPLE_NATIVE_AUTH_HTTP_${response.status}`);
+  }
+
+  const parsed = (await response.json()) as {
+    token?: unknown;
+    userId?: unknown;
+  };
+  if (typeof parsed.token !== "string" || typeof parsed.userId !== "string") {
+    throw new Error("APPLE_NATIVE_AUTH_INVALID_RESPONSE");
+  }
+
+  return {
+    token: parsed.token,
+    userId: parsed.userId,
+  };
 }
 
 async function exchangeKakaoAccessTokenForSession(input: {
@@ -731,7 +839,10 @@ function resolveAuthCallbackHashFromUrl(rawUrl: string, nativeAppScheme: string)
 
     const userId = readCallbackValue(parsed, "userId");
     const rawProvider = readCallbackValue(parsed, "provider");
-    const provider = rawProvider === "kakao" || rawProvider === "naver" ? rawProvider : null;
+    const provider =
+      rawProvider === "apple" || rawProvider === "kakao" || rawProvider === "naver"
+        ? rawProvider
+        : null;
     const error = readCallbackValue(parsed, "error");
 
     return buildAuthCallbackHash({
@@ -746,6 +857,9 @@ function resolveAuthCallbackHashFromUrl(rawUrl: string, nativeAppScheme: string)
 }
 
 function resolveProviderFromBridgeLoginResultType(type: string): AuthProvider | null {
+  if (type === "REST_AUTH_APPLE_LOGIN_RESULT") {
+    return "apple";
+  }
   if (type === "REST_AUTH_KAKAO_LOGIN_RESULT") {
     return "kakao";
   }
@@ -1126,6 +1240,7 @@ export default function WebViewScreen() {
   const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
   const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const nativeAppScheme = useMemo(() => resolveNativeAppScheme(), []);
+  const nativePlatform = useMemo(() => resolveNativePlatform(), []);
 
   const navigateWebViewToAuthCallbackHash = useCallback(
     (callbackHash: string) => {
@@ -1449,9 +1564,14 @@ export default function WebViewScreen() {
       wrap('error');
       window.__HYBRID_API_ORIGIN__ = ${JSON.stringify(hybridApiOrigin)};
       window.__HYBRID_APP_SCHEME__ = ${JSON.stringify(nativeAppScheme)};
-      post('bridge-ready', { href: location.href, appScheme: window.__HYBRID_APP_SCHEME__ });
+      window.__HYBRID_NATIVE_PLATFORM__ = ${JSON.stringify(nativePlatform)};
+      post('bridge-ready', {
+        href: location.href,
+        appScheme: window.__HYBRID_APP_SCHEME__,
+        platform: window.__HYBRID_NATIVE_PLATFORM__,
+      });
     })(); true;`,
-    [hybridApiOrigin, nativeAppScheme]
+    [hybridApiOrigin, nativeAppScheme, nativePlatform]
   );
   const injectedBeforeContentLoaded = useMemo(
     () => `${webDebugBridgeScript}\n${applyScaleScript}`,
@@ -1552,7 +1672,7 @@ export default function WebViewScreen() {
           manifestUrl: webUiManifestUrl,
           fallbackCurrentVersion: nativeAppVersion,
           nativeAppVersion,
-          nativePlatform: Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown",
+          nativePlatform,
           onProgress: setLaunchStatusMessage,
         });
 
@@ -1576,7 +1696,7 @@ export default function WebViewScreen() {
     };
 
     prepareLocalHtmlFile();
-  }, [webUiManifestUrl, webUiReleaseChannel]);
+  }, [nativePlatform, webUiManifestUrl, webUiReleaseChannel]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -1715,13 +1835,15 @@ export default function WebViewScreen() {
           getNativeAppVersion: resolveNativeAppVersion,
           getStoredWebUiReleaseSnapshot: readStoredWebUiReleaseSnapshot,
           webUiReleaseChannel,
-          platform: Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown",
+          platform: nativePlatform,
         },
         auth: {
           sendBridgeResult,
           hybridApiOrigin,
+          requestNativeAppleCredential,
           requestNativeNaverAccessToken,
           requestNativeKakaoOAuthToken,
+          exchangeAppleIdentityTokenForSession,
           exchangeNaverAccessTokenForSession,
           exchangeKakaoAccessTokenForSession,
           unlinkNaverAccountWithTimeout,

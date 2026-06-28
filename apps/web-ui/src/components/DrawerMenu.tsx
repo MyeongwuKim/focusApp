@@ -64,7 +64,13 @@ export function DrawerMenu({ isOpen }: DrawerMenuProps) {
 
   const accountEmail = meQuery.data?.email ?? authUser?.email ?? "guest";
   const providerLabel =
-    authProvider === "kakao" ? "카카오 로그인" : authProvider === "naver" ? "네이버 로그인" : null;
+    authProvider === "apple"
+      ? "Apple 로그인"
+      : authProvider === "kakao"
+        ? "카카오 로그인"
+        : authProvider === "naver"
+          ? "네이버 로그인"
+          : null;
   const [versionInfo, setVersionInfo] = useState<NativeAppVersionInfo | null>(null);
   const hasRequestedVersionRef = useRef(false);
 
