@@ -14,7 +14,10 @@ export function DateTodosFooterPanel() {
   } = useDateTodosRouteContext();
 
   return (
-    <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5" data-disable-date-sheet-swipe="true">
+    <div
+      className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5 pb-[var(--app-safe-area-bottom)]"
+      data-disable-date-sheet-swipe="true"
+    >
       <TodoQuickActions
         onOpenMemo={openMemo}
         onOpenTaskPicker={openTaskPicker}

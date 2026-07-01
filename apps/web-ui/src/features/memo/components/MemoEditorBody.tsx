@@ -7,7 +7,7 @@ type MemoEditorBodyProps = {
 
 export function MemoEditorBody({ editor }: MemoEditorBodyProps) {
   return (
-    <div className="memo-editor min-h-0 flex-1 rounded-xl border border-base-300/80 bg-base-100/90">
+    <div className="memo-editor min-h-0 flex-1 overflow-hidden rounded-xl border border-base-300/80 bg-base-100/90">
       <EditorContent editor={editor} className="h-full w-full" />
     </div>
   );

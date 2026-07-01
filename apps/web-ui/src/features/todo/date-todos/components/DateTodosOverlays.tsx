@@ -80,7 +80,7 @@ export function DateTodosOverlays({
         >
           <div
             className={[
-              "absolute inset-0 flex flex-col bg-base-100 transition-[transform,opacity] duration-250 ease-out",
+              "absolute inset-0 flex flex-col bg-base-100 pb-[var(--app-safe-area-bottom)] transition-[transform,opacity] duration-250 ease-out",
               isMemoVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-90",
             ].join(" ")}
           >
@@ -93,10 +93,10 @@ export function DateTodosOverlays({
               </h2>
               <div aria-hidden="true" />
             </header>
-            <div className="min-h-0 flex-1 p-2">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
               <MemoEditorPanel
                 dateKey={resolvedMemoDateKey}
-                className="h-full rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
+                className="h-full min-h-[22rem] rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
               />
             </div>
           </div>

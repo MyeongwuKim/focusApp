@@ -29,10 +29,10 @@ export function DateTodosMemoStandaloneLayer({
         </h2>
         <div />
       </header>
-      <div className="min-h-0 flex-1 p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 pb-[calc(0.5rem+var(--app-safe-area-bottom))]">
         <MemoEditorPanel
           dateKey={dateKey}
-          className="h-full rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
+          className="h-full min-h-[22rem] rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
         />
       </div>
     </DateTodosSwipeCloseLayer>

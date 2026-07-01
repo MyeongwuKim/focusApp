@@ -1502,6 +1502,21 @@ export default function WebViewScreen() {
         root.style.setProperty('--calendar-date-number-size', '${calendarLayoutVars.numberFontRem.toFixed(
           3
         )}rem');
+        const syncViewportHeight = () => {
+          const nextHeight = Math.max(
+            window.innerHeight || 0,
+            document.documentElement?.clientHeight || 0
+          );
+          if (nextHeight > 0) {
+            root.style.setProperty('--app-viewport-height', nextHeight + 'px');
+          }
+        };
+        syncViewportHeight();
+        if (!window.__focusHybridViewportHeightSyncInstalled) {
+          window.__focusHybridViewportHeightSyncInstalled = true;
+          window.addEventListener('resize', syncViewportHeight, { passive: true });
+          window.addEventListener('orientationchange', syncViewportHeight, { passive: true });
+        }
         root.style.background = 'transparent';
         if (document.body) {
           document.body.style.background = 'transparent';

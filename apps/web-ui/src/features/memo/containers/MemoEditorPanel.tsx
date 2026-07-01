@@ -291,7 +291,7 @@ export function MemoEditorPanel({ dateKey, className }: MemoEditorPanelProps) {
   return (
     <section
       className={[
-        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4",
+        "flex min-h-0 max-h-full flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4",
         className ?? "",
       ].join(" ")}
     >

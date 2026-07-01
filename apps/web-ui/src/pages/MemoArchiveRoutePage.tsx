@@ -373,7 +373,11 @@ export function MemoArchiveRoutePage() {
       </div>
 
       {selectedMemo ? (
-        <div className="fixed inset-0 z-[90] flex min-h-0 flex-col bg-base-100" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-[90] flex min-h-0 flex-col overflow-hidden bg-base-100 pb-[var(--app-safe-area-bottom)]"
+          role="dialog"
+          aria-modal="true"
+        >
           <header className="grid h-12 shrink-0 grid-cols-[44px_1fr_auto] items-center gap-1 border-b border-base-300/80 px-2">
             <button
               type="button"
@@ -394,10 +398,10 @@ export function MemoArchiveRoutePage() {
               날짜로 이동
             </button>
           </header>
-          <div className="min-h-0 flex-1 p-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
             <MemoEditorPanel
               dateKey={selectedMemo.dateKey}
-              className="h-full rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
+              className="h-full min-h-[22rem] rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
             />
           </div>
         </div>
