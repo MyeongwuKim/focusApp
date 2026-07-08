@@ -23,6 +23,8 @@
     "mobile:start:lan": "pnpm -C apps/mobile start -c --dev-client --host lan --port 8081",
     "mobile:ios": "pnpm -C apps/mobile ios",
     "mobile:android": "pnpm -C apps/mobile android",
+    "native:sync:test": "pnpm -C apps/mobile native:sync:test",
+    "native:sync:prod": "pnpm -C apps/mobile native:sync:prod",
     "hybrid:start": "pnpm hybrid:prepare && pnpm mobile:start",
     "hybrid:ios": "pnpm hybrid:prepare && pnpm mobile:ios",
     "hybrid:android": "pnpm hybrid:prepare && pnpm mobile:android"

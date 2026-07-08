@@ -561,7 +561,7 @@ test.describe("core app flow", () => {
 
     await page.goto(`/#/date-tasks?date=${previousDateKey}`);
 
-    await expect(page.getByText("지난 날짜에 등록된 할일이 없어요")).toBeVisible();
+    await expect(page.getByText("이 날짜에 기록된 할 일이 없어요")).toBeVisible();
     await page.getByRole("button", { name: "오늘로 이동" }).click();
 
     await expect(page).toHaveURL(new RegExp(`#\\/date-tasks\\?date=${todayKey}$`));

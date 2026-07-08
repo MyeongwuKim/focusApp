@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadEnvFile } from "node:process";
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const KAKAO_MAVEN_REPO = "https://devrepo.kakao.com/nexus/content/groups/public/";
@@ -14,6 +13,11 @@ const TEST_ANDROID_PACKAGE = "com.myeongwu.focushybrid.t";
 const PROD_APP_SCHEME = "mobile";
 const TEST_APP_SCHEME = "mobile-test";
 const NATIVE_CONFIG_FILE = join(APP_ROOT, "native.config.json");
+const ENV_FILE_NAMES_BY_VARIANT: Record<string, string[]> = {
+  prod: [".env.production", ".env.prod"],
+  production: [".env.production", ".env.prod"],
+  test: [".env.test"],
+};
 
 type NativePlatformConfig = {
   versionSource?: string;
@@ -44,17 +48,79 @@ type NativeConfig = {
   prod?: NativeVariantConfig;
 };
 
-function loadMobileEnvFiles() {
-  const candidates = [join(APP_ROOT, ".env"), join(APP_ROOT, ".env.local")];
-  for (const filePath of candidates) {
-    if (!existsSync(filePath)) {
+function parseEnvFile(filePath: string) {
+  const values: Record<string, string> = {};
+  const content = readFileSync(filePath, "utf8");
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
       continue;
     }
-    try {
-      loadEnvFile(filePath);
-    } catch {
-      // Ignore malformed/optional local env files and continue with existing process.env.
+
+    const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) {
+      continue;
     }
+
+    const [, key, rawValue] = match;
+    let value = rawValue.trim();
+    const quote = value[0];
+    if ((quote === "\"" || quote === "'") && value.endsWith(quote)) {
+      value = value.slice(1, -1);
+    } else {
+      value = value.replace(/\s+#.*$/, "").trim();
+    }
+
+    values[key] = value;
+  }
+
+  return values;
+}
+
+function loadEnvFileIfExists(
+  filePath: string,
+  loadedKeys: Set<string>,
+  options: { overrideExisting?: boolean; overrideLoaded?: boolean } = {}
+) {
+  if (!existsSync(filePath)) {
+    return;
+  }
+
+  try {
+    const values = parseEnvFile(filePath);
+    for (const [key, value] of Object.entries(values)) {
+      if (
+        options.overrideExisting ||
+        process.env[key] === undefined ||
+        (options.overrideLoaded && loadedKeys.has(key))
+      ) {
+        process.env[key] = value;
+        loadedKeys.add(key);
+      }
+    }
+  } catch {
+    // Ignore malformed/optional local env files and continue with existing process.env.
+  }
+}
+
+function resolveAppVariant() {
+  return process.env.APP_VARIANT?.trim().toLowerCase() || "test";
+}
+
+function loadMobileEnvFiles() {
+  const loadedKeys = new Set<string>();
+
+  loadEnvFileIfExists(join(APP_ROOT, ".env"), loadedKeys);
+  loadEnvFileIfExists(join(APP_ROOT, ".env.local"), loadedKeys, { overrideLoaded: true });
+
+  const appVariant = resolveAppVariant();
+  const variantEnvFileNames = ENV_FILE_NAMES_BY_VARIANT[appVariant] ?? [`.env.${appVariant}`];
+  for (const fileName of variantEnvFileNames) {
+    loadEnvFileIfExists(join(APP_ROOT, fileName), loadedKeys, { overrideExisting: true });
+  }
+  for (const fileName of variantEnvFileNames) {
+    loadEnvFileIfExists(join(APP_ROOT, `${fileName}.local`), loadedKeys, { overrideExisting: true });
   }
 }
 
@@ -119,7 +185,7 @@ function hasPlugin(
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const appVariant = process.env.APP_VARIANT?.trim().toLowerCase() ?? "prod";
+  const appVariant = resolveAppVariant();
   const isTestVariant = appVariant === "test";
   const kakaoAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY?.trim();
   const naverConsumerKey = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim();

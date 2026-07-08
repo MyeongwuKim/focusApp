@@ -5,6 +5,11 @@ const appRoot = path.resolve(__dirname, "..");
 const variant = (process.argv[2] || process.env.APP_VARIANT || "test").trim().toLowerCase();
 const appJsonPath = path.join(appRoot, "app.json");
 const configPath = path.join(appRoot, "native.config.json");
+const envFileNamesByVariant = {
+  prod: [".env.production", ".env.prod"],
+  production: [".env.production", ".env.prod"],
+  test: [".env.test"],
+};
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -17,6 +22,71 @@ function writeIfChanged(filePath, nextContent) {
   }
   fs.writeFileSync(filePath, nextContent);
   return true;
+}
+
+function parseEnvFile(filePath) {
+  const values = {};
+  const content = fs.readFileSync(filePath, "utf8");
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) {
+      continue;
+    }
+
+    const [, key, rawValue] = match;
+    let value = rawValue.trim();
+    const quote = value[0];
+    if ((quote === "\"" || quote === "'") && value.endsWith(quote)) {
+      value = value.slice(1, -1);
+    } else {
+      value = value.replace(/\s+#.*$/, "").trim();
+    }
+
+    values[key] = value;
+  }
+
+  return values;
+}
+
+function loadEnvFileIfExists(filePath, loadedKeys, options = {}) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const values = parseEnvFile(filePath);
+  for (const [key, value] of Object.entries(values)) {
+    if (
+      options.overrideExisting ||
+      process.env[key] === undefined ||
+      (options.overrideLoaded && loadedKeys.has(key))
+    ) {
+      process.env[key] = value;
+      loadedKeys.add(key);
+    }
+  }
+}
+
+function loadMobileEnvFiles() {
+  const loadedKeys = new Set();
+
+  loadEnvFileIfExists(path.join(appRoot, ".env"), loadedKeys);
+  loadEnvFileIfExists(path.join(appRoot, ".env.local"), loadedKeys, { overrideLoaded: true });
+
+  const variantEnvFileNames = envFileNamesByVariant[variant] || [`.env.${variant}`];
+  for (const fileName of variantEnvFileNames) {
+    loadEnvFileIfExists(path.join(appRoot, fileName), loadedKeys, { overrideExisting: true });
+  }
+  for (const fileName of variantEnvFileNames) {
+    loadEnvFileIfExists(path.join(appRoot, `${fileName}.local`), loadedKeys, {
+      overrideExisting: true,
+    });
+  }
 }
 
 function replaceRequired(content, pattern, replacement, label) {
@@ -96,10 +166,28 @@ function resolveNativeIdentity(appJson, variantConfig) {
   };
 }
 
+function resolveProviderIdentity() {
+  const naverUrlScheme = readConfigString(process.env.EXPO_PUBLIC_NAVER_URL_SCHEME);
+  const kakaoAppKey = readConfigString(process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY);
+
+  if (!naverUrlScheme) {
+    throw new Error("EXPO_PUBLIC_NAVER_URL_SCHEME is missing.");
+  }
+  if (!kakaoAppKey) {
+    throw new Error("EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY is missing.");
+  }
+
+  return {
+    naverUrlScheme,
+    kakaoAppKey,
+  };
+}
+
 function syncIos(input) {
   const projectPath = path.join(appRoot, "ios", "app.xcodeproj", "project.pbxproj");
   const plistPath = path.join(appRoot, "ios", "app", "Info.plist");
-  if (!fs.existsSync(projectPath) || !fs.existsSync(plistPath)) {
+  const appDelegatePath = path.join(appRoot, "ios", "app", "AppDelegate.swift");
+  if (!fs.existsSync(projectPath) || !fs.existsSync(plistPath) || !fs.existsSync(appDelegatePath)) {
     console.log("[native-sync] iOS project not found. Skipped.");
     return;
   }
@@ -131,6 +219,9 @@ function syncIos(input) {
   const escapedAppName = escapeXml(input.appName);
   const escapedAppScheme = escapeXml(input.appScheme);
   const escapedBundleIdentifier = escapeXml(input.bundleIdentifier);
+  const escapedNaverUrlScheme = escapeXml(input.naverUrlScheme);
+  const escapedKakaoAppKey = escapeXml(input.kakaoAppKey);
+  const escapedKakaoUrlScheme = escapeXml(`kakao${input.kakaoAppKey}`);
   const appUrlSchemesBlock = [
     "",
     `          <string>${escapedAppScheme}</string>`,
@@ -157,6 +248,24 @@ function syncIos(input) {
     `$1${appUrlSchemesBlock}$2`,
     "iOS app URL schemes"
   );
+  plistContent = replaceRequired(
+    plistContent,
+    /(<key>CFBundleURLName<\/key>\s*<string>naver<\/string>\s*<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>)[^<]+(<\/string>)/,
+    `$1${escapedNaverUrlScheme}$2`,
+    "iOS Naver URL scheme"
+  );
+  plistContent = replaceRequired(
+    plistContent,
+    /(<dict>\s*<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>)kakao[^<]+(<\/string>\s*<\/array>\s*<\/dict>)/,
+    `$1${escapedKakaoUrlScheme}$2`,
+    "iOS Kakao URL scheme"
+  );
+  plistContent = replaceRequired(
+    plistContent,
+    /(<key>KAKAO_APP_KEY<\/key>\s*<string>)[^<]+(<\/string>)/,
+    `$1${escapedKakaoAppKey}$2`,
+    "iOS Kakao app key"
+  );
   if (buildNumber) {
     plistContent = replaceRequired(
       plistContent,
@@ -167,10 +276,23 @@ function syncIos(input) {
   }
   const didUpdatePlist = writeIfChanged(plistPath, plistContent);
 
+  let appDelegateContent = fs.readFileSync(appDelegatePath, "utf8");
+  appDelegateContent = replaceRequired(
+    appDelegateContent,
+    /(url\.scheme == ")[^"]+(")/,
+    `$1${input.naverUrlScheme}$2`,
+    "iOS Naver AppDelegate URL scheme"
+  );
+  const didUpdateAppDelegate = writeIfChanged(appDelegatePath, appDelegateContent);
+
   console.log(
-    `[native-sync] iOS ${didUpdateProject || didUpdatePlist ? "updated" : "already synced"}: ${
+    `[native-sync] iOS ${
+      didUpdateProject || didUpdatePlist || didUpdateAppDelegate ? "updated" : "already synced"
+    }: ${
       input.bundleIdentifier
-    }, ${input.appScheme}, ${input.version}${buildNumber ? ` (${buildNumber})` : ""}`
+    }, ${input.appScheme}, ${input.naverUrlScheme}, ${input.version}${
+      buildNumber ? ` (${buildNumber})` : ""
+    }`
   );
 }
 
@@ -234,10 +356,13 @@ function syncAndroid(input) {
   );
 }
 
+loadMobileEnvFiles();
+
 const appJson = readJson(appJsonPath);
 const nativeConfig = readJson(configPath);
 const variantConfig = resolveVariantConfig(nativeConfig);
 const identity = resolveNativeIdentity(appJson, variantConfig);
+const providerIdentity = resolveProviderIdentity();
 const iosVersion = resolvePlatformVersion(appJson, variantConfig.ios, `${variant}.ios`);
 const androidVersion = resolvePlatformVersion(appJson, variantConfig.android, `${variant}.android`);
 
@@ -247,6 +372,8 @@ syncIos({
   appName: identity.appName,
   appScheme: identity.appScheme,
   bundleIdentifier: identity.iosBundleIdentifier,
+  naverUrlScheme: providerIdentity.naverUrlScheme,
+  kakaoAppKey: providerIdentity.kakaoAppKey,
 });
 syncAndroid({
   version: androidVersion,

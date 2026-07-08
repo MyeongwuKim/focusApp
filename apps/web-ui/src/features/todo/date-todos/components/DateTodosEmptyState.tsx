@@ -47,9 +47,9 @@ export function DateTodosEmptyState({
       {isPastDate ? (
         <>
           <div className="space-y-1">
-            <p className="m-0 text-base font-semibold tracking-tight text-base-content/85">지난 날짜에 등록된 할일이 없어요</p>
+            <p className="m-0 text-base font-semibold tracking-tight text-base-content/85">이 날짜에 기록된 할 일이 없어요</p>
             <p className="m-0 text-xs text-base-content/60">
-              이 날짜는 기록 확인용으로 두고, 오늘 계획을 먼저 잡아보는 게 좋아요.
+              지난 날짜는 기록만 확인할 수 있어요. 오늘 할 일을 먼저 계획해보세요.
             </p>
           </div>
           <div className="flex w-full max-w-xs gap-2" data-disable-date-sheet-swipe="true">
