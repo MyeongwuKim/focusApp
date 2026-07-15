@@ -35,6 +35,8 @@ export type NativeWeatherSettingsSyncPayload = {
 
 export type NativeAuthStateSyncPayload = {
   loggedIn: boolean;
+  token: string | null;
+  apiOrigin: string;
 };
 
 export type NativeTodoViewSyncPayload = {
@@ -42,6 +44,23 @@ export type NativeTodoViewSyncPayload = {
   source: "date-tasks" | "calendar-sheet" | "none";
   dateKey: string | null;
   routePath: string;
+};
+
+export type NativeFocusLiveActivityPayload = {
+  todoId: string;
+  dateKey: string;
+  title: string;
+  startedAtMs: number;
+  deviationSeconds: number;
+  pausedAtMs?: number | null;
+  isPaused: boolean;
+  targetFocusMinutes?: number | null;
+  deepLinkPath: string;
+};
+
+export type NativeFocusLiveActivityEndPayload = {
+  todoId: string;
+  dateKey: string;
 };
 
 export function getNativeWebViewBridge(): NativeWebViewBridge | null {
@@ -77,6 +96,18 @@ export function syncNativeAuthState(payload: NativeAuthStateSyncPayload) {
 
 export function syncNativeTodoView(payload: NativeTodoViewSyncPayload) {
   return postNativeBridgeMessage("REST_TODO_VIEW_SYNC", { payload });
+}
+
+export function startNativeFocusLiveActivity(payload: NativeFocusLiveActivityPayload) {
+  return postNativeBridgeMessage("REST_FOCUS_LIVE_ACTIVITY_START", { payload });
+}
+
+export function updateNativeFocusLiveActivity(payload: NativeFocusLiveActivityPayload) {
+  return postNativeBridgeMessage("REST_FOCUS_LIVE_ACTIVITY_UPDATE", { payload });
+}
+
+export function endNativeFocusLiveActivity(payload: NativeFocusLiveActivityEndPayload) {
+  return postNativeBridgeMessage("REST_FOCUS_LIVE_ACTIVITY_END", { payload });
 }
 
 export function requestNativeWeatherSnapshot() {

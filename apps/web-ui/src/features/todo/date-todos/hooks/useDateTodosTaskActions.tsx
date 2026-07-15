@@ -3,6 +3,12 @@ import { FiCheckCircle, FiClock, FiRotateCcw, FiTarget, FiTrash2 } from "react-i
 import { actionSheet, confirm, toast } from "../../../../stores";
 import { getUserFacingErrorMessage } from "../../../../utils/errorMessage";
 import { formatDateKey } from "../../../../utils/holidays";
+import {
+  endNativeFocusLiveActivity,
+  startNativeFocusLiveActivity,
+  updateNativeFocusLiveActivity,
+  type NativeFocusLiveActivityPayload,
+} from "../../../../utils/nativeBridge";
 import type { TaskItem } from "../../types";
 
 type DailyLogWithTodos = {
@@ -23,6 +29,68 @@ type DailyLogWithTodos = {
 } | null;
 
 type DateTaskAction = "start" | "pause" | "resume" | "complete";
+
+function toEpochMillis(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const epoch = new Date(value).getTime();
+  return Number.isFinite(epoch) ? epoch : null;
+}
+
+function buildFocusLiveActivityPayload(
+  dateKey: string,
+  todo: NonNullable<DailyLogWithTodos>["todos"][number]
+): NativeFocusLiveActivityPayload | null {
+  const startedAtMs = toEpochMillis(todo.startedAt);
+  if (!startedAtMs || todo.done) {
+    return null;
+  }
+
+  const pausedAtMs = toEpochMillis(todo.pausedAt);
+  const params = new URLSearchParams({
+    date: dateKey,
+    todoId: todo.id,
+  });
+
+  return {
+    todoId: todo.id,
+    dateKey,
+    title: todo.content,
+    startedAtMs,
+    deviationSeconds: Math.max(Math.floor(todo.deviationSeconds ?? 0), 0),
+    pausedAtMs,
+    isPaused: Boolean(pausedAtMs),
+    targetFocusMinutes: todo.targetFocusMinutes ?? null,
+    deepLinkPath: `/date-tasks?${params.toString()}`,
+  };
+}
+
+function syncNativeFocusLiveActivityFromLog(
+  dateKey: string,
+  nextLog: DailyLogWithTodos,
+  taskId: string
+) {
+  const todo = nextLog?.todos.find((item) => item.id === taskId);
+  if (!todo) {
+    endNativeFocusLiveActivity({ dateKey, todoId: taskId });
+    return;
+  }
+
+  const payload = buildFocusLiveActivityPayload(dateKey, todo);
+  if (!payload) {
+    endNativeFocusLiveActivity({ dateKey, todoId: taskId });
+    return;
+  }
+
+  if (payload.isPaused) {
+    updateNativeFocusLiveActivity(payload);
+    return;
+  }
+
+  startNativeFocusLiveActivity(payload);
+}
 
 type UseDateTodosTaskActionsParams = {
   dateKey: string | null;
@@ -131,6 +199,7 @@ export function useDateTodosTaskActions({
         try {
           const nextLog = await pauseTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
+          syncNativeFocusLiveActivityFromLog(dateKey, nextLog, taskId);
         } catch (error) {
           const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
           toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
@@ -164,6 +233,7 @@ export function useDateTodosTaskActions({
           }
           const nextLog = await startTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
+          syncNativeFocusLiveActivityFromLog(dateKey, nextLog, taskId);
           return;
         }
 
@@ -174,12 +244,14 @@ export function useDateTodosTaskActions({
           }
           const nextLog = await resumeTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
+          syncNativeFocusLiveActivityFromLog(dateKey, nextLog, taskId);
           return;
         }
 
         if (action === "complete") {
           const nextLog = await completeTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
+          endNativeFocusLiveActivity({ dateKey, todoId: taskId });
         }
       } catch (error) {
         const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
@@ -355,6 +427,7 @@ export function useDateTodosTaskActions({
         targetFocusMinutes: minutes === null ? null : Math.floor(minutes),
       });
       applyDailyLog(nextLog);
+      syncNativeFocusLiveActivityFromLog(dateKey, nextLog, editingTargetFocus.taskId);
       updateTargetFocusBaseline({
         todoId: editingTargetFocus.taskId,
         targetFocusMinutes: minutes === null ? null : Math.floor(minutes),
@@ -556,6 +629,7 @@ export function useDateTodosTaskActions({
       try {
         const nextLog = await resetTodo({ dateKey, todoId: taskId });
         applyDailyLog(nextLog);
+        endNativeFocusLiveActivity({ dateKey, todoId: taskId });
         toast.show({
           type: "positive",
           title: "초기화됨",
@@ -634,6 +708,7 @@ export function useDateTodosTaskActions({
           targetFocusMinutes: null,
         });
         applyDailyLog(nextLog);
+        syncNativeFocusLiveActivityFromLog(dateKey, nextLog, taskId);
         updateTargetFocusBaseline({
           todoId: taskId,
           targetFocusMinutes: null,
@@ -681,6 +756,7 @@ export function useDateTodosTaskActions({
       try {
         const nextLog = await deleteTodo({ dateKey, todoId: taskId });
         applyDailyLog(nextLog);
+        endNativeFocusLiveActivity({ dateKey, todoId: taskId });
         toast.show({
           type: "positive",
           title: "삭제됨",

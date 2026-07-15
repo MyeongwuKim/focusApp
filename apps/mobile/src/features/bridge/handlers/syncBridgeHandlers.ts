@@ -17,10 +17,17 @@ type WeatherSettingsRawPayload = {
   particleClarity?: unknown;
 };
 
+export type AuthStateSyncPayload = {
+  loggedIn?: unknown;
+  token?: unknown;
+  apiOrigin?: unknown;
+};
+
 export type SyncBridgeHandlerDeps = {
   handleTodoViewSync: (payload: TodoViewSyncPayload) => void;
   applyWeatherSettingsSync: (payload: WeatherSettingsRawPayload) => void;
   refreshNativeWeatherSnapshot: () => Promise<void>;
+  syncFocusLiveActivityAuth: (payload: AuthStateSyncPayload) => Promise<unknown>;
 };
 
 export async function handleSyncBridgeMessage(
@@ -49,7 +56,8 @@ export async function handleSyncBridgeMessage(
   }
 
   if (messageType === "REST_AUTH_STATE_SYNC") {
-    // push permission intro 는 네이티브 첫 진입 시점에서 처리
+    const payload = (readBridgePayloadRecord(parsedData) ?? {}) as AuthStateSyncPayload;
+    await deps.syncFocusLiveActivityAuth(payload);
     return true;
   }
 

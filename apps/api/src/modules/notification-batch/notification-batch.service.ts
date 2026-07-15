@@ -50,13 +50,68 @@ export type NotificationBatchResult = {
 
 const DEFAULT_TIMEZONE = "Asia/Seoul";
 const NEW_USER_REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
-const EMPTY_TODO_TITLE = "오늘 할일을 정해볼까요?";
 const INCOMPLETE_TODO_TITLE = "할일 이어가기";
 
-const EMPTY_TODO_COPY: Record<ReminderTone, string> = {
-  soft: "가볍게 하나만 적어도 충분해요.",
-  balanced: "오늘 할일을 하나 정하고 하루를 시작해보세요.",
-  firm: "오늘 할일이 비어 있어요. 지금 하나 정해보세요.",
+type EmptyTodoMessage = {
+  title: string;
+  body: string;
+};
+
+const EMPTY_TODO_MESSAGES_BY_TONE: Record<ReminderTone, readonly EmptyTodoMessage[]> = {
+  soft: [
+    {
+      title: "오늘은 뭐부터 해볼까요?",
+      body: "떠오르는 일 하나만 가볍게 적어봐요.",
+    },
+    {
+      title: "천천히 시작해도 괜찮아요",
+      body: "지금 생각나는 일 하나만 적어둘까요?",
+    },
+    {
+      title: "오늘 할 일, 하나만 골라봐요",
+      body: "작은 것부터 시작하면 마음도 조금 가벼워져요.",
+    },
+    {
+      title: "아직 비어 있어도 괜찮아요",
+      body: "부담 없는 일부터 하나씩 정해봐요.",
+    },
+  ],
+  balanced: [
+    {
+      title: "오늘 뭐부터 할까요?",
+      body: "가장 먼저 끝내고 싶은 일 하나를 적어봐요.",
+    },
+    {
+      title: "잠깐, 오늘 할 일은 정했나요?",
+      body: "생각해둔 게 있다면 잊기 전에 적어둬요.",
+    },
+    {
+      title: "오늘 계획이 아직 비어 있어요",
+      body: "지금 떠오르는 일부터 하나 추가해봐요.",
+    },
+    {
+      title: "하루 시작 전에 하나만",
+      body: "오늘 꼭 하고 싶은 일을 먼저 골라봐요.",
+    },
+  ],
+  firm: [
+    {
+      title: "오늘 할 일, 아직 안 정했어요",
+      body: "지금 해야 할 일 하나부터 적어봐요.",
+    },
+    {
+      title: "미루기 전에 하나만 정해요",
+      body: "가장 중요한 일이 뭔지 지금 골라봐요.",
+    },
+    {
+      title: "오늘 계획이 아직 비어 있어요",
+      body: "지금 바로 시작할 일 하나를 적어봐요.",
+    },
+    {
+      title: "이제 첫 할 일을 정할 때예요",
+      body: "고민은 잠깐 멈추고 하나부터 골라봐요.",
+    },
+  ],
 };
 
 const INCOMPLETE_COPY_BY_TONE: Record<ReminderTone, string> = {
@@ -66,6 +121,12 @@ const INCOMPLETE_COPY_BY_TONE: Record<ReminderTone, string> = {
 };
 
 const REMINDER_LOCK_TTL_MS = 90 * 1000;
+
+function pickEmptyTodoMessage(tone: ReminderTone) {
+  const candidates = EMPTY_TODO_MESSAGES_BY_TONE[tone];
+  const index = Math.floor(Math.random() * candidates.length);
+  return candidates[index] ?? candidates[0];
+}
 
 export async function runNotificationBatch(input: RunNotificationBatchInput): Promise<NotificationBatchResult> {
   const now = input.now ?? new Date();
@@ -269,11 +330,12 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
         continue;
       }
 
+      const emptyTodoMessage = pickEmptyTodoMessage(tone);
       deliveries.push({
         userId: settings.userId,
         kind: "empty_todo_start",
-        title: EMPTY_TODO_TITLE,
-        body: EMPTY_TODO_COPY[tone],
+        title: emptyTodoMessage.title,
+        body: emptyTodoMessage.body,
         tone,
       });
 
@@ -288,8 +350,8 @@ export async function runNotificationBatch(input: RunNotificationBatchInput): Pr
           await sendExpoPushMessages({
             entries: tokens.map((token) => ({
               pushToken: token.pushToken,
-              title: EMPTY_TODO_TITLE,
-              body: EMPTY_TODO_COPY[tone],
+              title: emptyTodoMessage.title,
+              body: emptyTodoMessage.body,
               data: {
                 kind: "empty_todo_start",
                 dateKey: nowInTimezone.dateKey,

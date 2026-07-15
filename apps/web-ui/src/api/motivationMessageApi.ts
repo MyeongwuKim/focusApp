@@ -7,9 +7,20 @@ export type MotivationMessageResponse = {
   ttlSeconds: number;
 };
 
-export async function fetchMotivationMessage() {
+export type FetchMotivationMessageInput = {
+  dateKey?: string | null;
+};
+
+export async function fetchMotivationMessage(input: FetchMotivationMessageInput = {}) {
   const apiOrigin = getApiOrigin();
-  const endpoint = apiOrigin ? `${apiOrigin}/api/motivation/message` : "/api/motivation/message";
+  const params = new URLSearchParams();
+  if (input.dateKey) {
+    params.set("dateKey", input.dateKey);
+  }
+
+  const queryString = params.toString();
+  const path = `/api/motivation/message${queryString ? `?${queryString}` : ""}`;
+  const endpoint = apiOrigin ? `${apiOrigin}${path}` : path;
   const response = await fetchWithBackendStatus(endpoint, {
     method: "GET",
     headers: buildAuthHeaders(),

@@ -78,6 +78,30 @@ function createPrismaMock(input: {
 }
 
 describe("runNotificationBatch", () => {
+  it("할 일이 비어 있으면 설정한 톤의 후보 중 하나를 선택한다", async () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.75);
+    const prisma = createPrismaMock({
+      settings: [createSettings({ tone: "balanced" })],
+      todos: [],
+    });
+
+    const result = await runNotificationBatch({
+      prisma: prisma as never,
+      now: new Date("2026-05-04T08:00:00.000Z"),
+      dryRun: true,
+      force: true,
+      timezone: "Asia/Seoul",
+    });
+
+    expect(result.deliveries[0]).toMatchObject({
+      kind: "empty_todo_start",
+      tone: "balanced",
+      title: "하루 시작 전에 하나만",
+      body: "오늘 꼭 하고 싶은 일을 먼저 골라봐요.",
+    });
+    randomSpy.mockRestore();
+  });
+
   it("첫번째 미완료가 미시작 상태면 미완료 리마인드를 보낸다", async () => {
     const prisma = createPrismaMock({
       todos: [createTodo({ content: "A", order: 0 }), createTodo({ id: "todo-2", content: "B", order: 1 })],

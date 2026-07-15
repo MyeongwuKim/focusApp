@@ -4,6 +4,10 @@ import {
   type LocationBridgeHandlerDeps,
 } from "./handlers/locationBridgeHandlers";
 import {
+  handleFocusLiveActivityBridgeMessage,
+  type FocusLiveActivityBridgeHandlerDeps,
+} from "./handlers/focusLiveActivityBridgeHandlers";
+import {
   handleNotificationBridgeMessage,
   type NotificationBridgeHandlerDeps,
 } from "./handlers/notificationBridgeHandlers";
@@ -17,6 +21,7 @@ export type RouteWebViewBridgeDeps = {
   location: LocationBridgeHandlerDeps;
   version: VersionBridgeHandlerDeps;
   auth: AuthBridgeHandlerDeps;
+  focusLiveActivity: FocusLiveActivityBridgeHandlerDeps;
 };
 
 export async function routeWebViewBridgeMessage(
@@ -36,6 +41,10 @@ export async function routeWebViewBridgeMessage(
   }
 
   if (await handleAuthBridgeMessage(parsedData, deps.auth)) {
+    return true;
+  }
+
+  if (await handleFocusLiveActivityBridgeMessage(parsedData, deps.focusLiveActivity)) {
     return true;
   }
 

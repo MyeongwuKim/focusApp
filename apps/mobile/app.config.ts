@@ -199,6 +199,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const iosBundleIdentifier =
     readConfigString(variantConfig?.ios?.bundleIdentifier) ||
     (isTestVariant ? TEST_BUNDLE_ID : PROD_BUNDLE_ID);
+  const focusLiveActivityAppGroup = `group.${iosBundleIdentifier}.focus-live-activity`;
+  const existingIosEntitlements = (config.ios?.entitlements ?? {}) as Record<string, unknown>;
+  const existingIosAppGroups = Array.isArray(
+    existingIosEntitlements["com.apple.security.application-groups"]
+  )
+    ? existingIosEntitlements["com.apple.security.application-groups"].filter(
+        (value): value is string => typeof value === "string" && Boolean(value.trim())
+      )
+    : [];
   const androidPackage =
     readConfigString(variantConfig?.android?.package) ||
     (isTestVariant ? TEST_ANDROID_PACKAGE : PROD_ANDROID_PACKAGE);
@@ -248,6 +257,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins.push("expo-apple-authentication");
   }
 
+  if (!hasPlugin(plugins, "@bacons/apple-targets")) {
+    plugins.push("@bacons/apple-targets");
+  }
+
+  if (!hasPlugin(plugins, "./plugins/with-focus-live-activity")) {
+    plugins.push("./plugins/with-focus-live-activity");
+  }
+
   const expoBuildPropertiesPluginIndex = plugins.findIndex((plugin) => {
     if (!Array.isArray(plugin)) {
       return false;
@@ -294,8 +311,19 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     version: testVersion || config.version,
     ios: {
       ...(config.ios ?? {}),
+      appleTeamId: "23598J95N3",
       bundleIdentifier: iosBundleIdentifier,
       usesAppleSignIn: true,
+      entitlements: {
+        ...existingIosEntitlements,
+        "com.apple.security.application-groups": Array.from(
+          new Set([...existingIosAppGroups, focusLiveActivityAppGroup])
+        ),
+      },
+      infoPlist: {
+        ...(config.ios?.infoPlist ?? {}),
+        NSSupportsLiveActivities: true,
+      },
       ...(testIosBuildNumber ? { buildNumber: testIosBuildNumber } : {}),
     },
     android: {

@@ -40,7 +40,11 @@ import {
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
 import { routeWebViewBridgeMessage } from "../src/features/bridge/routeWebViewBridgeMessage";
-import type { TodoViewSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
+import type { FocusLiveActivityPayload } from "../src/features/bridge/handlers/focusLiveActivityBridgeHandlers";
+import type {
+  AuthStateSyncPayload,
+  TodoViewSyncPayload,
+} from "../src/features/bridge/handlers/syncBridgeHandlers";
 import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
 import {
   prepareWebUiBundleVersion,
@@ -121,6 +125,13 @@ type NativeAppleAuthResult = {
   userId: string;
 };
 type AuthProvider = "apple" | "kakao" | "naver";
+type FocusLiveActivityNativeModule = {
+  isSupported?: () => Promise<unknown>;
+  configure?: (payload: AuthStateSyncPayload) => Promise<unknown>;
+  start?: (payload: FocusLiveActivityPayload) => Promise<unknown>;
+  update?: (payload: FocusLiveActivityPayload) => Promise<unknown>;
+  end?: (payload: Pick<FocusLiveActivityPayload, "todoId" | "dateKey">) => Promise<unknown>;
+};
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
 const NAVER_NATIVE_URL_SCHEME = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim() ?? "";
@@ -291,6 +302,33 @@ function resolveNativeAppScheme() {
 
 function resolveNativePlatform() {
   return Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown";
+}
+
+function getFocusLiveActivityNativeModule(): FocusLiveActivityNativeModule | null {
+  const nativeModulesRecord = readUnknownRecord(NativeModules);
+  const nativeModule = readUnknownRecord(nativeModulesRecord?.FocusLiveActivityModule);
+  if (!nativeModule) {
+    return null;
+  }
+
+  return nativeModule as FocusLiveActivityNativeModule;
+}
+
+async function callFocusLiveActivityModule(
+  method: "configure" | "start" | "update" | "end",
+  payload: FocusLiveActivityPayload | AuthStateSyncPayload
+) {
+  if (Platform.OS !== "ios") {
+    return { supported: false, reason: "UNSUPPORTED_PLATFORM" };
+  }
+
+  const nativeModule = getFocusLiveActivityNativeModule();
+  const nativeMethod = nativeModule?.[method];
+  if (typeof nativeMethod !== "function") {
+    return { supported: false, reason: "NATIVE_MODULE_UNAVAILABLE" };
+  }
+
+  return await nativeMethod(payload);
 }
 
 function hasNativeAppProtocol(rawUrl: string, nativeAppScheme: string) {
@@ -856,6 +894,30 @@ function resolveAuthCallbackHashFromUrl(rawUrl: string, nativeAppScheme: string)
   }
 }
 
+function resolveNativeRoutePathFromUrl(rawUrl: string, nativeAppScheme: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    if (normalizeNativeAppScheme(parsed.protocol) !== nativeAppScheme) {
+      return null;
+    }
+
+    const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+    if (hash.startsWith("/")) {
+      return hash;
+    }
+
+    const hostPath = parsed.hostname ? `/${parsed.hostname}${parsed.pathname}` : parsed.pathname;
+    const normalizedPath = hostPath.startsWith("/") ? hostPath : `/${hostPath}`;
+    if (normalizedPath === "/" || normalizedPath === "/auth/callback") {
+      return null;
+    }
+
+    return `${normalizedPath}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
 function resolveProviderFromBridgeLoginResultType(type: string): AuthProvider | null {
   if (type === "REST_AUTH_APPLE_LOGIN_RESULT") {
     return "apple";
@@ -1266,7 +1328,7 @@ export default function WebViewScreen() {
     [localFileUri, webUiEntryUri]
   );
 
-  const navigateWebViewByTargetPath = (targetPath: string) => {
+  const navigateWebViewByTargetPath = useCallback((targetPath: string) => {
     if (!targetPath.startsWith("/")) {
       return;
     }
@@ -1290,7 +1352,7 @@ export default function WebViewScreen() {
       `(() => { window.location.hash = ${JSON.stringify(hashPath)}; })(); true;`
     );
     pendingNotificationPathRef.current = null;
-  };
+  }, [webUiEntryUri]);
 
   const dispatchNativeBridgeEvent = useCallback(
     (message: { type: string; payload?: Record<string, unknown> }) => {
@@ -1764,11 +1826,15 @@ export default function WebViewScreen() {
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const callbackHash = resolveAuthCallbackHashFromUrl(event.url, nativeAppScheme);
-      if (!callbackHash) {
+      if (callbackHash) {
+        navigateWebViewToAuthCallbackHash(callbackHash);
         return;
       }
 
-      navigateWebViewToAuthCallbackHash(callbackHash);
+      const nativeRoutePath = resolveNativeRoutePathFromUrl(event.url, nativeAppScheme);
+      if (nativeRoutePath) {
+        navigateWebViewByTargetPath(nativeRoutePath);
+      }
     };
 
     const subscription = Linking.addEventListener("url", handleDeepLink);
@@ -1785,7 +1851,7 @@ export default function WebViewScreen() {
     return () => {
       subscription.remove();
     };
-  }, [nativeAppScheme, navigateWebViewToAuthCallbackHash]);
+  }, [nativeAppScheme, navigateWebViewByTargetPath, navigateWebViewToAuthCallbackHash]);
 
   useEffect(() => {
     if (!webUiEntryUri || !webViewRef.current) {
@@ -1825,6 +1891,9 @@ export default function WebViewScreen() {
           handleTodoViewSync,
           applyWeatherSettingsSync,
           refreshNativeWeatherSnapshot,
+          syncFocusLiveActivityAuth: async (payload) => {
+            return await callFocusLiveActivityModule("configure", payload);
+          },
         },
         notification: {
           sendBridgeResult,
@@ -1864,6 +1933,17 @@ export default function WebViewScreen() {
           unlinkNaverAccountWithTimeout,
           unlinkKakaoAccountWithTimeout,
           resolveNativeErrorCode,
+        },
+        focusLiveActivity: {
+          startFocusLiveActivity: async (payload) => {
+            return await callFocusLiveActivityModule("start", payload);
+          },
+          updateFocusLiveActivity: async (payload) => {
+            return await callFocusLiveActivityModule("update", payload);
+          },
+          endFocusLiveActivity: async (payload) => {
+            return await callFocusLiveActivityModule("end", payload);
+          },
         },
       });
       if (isHandledBridgeMessage) {
@@ -1937,6 +2017,12 @@ export default function WebViewScreen() {
                 const callbackHash = resolveAuthCallbackHashFromUrl(request.url, nativeAppScheme);
                 if (callbackHash) {
                   navigateWebViewToAuthCallbackHash(callbackHash);
+                  return false;
+                }
+
+                const nativeRoutePath = resolveNativeRoutePathFromUrl(request.url, nativeAppScheme);
+                if (nativeRoutePath) {
+                  navigateWebViewByTargetPath(nativeRoutePath);
                 }
                 return false;
               }

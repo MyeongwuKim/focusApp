@@ -32,6 +32,7 @@ import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
 import { fetchNotificationSettings, updateNotificationSettings } from "./api/notificationSettingsApi";
 import { queryClient } from "./queryClient";
 import { fetchMotivationMessage } from "./api/motivationMessageApi";
+import { getApiOrigin } from "./api/graphqlEndpoint";
 import { useOverlayRouteNavigation } from "./hooks/useOverlayRouteNavigation";
 import { useAuthSessionGuard } from "./hooks/useAuthSessionGuard";
 import { isNativeWebViewRuntime } from "./utils/runtimeEnvironment";
@@ -61,6 +62,14 @@ function markSettingsGuidePromptSeen(userId: string) {
   } catch {
     // ignore local storage failures
   }
+}
+
+function getAuthCacheKey(token: string) {
+  let hash = 0;
+  for (let index = 0; index < token.length; index += 1) {
+    hash = (hash * 31 + token.charCodeAt(index)) | 0;
+  }
+  return `auth-${Math.abs(hash)}`;
 }
 
 type NativeWeatherSnapshotPayload = {
@@ -167,13 +176,14 @@ function App() {
     hasShownLoginMotivationThisLaunchRef.current = true;
 
     let cancelled = false;
+    const todayDateKey = formatDateKey(new Date());
 
     void queryClient
       .fetchQuery({
-        queryKey: LOGIN_MOTIVATION_QUERY_KEY,
+        queryKey: [...LOGIN_MOTIVATION_QUERY_KEY, getAuthCacheKey(authToken), todayDateKey],
         staleTime: LOGIN_MOTIVATION_STALE_TIME_MS,
         gcTime: LOGIN_MOTIVATION_STALE_TIME_MS,
-        queryFn: fetchMotivationMessage,
+        queryFn: () => fetchMotivationMessage({ dateKey: todayDateKey }),
       })
       .then((result) => {
         if (cancelled) {
@@ -182,9 +192,9 @@ function App() {
 
         toast.show({
           type: "positive",
-          title: "오늘의 한마디",
+          title: "오늘 계획을 보고 한마디",
           message: result.message,
-          duration: 3200,
+          duration: 4200,
         });
       })
       .catch(() => {
@@ -231,8 +241,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    syncNativeAuthState({ loggedIn: isLoggedIn });
-  }, [isLoggedIn]);
+    syncNativeAuthState({
+      loggedIn: isLoggedIn,
+      token: authToken,
+      apiOrigin: getApiOrigin(),
+    });
+  }, [authToken, isLoggedIn]);
 
   useEffect(() => {
     const context = resolveTodayTodoViewContext({
