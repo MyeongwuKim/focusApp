@@ -97,6 +97,133 @@ function replaceRequired(content, pattern, replacement, label) {
   return content.replace(pattern, replacement);
 }
 
+function findExistingFile(candidates) {
+  return candidates.find((filePath) => fs.existsSync(filePath)) ?? null;
+}
+
+function listChildDirectories(parentPath) {
+  if (!fs.existsSync(parentPath)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(parentPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+}
+
+function resolveIosProjectFiles() {
+  const iosRoot = path.join(appRoot, "ios");
+  if (!fs.existsSync(iosRoot)) {
+    return null;
+  }
+
+  const projectNames = listChildDirectories(iosRoot).filter(
+    (name) => name.endsWith(".xcodeproj") && name !== "Pods.xcodeproj"
+  );
+  const projects = projectNames
+    .map((name) => ({
+      name,
+      baseName: name.replace(/\.xcodeproj$/, ""),
+      projectPath: path.join(iosRoot, name, "project.pbxproj"),
+    }))
+    .filter((project) => fs.existsSync(project.projectPath));
+
+  if (projects.length === 0) {
+    return null;
+  }
+
+  const appDirectoryNames = listChildDirectories(iosRoot).filter((name) => {
+    if (name === "Pods" || name === "build") {
+      return false;
+    }
+    if (name.endsWith(".xcodeproj") || name.endsWith(".xcworkspace")) {
+      return false;
+    }
+
+    return (
+      fs.existsSync(path.join(iosRoot, name, "Info.plist")) &&
+      fs.existsSync(path.join(iosRoot, name, "AppDelegate.swift"))
+    );
+  });
+
+  const preferredProject =
+    projects.find((project) => appDirectoryNames.includes(project.baseName)) ?? projects[0];
+  const preferredAppDirectoryName =
+    appDirectoryNames.find((name) => name === preferredProject.baseName) ?? appDirectoryNames[0];
+
+  if (!preferredAppDirectoryName) {
+    return null;
+  }
+
+  const appDirectoryPath = path.join(iosRoot, preferredAppDirectoryName);
+  const appEntitlementsPath = findExistingFile([
+    path.join(appDirectoryPath, `${preferredAppDirectoryName}.entitlements`),
+    path.join(appDirectoryPath, "app.entitlements"),
+    ...fs
+      .readdirSync(appDirectoryPath)
+      .filter((name) => name.endsWith(".entitlements"))
+      .map((name) => path.join(appDirectoryPath, name)),
+  ]);
+
+  return {
+    appDirectoryName: preferredAppDirectoryName,
+    projectPath: preferredProject.projectPath,
+    plistPath: path.join(appDirectoryPath, "Info.plist"),
+    appDelegatePath: path.join(appDirectoryPath, "AppDelegate.swift"),
+    appEntitlementsPath,
+    widgetEntitlementsPath: path.join(appRoot, "targets", "focus-live-activity", "generated.entitlements"),
+  };
+}
+
+function replaceIosBundleIdentifiers(projectContent, bundleIdentifier) {
+  return replaceRequired(
+    projectContent,
+    /PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g,
+    (_match, currentValue) => {
+      const normalizedValue = String(currentValue).trim().replace(/^"|"$/g, "");
+      const nextIdentifier = normalizedValue.endsWith(".FocusLiveActivityWidget")
+        ? `${bundleIdentifier}.FocusLiveActivityWidget`
+        : bundleIdentifier;
+      return `PRODUCT_BUNDLE_IDENTIFIER = ${nextIdentifier};`;
+    },
+    "iOS PRODUCT_BUNDLE_IDENTIFIER"
+  );
+}
+
+function syncAppGroupEntitlements(filePath, appGroup) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return false;
+  }
+
+  const escapedAppGroup = escapeXml(appGroup);
+  const appGroupBlock = [
+    "    <key>com.apple.security.application-groups</key>",
+    "    <array>",
+    `      <string>${escapedAppGroup}</string>`,
+    "    </array>",
+  ].join("\n");
+
+  let content = fs.readFileSync(filePath, "utf8");
+  if (/<key>com\.apple\.security\.application-groups<\/key>\s*<array>/.test(content)) {
+    content = replaceRequired(
+      content,
+      /\s*<key>com\.apple\.security\.application-groups<\/key>\s*<array>[\s\S]*?<\/array>/,
+      `\n${appGroupBlock}`,
+      `${path.basename(filePath)} application groups`
+    );
+  } else {
+    content = replaceRequired(
+      content,
+      /(\s*<\/dict>)/,
+      `${appGroupBlock}\n$1`,
+      `${path.basename(filePath)} application groups`
+    );
+  }
+
+  return writeIfChanged(filePath, content);
+}
+
 function readConfigString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -184,28 +311,21 @@ function resolveProviderIdentity() {
 }
 
 function syncIos(input) {
-  const projectPath = path.join(appRoot, "ios", "app.xcodeproj", "project.pbxproj");
-  const plistPath = path.join(appRoot, "ios", "app", "Info.plist");
-  const appDelegatePath = path.join(appRoot, "ios", "app", "AppDelegate.swift");
-  if (!fs.existsSync(projectPath) || !fs.existsSync(plistPath) || !fs.existsSync(appDelegatePath)) {
+  const iosProjectFiles = resolveIosProjectFiles();
+  if (!iosProjectFiles) {
     console.log("[native-sync] iOS project not found. Skipped.");
     return;
   }
 
   const buildNumber = input.iosConfig?.buildNumber;
-  let projectContent = fs.readFileSync(projectPath, "utf8");
+  let projectContent = fs.readFileSync(iosProjectFiles.projectPath, "utf8");
   projectContent = replaceRequired(
     projectContent,
     /MARKETING_VERSION = [^;]+;/g,
     `MARKETING_VERSION = ${input.version};`,
     "iOS MARKETING_VERSION"
   );
-  projectContent = replaceRequired(
-    projectContent,
-    /PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/g,
-    `PRODUCT_BUNDLE_IDENTIFIER = ${input.bundleIdentifier};`,
-    "iOS PRODUCT_BUNDLE_IDENTIFIER"
-  );
+  projectContent = replaceIosBundleIdentifiers(projectContent, input.bundleIdentifier);
   if (buildNumber) {
     projectContent = replaceRequired(
       projectContent,
@@ -214,7 +334,7 @@ function syncIos(input) {
       "iOS CURRENT_PROJECT_VERSION"
     );
   }
-  const didUpdateProject = writeIfChanged(projectPath, projectContent);
+  const didUpdateProject = writeIfChanged(iosProjectFiles.projectPath, projectContent);
 
   const escapedAppName = escapeXml(input.appName);
   const escapedAppScheme = escapeXml(input.appScheme);
@@ -229,7 +349,7 @@ function syncIos(input) {
     "        ",
   ].join("\n");
 
-  let plistContent = fs.readFileSync(plistPath, "utf8");
+  let plistContent = fs.readFileSync(iosProjectFiles.plistPath, "utf8");
   plistContent = replaceRequired(
     plistContent,
     /(<key>CFBundleDisplayName<\/key>\s*<string>)[^<]+(<\/string>)/,
@@ -274,21 +394,36 @@ function syncIos(input) {
       "iOS CFBundleVersion"
     );
   }
-  const didUpdatePlist = writeIfChanged(plistPath, plistContent);
+  const didUpdatePlist = writeIfChanged(iosProjectFiles.plistPath, plistContent);
 
-  let appDelegateContent = fs.readFileSync(appDelegatePath, "utf8");
+  let appDelegateContent = fs.readFileSync(iosProjectFiles.appDelegatePath, "utf8");
   appDelegateContent = replaceRequired(
     appDelegateContent,
     /(url\.scheme == ")[^"]+(")/,
     `$1${input.naverUrlScheme}$2`,
     "iOS Naver AppDelegate URL scheme"
   );
-  const didUpdateAppDelegate = writeIfChanged(appDelegatePath, appDelegateContent);
+  const didUpdateAppDelegate = writeIfChanged(iosProjectFiles.appDelegatePath, appDelegateContent);
+  const appGroup = `group.${input.bundleIdentifier}.focus-live-activity`;
+  const didUpdateAppEntitlements = syncAppGroupEntitlements(
+    iosProjectFiles.appEntitlementsPath,
+    appGroup
+  );
+  const didUpdateWidgetEntitlements = syncAppGroupEntitlements(
+    iosProjectFiles.widgetEntitlementsPath,
+    appGroup
+  );
 
   console.log(
     `[native-sync] iOS ${
-      didUpdateProject || didUpdatePlist || didUpdateAppDelegate ? "updated" : "already synced"
-    }: ${
+      didUpdateProject ||
+      didUpdatePlist ||
+      didUpdateAppDelegate ||
+      didUpdateAppEntitlements ||
+      didUpdateWidgetEntitlements
+        ? "updated"
+        : "already synced"
+    } (${iosProjectFiles.appDirectoryName}): ${
       input.bundleIdentifier
     }, ${input.appScheme}, ${input.naverUrlScheme}, ${input.version}${
       buildNumber ? ` (${buildNumber})` : ""

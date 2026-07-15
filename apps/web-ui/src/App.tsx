@@ -31,6 +31,13 @@ import {
 import { registerPushDeviceToken } from "./api/pushDeviceTokenApi";
 import { fetchNotificationSettings, updateNotificationSettings } from "./api/notificationSettingsApi";
 import { queryClient } from "./queryClient";
+import {
+  dailyLogByDateQueryKey,
+  dailyLogsByMonthQueryKey,
+  statsDailyDetailQueryKey,
+  syncExternalDailyLogPayload,
+  type DailyLogDetailPayload,
+} from "./queries";
 import { fetchMotivationMessage } from "./api/motivationMessageApi";
 import { getApiOrigin } from "./api/graphqlEndpoint";
 import { useOverlayRouteNavigation } from "./hooks/useOverlayRouteNavigation";
@@ -77,6 +84,22 @@ type NativeWeatherSnapshotPayload = {
   weatherCode?: number;
   isDay?: number;
 };
+
+function readUnknownRecord(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readUnknownString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isNativeDailyLogPayload(value: unknown): value is DailyLogDetailPayload {
+  const record = readUnknownRecord(value);
+  return Boolean(record && readUnknownString(record.dateKey) && Array.isArray(record.todos));
+}
 
 function resolveTodayTodoViewContext(input: {
   pathname: string;
@@ -305,6 +328,65 @@ function App() {
 
     return () => {
       window.removeEventListener("focus-hybrid-native-bridge", handleNativeWeatherSnapshot as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleNativeFocusLiveActivityControlEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        type?: string;
+        payload?: unknown;
+      }>;
+      const detail = customEvent.detail;
+      if (detail?.type !== "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT") {
+        return;
+      }
+
+      const payload = readUnknownRecord(detail.payload);
+      if (!payload) {
+        return;
+      }
+
+      const dailyLog = payload.dailyLog;
+      if (isNativeDailyLogPayload(dailyLog)) {
+        syncExternalDailyLogPayload(queryClient, dailyLog, {
+          syncMonthCache: true,
+        });
+        return;
+      }
+
+      const dateKey = readUnknownString(payload.dateKey);
+      if (!dateKey) {
+        return;
+      }
+
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogByDateQueryKey(dateKey),
+        exact: true,
+        refetchType: "active",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: statsDailyDetailQueryKey(dateKey),
+        exact: true,
+        refetchType: "active",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogsByMonthQueryKey(dateKey.slice(0, 7)),
+        exact: false,
+        refetchType: "active",
+      });
+    };
+
+    window.addEventListener(
+      "focus-hybrid-native-bridge",
+      handleNativeFocusLiveActivityControlEvent as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "focus-hybrid-native-bridge",
+        handleNativeFocusLiveActivityControlEvent as EventListener
+      );
     };
   }, []);
 

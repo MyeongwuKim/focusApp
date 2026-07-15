@@ -38,6 +38,7 @@ type AddTodosToDailyLogInput = {
 };
 
 type DailyLogDetail = Awaited<ReturnType<typeof addTodosToDailyLog>>;
+export type DailyLogDetailPayload = DailyLogDetail;
 type MonthlyLogSnapshot = Awaited<ReturnType<typeof fetchDailyLogsByMonth>>[number];
 type DailyLogTodo = DailyLogDetail["todos"][number];
 type DailyLogMutationInputBase = { dateKey: string };
@@ -596,6 +597,16 @@ function applyDailyLogMutationCacheSync(
       refetchType: "active",
     });
   }
+}
+
+export function syncExternalDailyLogPayload(
+  queryClient: QueryClient,
+  payload: DailyLogDetailPayload,
+  options?: { syncMonthCache?: boolean }
+) {
+  applyDailyLogMutationCacheSync(queryClient, payload, {
+    syncMonthCache: options?.syncMonthCache ?? true,
+  });
 }
 
 export function useUpsertDailyLogMemoMutation(dateKey: string) {

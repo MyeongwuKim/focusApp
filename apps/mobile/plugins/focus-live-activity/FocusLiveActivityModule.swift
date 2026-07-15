@@ -119,7 +119,9 @@ private struct FocusLiveActivityInput {
 
     let fallbackPath = "/date-tasks?date=\(dateKey)&todoId=\(todoId)"
     let targetPath = path.hasPrefix("/") ? path : fallbackPath
-    return "\(resolvePrimaryAppScheme())://\(targetPath.dropFirst())"
+    let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+    let encodedTargetPath = targetPath.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? "%2Fdate-tasks"
+    return "\(resolvePrimaryAppScheme()):///?focusPath=\(encodedTargetPath)"
   }
 
   private static func resolvePrimaryAppScheme() -> String {
@@ -254,6 +256,14 @@ class FocusLiveActivityModule: NSObject {
       await Self.endActivities(todoId: todoId, dateKey: dateKey)
       resolve(["supported": true, "ended": true])
     }
+  }
+
+  @objc
+  func consumePendingControlEvent(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    resolve(FocusLiveActivityControlEvents.consumePendingEvent() ?? NSNull())
   }
 
   @available(iOS 16.1, *)

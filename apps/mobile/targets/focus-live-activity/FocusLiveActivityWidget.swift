@@ -17,7 +17,7 @@ private func elapsedLabel(_ seconds: Int) -> String {
 
 @available(iOS 16.1, *)
 private func deepLinkURL(_ context: ActivityViewContext<FocusActivityAttributes>) -> URL {
-  URL(string: context.state.deepLink) ?? URL(string: "mobile://date-tasks")!
+  URL(string: context.state.deepLink) ?? URL(string: "mobile:///?focusPath=%2Fdate-tasks")!
 }
 
 @available(iOS 17.0, *)
@@ -33,17 +33,32 @@ private struct FocusLiveActivityControlButton: View {
         shouldResume: context.state.isPaused
       )
     ) {
-      Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
-        .font(.system(size: compact ? 13 : 16, weight: .bold))
-        .frame(width: compact ? 30 : 38, height: compact ? 30 : 38)
-        .foregroundStyle(context.state.isPaused ? Color.cyan : Color.white)
+      Image(systemName: context.state.isPaused ? "play.fill" : "stop.fill")
+        .font(.system(size: compact ? 12 : 16, weight: .bold))
+        .frame(width: compact ? 26 : 38, height: compact ? 26 : 38)
+        .foregroundStyle(context.state.isPaused ? Color.cyan : Color.red)
         .background(
-          context.state.isPaused ? Color.cyan.opacity(0.18) : Color.white.opacity(0.14),
+          context.state.isPaused ? Color.cyan.opacity(0.18) : Color.red.opacity(0.18),
           in: Circle()
         )
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(context.state.isPaused ? "집중 재개" : "집중 일시정지")
+    .accessibilityLabel(context.state.isPaused ? "작업 재개" : "작업 멈춤")
+  }
+}
+
+@available(iOS 16.1, *)
+private struct FocusLiveActivityAppIcon: View {
+  let size: CGFloat
+  let cornerRadius: CGFloat
+
+  var body: some View {
+    Image("AppIconLive")
+      .resizable()
+      .scaledToFit()
+      .frame(width: size, height: size)
+      .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+      .accessibilityHidden(true)
   }
 }
 
@@ -54,12 +69,10 @@ private struct FocusLiveActivityLockScreenView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(alignment: .center, spacing: 10) {
-        Image(systemName: context.state.isPaused ? "pause.circle.fill" : "timer")
-          .font(.system(size: 22, weight: .semibold))
-          .foregroundStyle(context.state.isPaused ? Color.orange : Color.cyan)
+        FocusLiveActivityAppIcon(size: 30, cornerRadius: 8)
 
         VStack(alignment: .leading, spacing: 2) {
-          Text(context.state.isPaused ? "일시정지" : "집중 중")
+          Text(context.state.isPaused ? "잠시 멈춤" : "작업 진행 중")
             .font(.caption)
             .foregroundStyle(.secondary)
           Text(context.state.title)
@@ -118,7 +131,7 @@ private struct FocusLiveActivityExpandedView: View {
         .lineLimit(1)
 
       HStack(spacing: 5) {
-        Image(systemName: context.state.isPaused ? "pause.fill" : "timer")
+        FocusLiveActivityAppIcon(size: 18, cornerRadius: 5)
         if context.state.isPaused {
           Text(elapsedLabel(context.state.pausedElapsedSeconds))
             .monospacedDigit()
@@ -177,25 +190,26 @@ struct FocusLiveActivityWidget: Widget {
         }
       } compactLeading: {
         Link(destination: url) {
-          Image(systemName: context.state.isPaused ? "pause.fill" : "timer")
-            .foregroundStyle(context.state.isPaused ? Color.orange : Color.cyan)
+          FocusLiveActivityAppIcon(size: 24, cornerRadius: 6)
         }
+        .accessibilityLabel("타임스택 열기")
       } compactTrailing: {
-        Link(destination: url) {
-          if context.state.isPaused {
-            Text(elapsedLabel(context.state.pausedElapsedSeconds))
-              .font(.caption2.weight(.semibold))
-              .monospacedDigit()
-          } else {
-            Text(context.state.timerStartedAt, style: .timer)
-              .font(.caption2.weight(.semibold))
-              .monospacedDigit()
+        if #available(iOS 17.0, *) {
+          FocusLiveActivityControlButton(context: context, compact: true)
+        } else {
+          Link(destination: url) {
+            Image(systemName: context.state.isPaused ? "play.fill" : "stop.fill")
+              .foregroundStyle(context.state.isPaused ? Color.cyan : Color.red)
           }
         }
       } minimal: {
-        Link(destination: url) {
-          Image(systemName: context.state.isPaused ? "pause.fill" : "timer")
-            .foregroundStyle(context.state.isPaused ? Color.orange : Color.cyan)
+        if #available(iOS 17.0, *) {
+          FocusLiveActivityControlButton(context: context, compact: true)
+        } else {
+          Link(destination: url) {
+            Image(systemName: context.state.isPaused ? "play.fill" : "stop.fill")
+              .foregroundStyle(context.state.isPaused ? Color.cyan : Color.red)
+          }
         }
       }
     }

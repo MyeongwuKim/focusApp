@@ -7,13 +7,28 @@ struct FocusLiveActivityCredentialSnapshot {
   let apiOrigin: String
 }
 
-enum FocusLiveActivityCredentials {
+private enum FocusLiveActivitySharedDefaults {
   private static let widgetBundleSuffix = ".FocusLiveActivityWidget"
+
+  static func read() -> UserDefaults? {
+    guard var bundleIdentifier = Bundle.main.bundleIdentifier, !bundleIdentifier.isEmpty else {
+      return nil
+    }
+
+    if bundleIdentifier.hasSuffix(widgetBundleSuffix) {
+      bundleIdentifier.removeLast(widgetBundleSuffix.count)
+    }
+
+    return UserDefaults(suiteName: "group.\(bundleIdentifier).focus-live-activity")
+  }
+}
+
+enum FocusLiveActivityCredentials {
   private static let tokenKey = "focus-live-activity.session-token"
   private static let apiOriginKey = "focus-live-activity.api-origin"
 
   static func update(loggedIn: Bool, token: String, apiOrigin: String) {
-    guard let defaults = sharedDefaults() else {
+    guard let defaults = FocusLiveActivitySharedDefaults.read() else {
       return
     }
 
@@ -29,7 +44,7 @@ enum FocusLiveActivityCredentials {
 
   static func read() -> FocusLiveActivityCredentialSnapshot? {
     guard
-      let defaults = sharedDefaults(),
+      let defaults = FocusLiveActivitySharedDefaults.read(),
       let token = defaults.string(forKey: tokenKey)?.trimmingCharacters(in: .whitespacesAndNewlines),
       let apiOrigin = defaults.string(forKey: apiOriginKey)?.trimmingCharacters(in: .whitespacesAndNewlines),
       !token.isEmpty,
@@ -40,17 +55,65 @@ enum FocusLiveActivityCredentials {
 
     return FocusLiveActivityCredentialSnapshot(token: token, apiOrigin: apiOrigin)
   }
+}
 
-  private static func sharedDefaults() -> UserDefaults? {
-    guard var bundleIdentifier = Bundle.main.bundleIdentifier, !bundleIdentifier.isEmpty else {
+struct FocusLiveActivityControlEvent: Codable {
+  let id: String
+  let action: String
+  let todoId: String
+  let dateKey: String
+  let occurredAt: String
+  let dailyLog: FocusLiveActivityDailyLogResponse
+}
+
+enum FocusLiveActivityControlEvents {
+  private static let eventKey = "focus-live-activity.pending-control-event"
+
+  static func record(action: String, todoId: String, dateKey: String, dailyLog: FocusLiveActivityDailyLogResponse) {
+    guard let defaults = FocusLiveActivitySharedDefaults.read() else {
+      return
+    }
+
+    let event = FocusLiveActivityControlEvent(
+      id: UUID().uuidString,
+      action: action,
+      todoId: todoId,
+      dateKey: dateKey,
+      occurredAt: isoString(from: Date()),
+      dailyLog: dailyLog
+    )
+
+    guard let data = try? JSONEncoder().encode(event) else {
+      return
+    }
+
+    defaults.set(data, forKey: eventKey)
+    defaults.synchronize()
+  }
+
+  static func consumePendingEvent() -> NSDictionary? {
+    guard
+      let defaults = FocusLiveActivitySharedDefaults.read(),
+      let data = defaults.data(forKey: eventKey)
+    else {
       return nil
     }
 
-    if bundleIdentifier.hasSuffix(widgetBundleSuffix) {
-      bundleIdentifier.removeLast(widgetBundleSuffix.count)
+    defaults.removeObject(forKey: eventKey)
+    guard
+      let object = try? JSONSerialization.jsonObject(with: data),
+      let dictionary = object as? [String: Any]
+    else {
+      return nil
     }
 
-    return UserDefaults(suiteName: "group.\(bundleIdentifier).focus-live-activity")
+    return dictionary as NSDictionary
+  }
+
+  private static func isoString(from date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.string(from: date)
   }
 }
 
@@ -81,26 +144,52 @@ struct ToggleFocusLiveActivityIntent: LiveActivityIntent {
       throw FocusLiveActivityControlError.authenticationRequired
     }
 
-    let todo = try await updateTodo(credentials: credentials)
-    try await updateActivity(todo: todo)
+    let previousState = try await updateActivityOptimistically()
+
+    do {
+      let result = try await updateTodo(credentials: credentials)
+      try await updateActivity(todo: result.todo)
+      FocusLiveActivityControlEvents.record(
+        action: shouldResume ? "resume" : "pause",
+        todoId: todoId,
+        dateKey: dateKey,
+        dailyLog: result.dailyLog
+      )
+    } catch {
+      await restoreActivity(state: previousState)
+      throw error
+    }
+
     return .result()
   }
 
   private func updateTodo(
     credentials: FocusLiveActivityCredentialSnapshot
-  ) async throws -> FocusLiveActivityTodoResponse {
+  ) async throws -> FocusLiveActivityToggleResult {
     let action = shouldResume ? "resumeTodo" : "pauseTodo"
     let query = """
       mutation ToggleFocusTodo($input: TodoActionInput!) {
         updateTodo: \(action)(input: $input) {
+          dateKey
+          memo
+          restAccumulatedSeconds
+          restStartedAt
           todos {
             id
+            taskId
+            titleSnapshot
             content
             done
+            order
             startedAt
+            scheduledStartAt
             pausedAt
+            completedAt
             deviationSeconds
+            resumeCount
+            actualFocusSeconds
             targetFocusMinutes
+            muteReminderDateKey
           }
         }
       }
@@ -131,14 +220,54 @@ struct ToggleFocusLiveActivityIntent: LiveActivityIntent {
     }
 
     guard
-      let todo = result.data?.updateTodo.todos.first(where: { $0.id == todoId }),
+      let dailyLog = result.data?.updateTodo,
+      let todo = dailyLog.todos.first(where: { $0.id == todoId }),
       !todo.done,
       todo.startedAt != nil
     else {
       throw FocusLiveActivityControlError.todoUnavailable
     }
 
-    return todo
+    return FocusLiveActivityToggleResult(todo: todo, dailyLog: dailyLog)
+  }
+
+  private func updateActivityOptimistically() async throws -> FocusActivityAttributes.ContentState {
+    guard
+      let activity = Activity<FocusActivityAttributes>.activities.first(where: {
+        $0.attributes.todoId == todoId && $0.attributes.dateKey == dateKey
+      })
+    else {
+      throw FocusLiveActivityControlError.activityUnavailable
+    }
+
+    let previousState = activity.content.state
+    let now = Date()
+    let nextState: FocusActivityAttributes.ContentState
+    if shouldResume {
+      nextState = FocusActivityAttributes.ContentState(
+        title: previousState.title,
+        startedAt: previousState.startedAt,
+        timerStartedAt: now.addingTimeInterval(-TimeInterval(previousState.pausedElapsedSeconds)),
+        isPaused: false,
+        pausedElapsedSeconds: previousState.pausedElapsedSeconds,
+        targetFocusMinutes: previousState.targetFocusMinutes,
+        deepLink: previousState.deepLink
+      )
+    } else {
+      let elapsedSeconds = max(Int(now.timeIntervalSince(previousState.timerStartedAt)), 0)
+      nextState = FocusActivityAttributes.ContentState(
+        title: previousState.title,
+        startedAt: previousState.startedAt,
+        timerStartedAt: previousState.timerStartedAt,
+        isPaused: true,
+        pausedElapsedSeconds: elapsedSeconds,
+        targetFocusMinutes: previousState.targetFocusMinutes,
+        deepLink: previousState.deepLink
+      )
+    }
+
+    await updateActivity(activity, state: nextState)
+    return previousState
   }
 
   private func updateActivity(todo: FocusLiveActivityTodoResponse) async throws {
@@ -166,6 +295,25 @@ struct ToggleFocusLiveActivityIntent: LiveActivityIntent {
       deepLink: previousState.deepLink
     )
 
+    await updateActivity(activity, state: state)
+  }
+
+  private func restoreActivity(state: FocusActivityAttributes.ContentState) async {
+    guard
+      let activity = Activity<FocusActivityAttributes>.activities.first(where: {
+        $0.attributes.todoId == todoId && $0.attributes.dateKey == dateKey
+      })
+    else {
+      return
+    }
+
+    await updateActivity(activity, state: state)
+  }
+
+  private func updateActivity(
+    _ activity: Activity<FocusActivityAttributes>,
+    state: FocusActivityAttributes.ContentState
+  ) async {
     await activity.update(ActivityContent(state: state, staleDate: nil))
   }
 
@@ -200,11 +348,7 @@ private struct FocusLiveActivityGraphQLRequest: Encodable {
 
 private struct FocusLiveActivityGraphQLResponse: Decodable {
   struct Payload: Decodable {
-    struct DailyLog: Decodable {
-      let todos: [FocusLiveActivityTodoResponse]
-    }
-
-    let updateTodo: DailyLog
+    let updateTodo: FocusLiveActivityDailyLogResponse
   }
 
   struct GraphQLError: Decodable {
@@ -215,14 +359,35 @@ private struct FocusLiveActivityGraphQLResponse: Decodable {
   let errors: [GraphQLError]?
 }
 
-private struct FocusLiveActivityTodoResponse: Decodable {
+struct FocusLiveActivityDailyLogResponse: Codable {
+  let dateKey: String
+  let memo: String?
+  let restAccumulatedSeconds: Int
+  let restStartedAt: String?
+  let todos: [FocusLiveActivityTodoResponse]
+}
+
+private struct FocusLiveActivityToggleResult {
+  let todo: FocusLiveActivityTodoResponse
+  let dailyLog: FocusLiveActivityDailyLogResponse
+}
+
+struct FocusLiveActivityTodoResponse: Codable {
   let id: String
+  let taskId: String?
+  let titleSnapshot: String?
   let content: String
   let done: Bool
+  let order: Int
   let startedAt: String?
+  let scheduledStartAt: String?
   let pausedAt: String?
+  let completedAt: String?
   let deviationSeconds: Int
+  let resumeCount: Int
+  let actualFocusSeconds: Int?
   let targetFocusMinutes: Int?
+  let muteReminderDateKey: String?
 }
 
 private enum FocusLiveActivityControlError: LocalizedError {

@@ -131,6 +131,7 @@ type FocusLiveActivityNativeModule = {
   start?: (payload: FocusLiveActivityPayload) => Promise<unknown>;
   update?: (payload: FocusLiveActivityPayload) => Promise<unknown>;
   end?: (payload: Pick<FocusLiveActivityPayload, "todoId" | "dateKey">) => Promise<unknown>;
+  consumePendingControlEvent?: () => Promise<unknown>;
 };
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
@@ -329,6 +330,20 @@ async function callFocusLiveActivityModule(
   }
 
   return await nativeMethod(payload);
+}
+
+async function consumePendingFocusLiveActivityControlEvent() {
+  if (Platform.OS !== "ios") {
+    return null;
+  }
+
+  const nativeModule = getFocusLiveActivityNativeModule();
+  const nativeMethod = nativeModule?.consumePendingControlEvent;
+  if (typeof nativeMethod !== "function") {
+    return null;
+  }
+
+  return await nativeMethod();
 }
 
 function hasNativeAppProtocol(rawUrl: string, nativeAppScheme: string) {
@@ -901,6 +916,11 @@ function resolveNativeRoutePathFromUrl(rawUrl: string, nativeAppScheme: string):
       return null;
     }
 
+    const focusPath = parsed.searchParams.get("focusPath");
+    if (focusPath?.startsWith("/")) {
+      return focusPath;
+    }
+
     const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
     if (hash.startsWith("/")) {
       return hash;
@@ -1297,6 +1317,7 @@ export default function WebViewScreen() {
     routePath: null,
   });
   const pendingWeatherSnapshotRef = useRef<NativeWeatherSnapshot | null>(null);
+  const pendingFocusLiveActivityControlEventRef = useRef<Record<string, unknown> | null>(null);
   const hasShownFatalStartupAlertRef = useRef(false);
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
@@ -1368,6 +1389,39 @@ export default function WebViewScreen() {
     },
     []
   );
+  const dispatchPendingFocusLiveActivityControlEvent = useCallback(() => {
+    const pendingEvent = pendingFocusLiveActivityControlEventRef.current;
+    if (!pendingEvent) {
+      return;
+    }
+
+    const isDispatched = dispatchNativeBridgeEvent({
+      type: "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT",
+      payload: pendingEvent,
+    });
+    if (isDispatched) {
+      pendingFocusLiveActivityControlEventRef.current = null;
+    }
+  }, [dispatchNativeBridgeEvent]);
+  const consumeAndDispatchPendingFocusLiveActivityControlEvent = useCallback(async () => {
+    dispatchPendingFocusLiveActivityControlEvent();
+    if (pendingFocusLiveActivityControlEventRef.current) {
+      return;
+    }
+
+    try {
+      const event = await consumePendingFocusLiveActivityControlEvent();
+      const eventRecord = readUnknownRecord(event);
+      if (!eventRecord) {
+        return;
+      }
+
+      pendingFocusLiveActivityControlEventRef.current = eventRecord;
+      dispatchPendingFocusLiveActivityControlEvent();
+    } catch (error) {
+      console.log("Failed to consume focus live activity control event:", error);
+    }
+  }, [dispatchPendingFocusLiveActivityControlEvent]);
   const sendBridgeResult = useCallback(
     (message: { type: string; requestId?: string | null; payload?: unknown }) => {
       const loginProvider = resolveProviderFromBridgeLoginResultType(message.type);
@@ -1807,12 +1861,25 @@ export default function WebViewScreen() {
         },
       });
 
+      if (nextState === "active") {
+        void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+        setTimeout(() => {
+          void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+        }, 900);
+        setTimeout(() => {
+          void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+        }, 2200);
+      }
     });
 
     return () => {
       subscription.remove();
     };
-  }, [dispatchNativeBridgeEvent]);
+  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent, dispatchNativeBridgeEvent]);
+
+  useEffect(() => {
+    void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent]);
 
   useEffect(() => {
     const callbackHash = pendingAuthCallbackHashRef.current;
@@ -2051,6 +2118,7 @@ export default function WebViewScreen() {
                 webViewRef.current.injectJavaScript(applyScaleScript);
               }
               dispatchPendingWeatherSnapshot();
+              void consumeAndDispatchPendingFocusLiveActivityControlEvent();
               const pendingTargetPath = pendingNotificationPathRef.current;
               if (pendingTargetPath) {
                 const hashPath = `#${pendingTargetPath}`;

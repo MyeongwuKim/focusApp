@@ -41,6 +41,7 @@ app-example
 # generated native folders
 /ios
 /android
+/targets/*/generated.entitlements
 
 # generated webview assets (source of truth: ../web-ui/dist)
 web-dist/

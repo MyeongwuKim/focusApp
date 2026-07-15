@@ -7,6 +7,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="[...unmatched]" />
       </Stack>
       <StatusBar style="auto" />
     </SafeAreaProvider>
