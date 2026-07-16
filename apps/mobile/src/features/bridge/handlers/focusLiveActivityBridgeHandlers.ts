@@ -17,10 +17,15 @@ export type FocusLiveActivityPayload = {
   deepLinkPath?: unknown;
 };
 
+export type FocusLiveActivityControlEventAckPayload = {
+  eventId?: unknown;
+};
+
 export type FocusLiveActivityBridgeHandlerDeps = {
   startFocusLiveActivity: (payload: FocusLiveActivityPayload) => Promise<unknown>;
   updateFocusLiveActivity: (payload: FocusLiveActivityPayload) => Promise<unknown>;
   endFocusLiveActivity: (payload: Pick<FocusLiveActivityPayload, "todoId" | "dateKey">) => Promise<unknown>;
+  ackFocusLiveActivityControlEvent: (payload: FocusLiveActivityControlEventAckPayload) => void;
 };
 
 export async function handleFocusLiveActivityBridgeMessage(
@@ -50,6 +55,12 @@ export async function handleFocusLiveActivityBridgeMessage(
       todoId: payload.todoId,
       dateKey: payload.dateKey,
     });
+    return true;
+  }
+
+  if (messageType === "REST_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT_ACK") {
+    const payload = (readBridgePayloadRecord(parsedData) ?? {}) as FocusLiveActivityControlEventAckPayload;
+    deps.ackFocusLiveActivityControlEvent(payload);
     return true;
   }
 

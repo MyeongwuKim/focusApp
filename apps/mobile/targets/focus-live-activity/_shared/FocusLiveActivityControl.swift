@@ -117,6 +117,45 @@ enum FocusLiveActivityControlEvents {
   }
 }
 
+enum FocusLiveActivityControlLocks {
+  private static let keyPrefix = "focus-live-activity.control-lock"
+  private static let lockTTL: TimeInterval = 8
+
+  static func acquire(todoId: String, dateKey: String) -> TimeInterval? {
+    guard let defaults = FocusLiveActivitySharedDefaults.read() else {
+      return Date().timeIntervalSince1970
+    }
+
+    let key = lockKey(todoId: todoId, dateKey: dateKey)
+    let now = Date().timeIntervalSince1970
+    let previous = defaults.double(forKey: key)
+    if previous > 0 && now - previous < lockTTL {
+      return nil
+    }
+
+    defaults.set(now, forKey: key)
+    defaults.synchronize()
+    return now
+  }
+
+  static func release(todoId: String, dateKey: String, token: TimeInterval) {
+    guard let defaults = FocusLiveActivitySharedDefaults.read() else {
+      return
+    }
+
+    let key = lockKey(todoId: todoId, dateKey: dateKey)
+    let current = defaults.double(forKey: key)
+    if abs(current - token) < 0.000001 {
+      defaults.removeObject(forKey: key)
+      defaults.synchronize()
+    }
+  }
+
+  private static func lockKey(todoId: String, dateKey: String) -> String {
+    "\(keyPrefix).\(dateKey).\(todoId)"
+  }
+}
+
 @available(iOS 17.0, *)
 struct ToggleFocusLiveActivityIntent: LiveActivityIntent {
   static var title: LocalizedStringResource = "집중 타이머 일시정지 또는 재개"
@@ -140,6 +179,13 @@ struct ToggleFocusLiveActivityIntent: LiveActivityIntent {
   }
 
   func perform() async throws -> some IntentResult {
+    guard let lockToken = FocusLiveActivityControlLocks.acquire(todoId: todoId, dateKey: dateKey) else {
+      return .result()
+    }
+    defer {
+      FocusLiveActivityControlLocks.release(todoId: todoId, dateKey: dateKey, token: lockToken)
+    }
+
     guard let credentials = FocusLiveActivityCredentials.read() else {
       throw FocusLiveActivityControlError.authenticationRequired
     }

@@ -110,6 +110,12 @@ export function endNativeFocusLiveActivity(payload: NativeFocusLiveActivityEndPa
   return postNativeBridgeMessage("REST_FOCUS_LIVE_ACTIVITY_END", { payload });
 }
 
+export function ackNativeFocusLiveActivityControlEvent(eventId: string) {
+  return postNativeBridgeMessage("REST_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT_ACK", {
+    payload: { eventId },
+  });
+}
+
 export function requestNativeWeatherSnapshot() {
   return postNativeBridgeMessage("REST_WEATHER_SNAPSHOT_REQUEST");
 }

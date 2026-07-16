@@ -1,4 +1,4 @@
-import { type MutableRefObject } from "react";
+import { useRef, type MutableRefObject } from "react";
 import { FiCheckCircle, FiClock, FiRotateCcw, FiTarget, FiTrash2 } from "react-icons/fi";
 import { actionSheet, confirm, toast } from "../../../../stores";
 import { getUserFacingErrorMessage } from "../../../../utils/errorMessage";
@@ -167,6 +167,8 @@ export function useDateTodosTaskActions({
   muteTodoReminderToday,
   unmuteTodoReminder,
 }: UseDateTodosTaskActionsParams) {
+  const pendingTaskActionKeyRef = useRef<string | null>(null);
+
   const handleDateTaskAction = (taskId: string, action: DateTaskAction) => {
     if (!dateKey) {
       return;
@@ -194,8 +196,26 @@ export function useDateTodosTaskActions({
       }
     }
 
-    if (action === "pause") {
+    const actionLockKey = `${dateKey}:${taskId}`;
+    if (pendingTaskActionKeyRef.current) {
+      return;
+    }
+
+    const runLockedTaskAction = (operation: () => Promise<void>) => {
+      pendingTaskActionKeyRef.current = actionLockKey;
       void (async () => {
+        try {
+          await operation();
+        } finally {
+          if (pendingTaskActionKeyRef.current === actionLockKey) {
+            pendingTaskActionKeyRef.current = null;
+          }
+        }
+      })();
+    };
+
+    if (action === "pause") {
+      runLockedTaskAction(async () => {
         try {
           const nextLog = await pauseTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
@@ -204,11 +224,11 @@ export function useDateTodosTaskActions({
           const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
           toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
         }
-      })();
+      });
       return;
     }
 
-    void (async () => {
+    runLockedTaskAction(async () => {
       try {
         if (action === "start") {
           const todayKey = formatDateKey(new Date());
@@ -257,7 +277,7 @@ export function useDateTodosTaskActions({
         const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
         toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
       }
-    })();
+    });
   };
 
   const handleEditActualFocus = (taskId: string) => {

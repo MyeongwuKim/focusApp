@@ -18,6 +18,7 @@ import {
 } from "../../../queries";
 import { confirm, toast, useAppStore } from "../../../stores";
 import { formatDateKey } from "../../../utils/holidays";
+import { ackNativeFocusLiveActivityControlEvent } from "../../../utils/nativeBridge";
 import {
   cancelNativeRestNotification,
   cancelNativeTodoStartNotification,
@@ -775,6 +776,10 @@ export function DateTodosRouteProvider({
       }
 
       applyDailyLog(dailyLog);
+      const eventId = typeof payload?.id === "string" ? payload.id.trim() : "";
+      if (eventId) {
+        ackNativeFocusLiveActivityControlEvent(eventId);
+      }
     };
 
     window.addEventListener(

@@ -23,6 +23,7 @@ import {
 import {
   getLocationPermissionStatus,
   getNativeExpoPushToken,
+  ackNativeFocusLiveActivityControlEvent,
   requestNativeWeatherSnapshot,
   syncNativeAuthState,
   syncNativeTodoView,
@@ -288,6 +289,56 @@ function App() {
   }, [activeRoute, locationPathname, locationSearch, selectedDateKey]);
 
   useEffect(() => {
+    const handleNativeAppStateChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        type?: string;
+        payload?: unknown;
+      }>;
+      const detail = customEvent.detail;
+      if (detail?.type !== "RN_APP_STATE_CHANGED") {
+        return;
+      }
+
+      const payload = readUnknownRecord(detail.payload);
+      if (payload?.isActive !== true) {
+        return;
+      }
+
+      const context = resolveTodayTodoViewContext({
+        pathname: locationPathname,
+        search: locationSearch,
+        activeRoute,
+        selectedDateKey,
+      });
+      if (!context.dateKey) {
+        return;
+      }
+
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogByDateQueryKey(context.dateKey),
+        exact: true,
+        refetchType: "active",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: statsDailyDetailQueryKey(context.dateKey),
+        exact: true,
+        refetchType: "active",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogsByMonthQueryKey(context.dateKey.slice(0, 7)),
+        exact: false,
+        refetchType: "active",
+      });
+    };
+
+    window.addEventListener("focus-hybrid-native-bridge", handleNativeAppStateChanged as EventListener);
+
+    return () => {
+      window.removeEventListener("focus-hybrid-native-bridge", handleNativeAppStateChanged as EventListener);
+    };
+  }, [activeRoute, locationPathname, locationSearch, selectedDateKey]);
+
+  useEffect(() => {
     syncNativeWeatherSettings({
       enabled: weatherEnabled,
       mood: weatherMood,
@@ -347,11 +398,15 @@ function App() {
         return;
       }
 
+      const eventId = readUnknownString(payload.id);
       const dailyLog = payload.dailyLog;
       if (isNativeDailyLogPayload(dailyLog)) {
         syncExternalDailyLogPayload(queryClient, dailyLog, {
           syncMonthCache: true,
         });
+        if (eventId) {
+          ackNativeFocusLiveActivityControlEvent(eventId);
+        }
         return;
       }
 
@@ -375,6 +430,9 @@ function App() {
         exact: false,
         refetchType: "active",
       });
+      if (eventId) {
+        ackNativeFocusLiveActivityControlEvent(eventId);
+      }
     };
 
     window.addEventListener(

@@ -1395,14 +1395,22 @@ export default function WebViewScreen() {
       return;
     }
 
-    const isDispatched = dispatchNativeBridgeEvent({
+    dispatchNativeBridgeEvent({
       type: "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT",
       payload: pendingEvent,
     });
-    if (isDispatched) {
-      pendingFocusLiveActivityControlEventRef.current = null;
-    }
   }, [dispatchNativeBridgeEvent]);
+
+  const ackPendingFocusLiveActivityControlEvent = useCallback((payload: { eventId?: unknown }) => {
+    const eventId = readUnknownString(payload.eventId);
+    const pendingEventId = readUnknownString(pendingFocusLiveActivityControlEventRef.current?.id);
+    if (!eventId || eventId !== pendingEventId) {
+      return;
+    }
+
+    pendingFocusLiveActivityControlEventRef.current = null;
+  }, []);
+
   const consumeAndDispatchPendingFocusLiveActivityControlEvent = useCallback(async () => {
     dispatchPendingFocusLiveActivityControlEvent();
     if (pendingFocusLiveActivityControlEventRef.current) {
@@ -2025,6 +2033,7 @@ export default function WebViewScreen() {
           endFocusLiveActivity: async (payload) => {
             return await callFocusLiveActivityModule("end", payload);
           },
+          ackFocusLiveActivityControlEvent: ackPendingFocusLiveActivityControlEvent,
         },
       });
       if (isHandledBridgeMessage) {
