@@ -33,17 +33,17 @@ private struct FocusLiveActivityControlButton: View {
         shouldResume: context.state.isPaused
       )
     ) {
-      Image(systemName: context.state.isPaused ? "play.fill" : "stop.fill")
+      Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
         .font(.system(size: compact ? 12 : 16, weight: .bold))
         .frame(width: compact ? 26 : 38, height: compact ? 26 : 38)
-        .foregroundStyle(context.state.isPaused ? Color.cyan : Color.red)
+        .foregroundStyle(context.state.isPaused ? Color.cyan : Color.orange)
         .background(
-          context.state.isPaused ? Color.cyan.opacity(0.18) : Color.red.opacity(0.18),
+          context.state.isPaused ? Color.cyan.opacity(0.18) : Color.orange.opacity(0.18),
           in: Circle()
         )
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(context.state.isPaused ? "작업 재개" : "작업 멈춤")
+    .accessibilityLabel(context.state.isPaused ? "작업 재개" : "작업 일시정지")
   }
 }
 
@@ -198,8 +198,8 @@ struct FocusLiveActivityWidget: Widget {
           FocusLiveActivityControlButton(context: context, compact: true)
         } else {
           Link(destination: url) {
-            Image(systemName: context.state.isPaused ? "play.fill" : "stop.fill")
-              .foregroundStyle(context.state.isPaused ? Color.cyan : Color.red)
+            Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
+              .foregroundStyle(context.state.isPaused ? Color.cyan : Color.orange)
           }
         }
       } minimal: {
@@ -207,8 +207,8 @@ struct FocusLiveActivityWidget: Widget {
           FocusLiveActivityControlButton(context: context, compact: true)
         } else {
           Link(destination: url) {
-            Image(systemName: context.state.isPaused ? "play.fill" : "stop.fill")
-              .foregroundStyle(context.state.isPaused ? Color.cyan : Color.red)
+            Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
+              .foregroundStyle(context.state.isPaused ? Color.cyan : Color.orange)
           }
         }
       }

@@ -52,6 +52,7 @@ type TargetFocusBaselineEntry = {
 };
 
 type DailyLogWithTodos = {
+  dateKey?: string;
   todos: Array<{
     id: string;
     titleSnapshot?: string | null;
@@ -68,6 +69,11 @@ type DailyLogWithTodos = {
     actualFocusSeconds: number | null;
   }>;
 } | null;
+
+type NativeBridgeEventDetail = {
+  type?: string;
+  payload?: unknown;
+};
 
 type DateTodosRouteContextValue = {
   items: TaskItem[];
@@ -137,6 +143,22 @@ type DateTodosRouteContextValue = {
 
 const DateTodosRouteContext = createContext<DateTodosRouteContextValue | null>(null);
 const handledFocusTargetPromptKeySet = new Set<string>();
+const FOCUS_LIVE_ACTIVITY_CONTROL_EVENT_TYPE = "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT";
+
+function readUnknownRecord(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function isExternalDailyLogWithTodos(
+  value: unknown
+): value is NonNullable<DailyLogWithTodos> & { dateKey: string } {
+  const record = readUnknownRecord(value);
+  return Boolean(record && typeof record.dateKey === "string" && Array.isArray(record.todos));
+}
 
 function toEpochMillis(value: string | null) {
   if (!value) {
@@ -729,7 +751,7 @@ export function DateTodosRouteProvider({
     })();
   };
 
-  const applyDailyLog = (nextLog: DailyLogWithTodos) => {
+  const applyDailyLog = useCallback((nextLog: DailyLogWithTodos) => {
     if (!dateKey) {
       return;
     }
@@ -737,7 +759,36 @@ export function DateTodosRouteProvider({
     const mappedItems = mapDailyLogTodosToTaskItems(dateKey, formatDateKey(new Date()), todos);
     setDateTasksRouteItems(applyTargetFocusBaselines(mappedItems, todos));
     setHydratedDateKey(dateKey);
-  };
+  }, [applyTargetFocusBaselines, dateKey]);
+
+  useEffect(() => {
+    const handleNativeFocusLiveActivityControlEvent = (event: Event) => {
+      const detail = (event as CustomEvent<NativeBridgeEventDetail>).detail;
+      if (detail?.type !== FOCUS_LIVE_ACTIVITY_CONTROL_EVENT_TYPE) {
+        return;
+      }
+
+      const payload = readUnknownRecord(detail.payload);
+      const dailyLog = isExternalDailyLogWithTodos(payload?.dailyLog) ? payload.dailyLog : null;
+      if (!dailyLog || dailyLog.dateKey !== dateKey) {
+        return;
+      }
+
+      applyDailyLog(dailyLog);
+    };
+
+    window.addEventListener(
+      "focus-hybrid-native-bridge",
+      handleNativeFocusLiveActivityControlEvent as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "focus-hybrid-native-bridge",
+        handleNativeFocusLiveActivityControlEvent as EventListener
+      );
+    };
+  }, [applyDailyLog, dateKey]);
 
   const clearTodoTargetFocus = useCallback(
     async (todoId: string) => {
@@ -757,7 +808,7 @@ export function DateTodosRouteProvider({
         baselineActualFocusSeconds: 0,
       });
     },
-    [dateKey, updateTargetFocusBaseline, updateTodoTargetFocusMutation]
+    [applyDailyLog, dateKey, updateTargetFocusBaseline, updateTodoTargetFocusMutation]
   );
 
   const toggleRestSession = (startDurationMin?: number | null) => {
@@ -769,7 +820,7 @@ export function DateTodosRouteProvider({
       toast.show({
         type: "error",
         title: "휴식 시작 불가",
-        message: "진행 중인 할일을 먼저 중단해 주세요.",
+        message: "진행 중인 할일을 먼저 일시정지해 주세요.",
         duration: 1800,
       });
       return;

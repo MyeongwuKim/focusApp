@@ -1882,6 +1882,20 @@ export default function WebViewScreen() {
   }, [consumeAndDispatchPendingFocusLiveActivityControlEvent]);
 
   useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (appStateRef.current !== "active" || !isWebViewReadyRef.current) {
+        return;
+      }
+
+      void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+    }, 1500);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent]);
+
+  useEffect(() => {
     const callbackHash = pendingAuthCallbackHashRef.current;
     if (!callbackHash) {
       return;

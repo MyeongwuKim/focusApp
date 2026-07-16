@@ -126,7 +126,7 @@ function renderTaskActions(
           onClick={() => onTaskAction(item.id, "pause")}
         >
           <FiPause size={13} />
-          중단
+          일시정지
         </Button>
         <Button
           size="sm"
