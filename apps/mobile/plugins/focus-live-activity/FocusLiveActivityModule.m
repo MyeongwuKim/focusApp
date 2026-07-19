@@ -24,4 +24,7 @@ RCT_EXTERN_METHOD(end:(NSDictionary *)payload
 RCT_EXTERN_METHOD(consumePendingControlEvent:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(currentActivitySnapshot:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

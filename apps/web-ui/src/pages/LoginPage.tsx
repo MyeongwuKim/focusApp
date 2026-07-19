@@ -13,6 +13,7 @@ type AuthProvider = "apple" | "kakao" | "naver";
 type WebOAuthProvider = Exclude<AuthProvider, "apple">;
 
 const NATIVE_PROVIDER_LOGIN_SESSION_TIMEOUT_MS = 60000;
+const NATIVE_PROVIDER_APP_RESUME_CANCEL_GRACE_MS = 3000;
 
 function buildOAuthStartUrl(provider: WebOAuthProvider) {
   const apiOrigin = getApiOrigin();
@@ -33,7 +34,93 @@ type NativeLoginResultPayload = {
   error?: string;
 };
 
-async function requestNativeProviderLoginSession(provider: AuthProvider) {
+type NativeBridgeAppStatePayload = {
+  state?: unknown;
+  previousState?: unknown;
+  isActive?: unknown;
+};
+
+function buildNativeLoginCancelledError(provider: AuthProvider) {
+  return new Error(`${provider.toUpperCase()}_NATIVE_LOGIN_CANCELLED`);
+}
+
+function resolveAbortError(signal: AbortSignal | undefined, fallbackError: Error) {
+  const reason = (signal as (AbortSignal & { reason?: unknown }) | undefined)?.reason;
+  if (reason instanceof Error) {
+    return reason;
+  }
+  if (typeof reason === "string" && reason.trim()) {
+    return new Error(reason.trim());
+  }
+  return fallbackError;
+}
+
+function bindNativeLoginAppResumeCancellation(provider: AuthProvider, controller: AbortController) {
+  let didLeaveNativeApp = false;
+  let cancelTimerId: number | null = null;
+
+  const clearCancelTimer = () => {
+    if (cancelTimerId === null) {
+      return;
+    }
+    window.clearTimeout(cancelTimerId);
+    cancelTimerId = null;
+  };
+
+  const handleBridgeAppStateEvent = (event: Event) => {
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    const detail = (
+      event as CustomEvent<{
+        type?: string;
+        payload?: NativeBridgeAppStatePayload;
+      }>
+    ).detail;
+    if (detail?.type !== "RN_APP_STATE_CHANGED") {
+      return;
+    }
+
+    const payload = detail.payload ?? {};
+    const state = typeof payload.state === "string" ? payload.state : "";
+    const previousState = typeof payload.previousState === "string" ? payload.previousState : "";
+    const isActive = payload.isActive === true || state === "active";
+
+    if (!isActive) {
+      didLeaveNativeApp = true;
+      clearCancelTimer();
+      return;
+    }
+
+    if (previousState && previousState !== "active") {
+      didLeaveNativeApp = true;
+    }
+
+    if (!didLeaveNativeApp) {
+      return;
+    }
+
+    clearCancelTimer();
+    cancelTimerId = window.setTimeout(() => {
+      if (!controller.signal.aborted) {
+        controller.abort(buildNativeLoginCancelledError(provider));
+      }
+    }, NATIVE_PROVIDER_APP_RESUME_CANCEL_GRACE_MS);
+  };
+
+  window.addEventListener("focus-hybrid-native-bridge", handleBridgeAppStateEvent as EventListener);
+
+  return () => {
+    clearCancelTimer();
+    window.removeEventListener("focus-hybrid-native-bridge", handleBridgeAppStateEvent as EventListener);
+  };
+}
+
+async function requestNativeProviderLoginSession(
+  provider: AuthProvider,
+  options?: { signal?: AbortSignal }
+) {
   const bridge = getNativeWebViewBridge();
   if (!bridge) {
     throw new Error("NATIVE_BRIDGE_UNAVAILABLE");
@@ -51,7 +138,17 @@ async function requestNativeProviderLoginSession(provider: AuthProvider) {
 
     const cleanUp = () => {
       window.removeEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+      options?.signal?.removeEventListener("abort", handleAbort);
       window.clearTimeout(timeoutId);
+    };
+
+    const handleAbort = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanUp();
+      reject(resolveAbortError(options?.signal, buildNativeLoginCancelledError(provider)));
     };
 
     const timeoutId = window.setTimeout(() => {
@@ -87,6 +184,11 @@ async function requestNativeProviderLoginSession(provider: AuthProvider) {
     };
 
     window.addEventListener("focus-hybrid-native-bridge", handleBridgeEvent as EventListener);
+    if (options?.signal?.aborted) {
+      handleAbort();
+      return;
+    }
+    options?.signal?.addEventListener("abort", handleAbort, { once: true });
     bridge.postMessage(
       JSON.stringify({
         type: requestType,
@@ -149,9 +251,13 @@ export function LoginPage() {
 
     event.preventDefault();
     setNativeLoadingProvider(provider);
+    const abortController = new AbortController();
+    const unbindAppResumeCancellation = bindNativeLoginAppResumeCancellation(provider, abortController);
 
     try {
-      const result = await requestNativeProviderLoginSession(provider);
+      const result = await requestNativeProviderLoginSession(provider, {
+        signal: abortController.signal,
+      });
       const params = new URLSearchParams();
       params.set("token", result.token);
       if (result.userId) {
@@ -173,6 +279,7 @@ export function LoginPage() {
       window.location.assign(buildOAuthStartUrl(provider));
       return;
     } finally {
+      unbindAppResumeCancellation();
       setNativeLoadingProvider((currentProvider) =>
         currentProvider === provider ? null : currentProvider
       );

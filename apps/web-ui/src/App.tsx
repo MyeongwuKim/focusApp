@@ -102,6 +102,53 @@ function isNativeDailyLogPayload(value: unknown): value is DailyLogDetailPayload
   return Boolean(record && readUnknownString(record.dateKey) && Array.isArray(record.todos));
 }
 
+function patchDailyLogByLiveActivitySnapshot(
+  dailyLog: DailyLogDetailPayload | null | undefined,
+  snapshot: { dateKey: string; todoId: string; isPaused: boolean }
+) {
+  if (!dailyLog || dailyLog.dateKey !== snapshot.dateKey) {
+    return dailyLog;
+  }
+
+  let didChange = false;
+  const nowIso = new Date().toISOString();
+  const nextTodos = dailyLog.todos.map((todo) => {
+    if (todo.id !== snapshot.todoId || todo.done || !todo.startedAt) {
+      return todo;
+    }
+
+    if (snapshot.isPaused) {
+      if (todo.pausedAt) {
+        return todo;
+      }
+      didChange = true;
+      return {
+        ...todo,
+        pausedAt: nowIso,
+      };
+    }
+
+    if (!todo.pausedAt) {
+      return todo;
+    }
+
+    const pausedAtMs = new Date(todo.pausedAt).getTime();
+    const pausedSeconds = Number.isFinite(pausedAtMs)
+      ? Math.max(Math.floor((Date.now() - pausedAtMs) / 1000), 0)
+      : 0;
+    didChange = true;
+    return {
+      ...todo,
+      pausedAt: null,
+      scheduledStartAt: null,
+      deviationSeconds: Math.max(todo.deviationSeconds + pausedSeconds, 0),
+      resumeCount: Math.max(todo.resumeCount ?? 0, 0) + 1,
+    };
+  });
+
+  return didChange ? { ...dailyLog, todos: nextTodos } : dailyLog;
+}
+
 function resolveTodayTodoViewContext(input: {
   pathname: string;
   search: string;
@@ -445,6 +492,62 @@ function App() {
         "focus-hybrid-native-bridge",
         handleNativeFocusLiveActivityControlEvent as EventListener
       );
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleNativeFocusLiveActivitySnapshot = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        type?: string;
+        payload?: unknown;
+      }>;
+      const detail = customEvent.detail;
+      if (detail?.type !== "RN_FOCUS_LIVE_ACTIVITY_SNAPSHOT") {
+        return;
+      }
+
+      const payload = readUnknownRecord(detail.payload);
+      const dateKey = readUnknownString(payload?.dateKey);
+      const todoId = readUnknownString(payload?.todoId);
+      if (!dateKey || !todoId) {
+        return;
+      }
+      const snapshot = {
+        dateKey,
+        todoId,
+        isPaused: payload?.isPaused === true,
+      };
+
+      queryClient.setQueryData<DailyLogDetailPayload | null | undefined>(
+        dailyLogByDateQueryKey(dateKey),
+        (previous) => patchDailyLogByLiveActivitySnapshot(previous, snapshot)
+      );
+      queryClient.setQueryData<DailyLogDetailPayload | null | undefined>(
+        statsDailyDetailQueryKey(dateKey),
+        (previous) => patchDailyLogByLiveActivitySnapshot(previous, snapshot)
+      );
+
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogByDateQueryKey(dateKey),
+        exact: true,
+        refetchType: "active",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: statsDailyDetailQueryKey(dateKey),
+        exact: true,
+        refetchType: "active",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: dailyLogsByMonthQueryKey(dateKey.slice(0, 7)),
+        exact: false,
+        refetchType: "active",
+      });
+    };
+
+    window.addEventListener("focus-hybrid-native-bridge", handleNativeFocusLiveActivitySnapshot as EventListener);
+
+    return () => {
+      window.removeEventListener("focus-hybrid-native-bridge", handleNativeFocusLiveActivitySnapshot as EventListener);
     };
   }, []);
 

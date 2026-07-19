@@ -266,6 +266,43 @@ class FocusLiveActivityModule: NSObject {
     resolve(FocusLiveActivityControlEvents.consumePendingEvent() ?? NSNull())
   }
 
+  @objc
+  func currentActivitySnapshot(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.1, *) else {
+      resolve(NSNull())
+      return
+    }
+
+    guard let activity = Activity<FocusActivityAttributes>.activities.first else {
+      resolve(NSNull())
+      return
+    }
+
+    let state = activity.contentState
+    var snapshot: [String: Any] = [
+      "activityId": activity.id,
+      "todoId": activity.attributes.todoId,
+      "dateKey": activity.attributes.dateKey,
+      "title": state.title,
+      "startedAtMs": Int(state.startedAt.timeIntervalSince1970 * 1000),
+      "timerStartedAtMs": Int(state.timerStartedAt.timeIntervalSince1970 * 1000),
+      "isPaused": state.isPaused,
+      "pausedElapsedSeconds": state.pausedElapsedSeconds,
+      "deepLink": state.deepLink,
+    ]
+
+    if let targetFocusMinutes = state.targetFocusMinutes {
+      snapshot["targetFocusMinutes"] = targetFocusMinutes
+    } else {
+      snapshot["targetFocusMinutes"] = NSNull()
+    }
+
+    resolve(snapshot)
+  }
+
   @available(iOS 16.1, *)
   private static func startOrUpdateActivity(
     _ input: FocusLiveActivityInput

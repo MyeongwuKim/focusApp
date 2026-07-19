@@ -60,6 +60,7 @@ const MAX_SCALE = 1.08;
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 const NATIVE_PROVIDER_LOGIN_TIMEOUT_MS = 35000;
 const NATIVE_SESSION_EXCHANGE_TIMEOUT_MS = 30000;
+const NATIVE_PROVIDER_FOREGROUND_CANCEL_GRACE_MS = 3000;
 const NOTIFICATION_PERMISSION_INTRO_FILE_URI = `${
   FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
 }native-notification-permission-intro-v1.json`;
@@ -132,6 +133,7 @@ type FocusLiveActivityNativeModule = {
   update?: (payload: FocusLiveActivityPayload) => Promise<unknown>;
   end?: (payload: Pick<FocusLiveActivityPayload, "todoId" | "dateKey">) => Promise<unknown>;
   consumePendingControlEvent?: () => Promise<unknown>;
+  currentActivitySnapshot?: () => Promise<unknown>;
 };
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
@@ -159,6 +161,72 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorCode: strin
         clearTimeout(timeoutId);
         reject(error);
       });
+  });
+}
+
+function withForegroundResumeCancel<T>(promise: Promise<T>, errorCode: string): Promise<T> {
+  if (Platform.OS !== "ios" && Platform.OS !== "android") {
+    return promise;
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let didLeaveForeground = AppState.currentState !== "active";
+    let cancelTimerId: ReturnType<typeof setTimeout> | null = null;
+
+    const clearCancelTimer = () => {
+      if (cancelTimerId === null) {
+        return;
+      }
+      clearTimeout(cancelTimerId);
+      cancelTimerId = null;
+    };
+
+    const cleanUp = () => {
+      clearCancelTimer();
+      subscription.remove();
+    };
+
+    const resolveOnce = (value: T) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanUp();
+      resolve(value);
+    };
+
+    const rejectOnce = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanUp();
+      reject(error);
+    };
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (settled) {
+        return;
+      }
+
+      if (nextState !== "active") {
+        didLeaveForeground = true;
+        clearCancelTimer();
+        return;
+      }
+
+      if (!didLeaveForeground) {
+        return;
+      }
+
+      clearCancelTimer();
+      cancelTimerId = setTimeout(() => {
+        rejectOnce(new Error(errorCode));
+      }, NATIVE_PROVIDER_FOREGROUND_CANCEL_GRACE_MS);
+    });
+
+    promise.then(resolveOnce).catch(rejectOnce);
   });
 }
 
@@ -346,12 +414,95 @@ async function consumePendingFocusLiveActivityControlEvent() {
   return await nativeMethod();
 }
 
+async function getCurrentFocusLiveActivitySnapshot() {
+  if (Platform.OS !== "ios") {
+    return null;
+  }
+
+  const nativeModule = getFocusLiveActivityNativeModule();
+  const nativeMethod = nativeModule?.currentActivitySnapshot;
+  if (typeof nativeMethod !== "function") {
+    return null;
+  }
+
+  return await nativeMethod();
+}
+
 function hasNativeAppProtocol(rawUrl: string, nativeAppScheme: string) {
   try {
     const parsed = new URL(rawUrl);
     return normalizeNativeAppScheme(parsed.protocol) === nativeAppScheme;
   } catch {
     return false;
+  }
+}
+
+function isMainFrameWebViewRequest(request: {
+  url: string;
+  isTopFrame?: boolean;
+  mainDocumentURL?: string | null;
+}) {
+  if (typeof request.isTopFrame === "boolean") {
+    return request.isTopFrame;
+  }
+
+  if (request.mainDocumentURL) {
+    return request.mainDocumentURL === request.url;
+  }
+
+  return true;
+}
+
+function shouldKeepUrlInWebView(rawUrl: string, knownEntryUris: (string | null | undefined)[]) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (
+      parsed.protocol === "file:" ||
+      parsed.protocol === "about:" ||
+      parsed.protocol === "data:" ||
+      parsed.protocol === "blob:"
+    ) {
+      return true;
+    }
+
+    return knownEntryUris.some((entryUri) => {
+      if (!entryUri) {
+        return false;
+      }
+
+      try {
+        const entryUrl = new URL(entryUri);
+        return parsed.origin === entryUrl.origin && parsed.pathname === entryUrl.pathname;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return true;
+  }
+}
+
+function shouldOpenUrlOutsideWebView(
+  rawUrl: string,
+  knownEntryUris: (string | null | undefined)[]
+) {
+  if (shouldKeepUrlInWebView(rawUrl, knownEntryUris)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    return Boolean(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+async function openUrlOutsideWebView(rawUrl: string) {
+  try {
+    await Linking.openURL(rawUrl);
+  } catch (error) {
+    console.log("Failed to open external WebView navigation:", rawUrl, error);
   }
 }
 
@@ -665,7 +816,7 @@ async function requestNativeAppleCredential(): Promise<NativeAppleCredential> {
 async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
   try {
     return await withTimeout(
-      loginWithKakaoTalk(),
+      withForegroundResumeCancel(loginWithKakaoTalk(), "KAKAO_NATIVE_LOGIN_CANCELLED"),
       NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
       "KAKAO_NATIVE_TALK_LOGIN_TIMEOUT"
     );
@@ -699,7 +850,7 @@ function initializeNaverLoginSdk() {
 async function requestNativeNaverAccessToken(): Promise<string> {
   initializeNaverLoginSdk();
   const loginResult = await withTimeout(
-    NaverLogin.login(),
+    withForegroundResumeCancel(NaverLogin.login(), "NAVER_NATIVE_LOGIN_CANCELLED"),
     NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
     "NAVER_NATIVE_LOGIN_TIMEOUT"
   );
@@ -1318,6 +1469,8 @@ export default function WebViewScreen() {
   });
   const pendingWeatherSnapshotRef = useRef<NativeWeatherSnapshot | null>(null);
   const pendingFocusLiveActivityControlEventRef = useRef<Record<string, unknown> | null>(null);
+  const lastFocusLiveActivitySnapshotKeyRef = useRef<string | null>(null);
+  const focusLiveActivitySnapshotRefreshUntilRef = useRef(0);
   const hasShownFatalStartupAlertRef = useRef(false);
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
@@ -1430,6 +1583,52 @@ export default function WebViewScreen() {
       console.log("Failed to consume focus live activity control event:", error);
     }
   }, [dispatchPendingFocusLiveActivityControlEvent]);
+
+  const dispatchCurrentFocusLiveActivitySnapshot = useCallback(
+    async (options?: { force?: boolean }) => {
+      try {
+        const snapshot = readUnknownRecord(await getCurrentFocusLiveActivitySnapshot());
+        if (!snapshot) {
+          lastFocusLiveActivitySnapshotKeyRef.current = null;
+          return;
+        }
+
+        const dateKey = readUnknownString(snapshot.dateKey);
+        const todoId = readUnknownString(snapshot.todoId);
+        if (!dateKey || !todoId) {
+          return;
+        }
+
+        const isPaused = snapshot.isPaused === true ? "paused" : "running";
+        const snapshotKey = `${dateKey}:${todoId}:${isPaused}`;
+        const now = Date.now();
+        const didSnapshotChange = lastFocusLiveActivitySnapshotKeyRef.current !== snapshotKey;
+        if (didSnapshotChange) {
+          focusLiveActivitySnapshotRefreshUntilRef.current = now + 10000;
+        }
+
+        if (
+          !options?.force &&
+          !didSnapshotChange &&
+          now > focusLiveActivitySnapshotRefreshUntilRef.current
+        ) {
+          return;
+        }
+
+        const isDispatched = dispatchNativeBridgeEvent({
+          type: "RN_FOCUS_LIVE_ACTIVITY_SNAPSHOT",
+          payload: snapshot,
+        });
+        if (isDispatched) {
+          lastFocusLiveActivitySnapshotKeyRef.current = snapshotKey;
+        }
+      } catch (error) {
+        console.log("Failed to dispatch focus live activity snapshot:", error);
+      }
+    },
+    [dispatchNativeBridgeEvent]
+  );
+
   const sendBridgeResult = useCallback(
     (message: { type: string; requestId?: string | null; payload?: unknown }) => {
       const loginProvider = resolveProviderFromBridgeLoginResultType(message.type);
@@ -1871,11 +2070,14 @@ export default function WebViewScreen() {
 
       if (nextState === "active") {
         void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+        void dispatchCurrentFocusLiveActivitySnapshot({ force: true });
         setTimeout(() => {
           void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+          void dispatchCurrentFocusLiveActivitySnapshot({ force: true });
         }, 900);
         setTimeout(() => {
           void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+          void dispatchCurrentFocusLiveActivitySnapshot({ force: true });
         }, 2200);
       }
     });
@@ -1883,11 +2085,16 @@ export default function WebViewScreen() {
     return () => {
       subscription.remove();
     };
-  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent, dispatchNativeBridgeEvent]);
+  }, [
+    consumeAndDispatchPendingFocusLiveActivityControlEvent,
+    dispatchCurrentFocusLiveActivitySnapshot,
+    dispatchNativeBridgeEvent,
+  ]);
 
   useEffect(() => {
     void consumeAndDispatchPendingFocusLiveActivityControlEvent();
-  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent]);
+    void dispatchCurrentFocusLiveActivitySnapshot({ force: true });
+  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent, dispatchCurrentFocusLiveActivitySnapshot]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -1896,12 +2103,13 @@ export default function WebViewScreen() {
       }
 
       void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+      void dispatchCurrentFocusLiveActivitySnapshot();
     }, 1500);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent]);
+  }, [consumeAndDispatchPendingFocusLiveActivityControlEvent, dispatchCurrentFocusLiveActivitySnapshot]);
 
   useEffect(() => {
     const callbackHash = pendingAuthCallbackHashRef.current;
@@ -2117,17 +2325,25 @@ export default function WebViewScreen() {
                 return false;
               }
 
-              if (request.url.includes("#/auth/callback") && request.url.includes("token=")) {
-                return true;
-              }
-
               const callbackHash = resolveAuthCallbackHashFromUrl(request.url, nativeAppScheme);
-              if (!callbackHash) {
-                return true;
+              if (callbackHash) {
+                if (request.url.includes("#/auth/callback") && request.url.includes("token=")) {
+                  return true;
+                }
+
+                navigateWebViewToAuthCallbackHash(callbackHash);
+                return false;
               }
 
-              navigateWebViewToAuthCallbackHash(callbackHash);
-              return false;
+              if (
+                isMainFrameWebViewRequest(request) &&
+                shouldOpenUrlOutsideWebView(request.url, [webUiEntryUri, localFileUri])
+              ) {
+                void openUrlOutsideWebView(request.url);
+                return false;
+              }
+
+              return true;
             }}
             onLoadStart={() => {
               console.log("WebView load start:", source?.uri);
@@ -2142,6 +2358,7 @@ export default function WebViewScreen() {
               }
               dispatchPendingWeatherSnapshot();
               void consumeAndDispatchPendingFocusLiveActivityControlEvent();
+              void dispatchCurrentFocusLiveActivitySnapshot({ force: true });
               const pendingTargetPath = pendingNotificationPathRef.current;
               if (pendingTargetPath) {
                 const hashPath = `#${pendingTargetPath}`;
