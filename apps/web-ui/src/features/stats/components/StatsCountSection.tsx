@@ -2,6 +2,8 @@ import { MetricCardGrid } from "./MetricCardGrid";
 import { StatsCountChart } from "./StatsCountChart";
 import type { CountBarDatum } from "./types";
 
+const RESUME_COUNT_DESCRIPTION = "일시정지 후 다시 시작한 누적 횟수";
+
 type StatsCountSectionProps = {
   completionRate: number;
   incompleteRate: number;
@@ -33,7 +35,7 @@ export function StatsCountSection({
           { label: "완료율", value: `${completionRate.toFixed(1)}%` },
           { label: "미완료율", value: `${incompleteRate.toFixed(1)}%` },
           { label: "완료 할일", value: doneTodos },
-          { label: "재개 횟수", value: `${resumeCount}회` },
+          { label: "재개 횟수", value: `${resumeCount}회`, description: RESUME_COUNT_DESCRIPTION },
         ]}
       />
 
