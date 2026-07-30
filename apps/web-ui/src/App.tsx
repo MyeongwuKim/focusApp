@@ -1,12 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { SettingsPage } from "./pages/SettingsPage";
-import { RoutineRoutePage } from "./pages/RoutineRoutePage";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
 import { CalendarRootPage } from "./pages/CalendarRootPage";
-import { TaskManagementRoutePage } from "./pages/TaskManagementRoutePage";
-import { AchievementsRoutePage } from "./pages/AchievementsRoutePage";
-import { MemoArchiveRoutePage } from "./pages/MemoArchiveRoutePage";
-import { StatsRoutePage } from "./pages/StatsRoutePage";
 import { LoginPage } from "./pages/LoginPage";
 import { DrawerMenu } from "./components/DrawerMenu";
 import { PageHeader } from "./components/PageHeader";
@@ -45,10 +39,20 @@ import { useOverlayRouteNavigation } from "./hooks/useOverlayRouteNavigation";
 import { useAuthSessionGuard } from "./hooks/useAuthSessionGuard";
 import { isNativeWebViewRuntime } from "./utils/runtimeEnvironment";
 import { formatDateKey } from "./utils/holidays";
+import { RoutePageFallback } from "./components/route-loading/RoutePageFallback";
+import {
+  LazyAchievementsRoutePage,
+  LazyMemoArchiveRoutePage,
+  LazyRoutineRoutePage,
+  LazySettingsPage,
+  LazyStatsRoutePage,
+  LazyTaskManagementRoutePage,
+  preloadSecondaryRoutePages,
+} from "./routes/lazy-route-pages";
 
 const SETTINGS_GUIDE_PROMPTED_KEY_PREFIX = "focus-settings-guide-prompted-v1";
 const LOGIN_MOTIVATION_STALE_TIME_MS = 1000 * 60 * 60 * 3;
-const LOGIN_MOTIVATION_QUERY_KEY = ["motivation-message"] as const;
+const LOGIN_MOTIVATION_QUERY_KEY = ["motivation-message-v2"] as const;
 
 function hasSeenSettingsGuidePrompt(userId: string) {
   if (typeof window === "undefined" || !userId) {
@@ -190,6 +194,7 @@ function resolveTodayTodoViewContext(input: {
 function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const openMenu = useCallback(() => {
+    void preloadSecondaryRoutePages();
     setIsDrawerOpen(true);
   }, []);
   const closeMenu = useCallback(() => {
@@ -229,6 +234,27 @@ function App() {
   const weatherMood = useWeatherStore((state) => state.weatherMood);
   const weatherParticleClarity = useWeatherStore((state) => state.weatherParticleClarity);
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
+
+  useEffect(() => {
+    if (!isLoggedIn || isAuthCallbackRoute || hasAuthSessionScopeMismatch) {
+      return;
+    }
+
+    const preload = () => {
+      void preloadSecondaryRoutePages();
+    };
+    if (window.requestIdleCallback) {
+      const idleCallbackId = window.requestIdleCallback(preload, { timeout: 1500 });
+      return () => {
+        window.cancelIdleCallback(idleCallbackId);
+      };
+    }
+
+    const timeoutId = window.setTimeout(preload, 600);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [hasAuthSessionScopeMismatch, isAuthCallbackRoute, isLoggedIn]);
 
   useEffect(() => {
     if (!authToken) {
@@ -649,9 +675,9 @@ function App() {
   ) => {
     switch (route) {
       case "settings":
-        return <SettingsPage forcedPathname={options?.forcedPathname} />;
+        return <LazySettingsPage forcedPathname={options?.forcedPathname} />;
       case "routine":
-        return <RoutineRoutePage forcedPathname={options?.forcedPathname} />;
+        return <LazyRoutineRoutePage forcedPathname={options?.forcedPathname} />;
       case "dateTasks":
         return (
           <DateTodosRoutePage
@@ -662,18 +688,18 @@ function App() {
         );
       case "tasks":
         return (
-          <TaskManagementRoutePage
+          <LazyTaskManagementRoutePage
             forcedPathname={options?.forcedPathname}
             forcedSearch={options?.forcedSearch}
             isActive={options?.isActive ?? true}
           />
         );
       case "stats":
-        return <StatsRoutePage forcedSearch={options?.forcedSearch} />;
+        return <LazyStatsRoutePage forcedSearch={options?.forcedSearch} />;
       case "achievements":
-        return <AchievementsRoutePage forcedSearch={options?.forcedSearch} />;
+        return <LazyAchievementsRoutePage forcedSearch={options?.forcedSearch} />;
       case "memo":
-        return <MemoArchiveRoutePage />;
+        return <LazyMemoArchiveRoutePage />;
       case "calendar":
         return null;
       default: {
@@ -740,11 +766,20 @@ function App() {
 	                  >
                     <PageHeader route={entry.route} forcedPathname={entry.pathname} forcedSearch={entry.search} />
                     <div className="relative min-h-0 flex flex-1 flex-col overflow-hidden">
-                      {renderOverlayBody(entry.route, {
-                        forcedPathname: entry.pathname,
-                        forcedSearch: entry.search,
-                        isActive: isActiveEntry,
-                      })}
+                      <Suspense
+                        fallback={
+                          <RoutePageFallback
+                            route={entry.route}
+                            forcedPathname={entry.pathname}
+                          />
+                        }
+                      >
+                        {renderOverlayBody(entry.route, {
+                          forcedPathname: entry.pathname,
+                          forcedSearch: entry.search,
+                          isActive: isActiveEntry,
+                        })}
+                      </Suspense>
                     </div>
                   </div>
                 );

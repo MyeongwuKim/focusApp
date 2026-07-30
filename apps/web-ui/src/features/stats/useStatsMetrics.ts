@@ -3,7 +3,12 @@ import { useQueries } from "@tanstack/react-query";
 import { fetchDailyLogByDate } from "../../api/dailyLogApi";
 import { statsDailyDetailQueryKey, useDailyLogQuery } from "../../queries";
 import { addDays, formatDateInput, getMonthKeysBetween, getRangeDays, parseInputDate } from "./statsDate";
-import type { CountBarDatum, StatsDailyActivityDatum, TimeBarDatum } from "./components/types";
+import type {
+  CountBarDatum,
+  FocusResumeDatum,
+  StatsDailyActivityDatum,
+  TimeBarDatum,
+} from "./components/types";
 
 function toEpochMillis(value: string | null) {
   if (!value) {
@@ -189,7 +194,8 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
   }, [detailMap, filteredLogs, rangeDays, start, taskId, taskLabel]);
 
   const timeStats = useMemo(() => {
-    const dailySeries: Array<{ key: string; focusMin: number; restMin: number }> = [];
+    const dailySeries: Array<{ key: string; focusMin: number; restMin: number; focusStartCount: number }> = [];
+    const focusResumePoints: FocusResumeDatum[] = [];
 
     for (let i = 0; i < rangeDays; i += 1) {
       const day = addDays(start, i);
@@ -198,25 +204,46 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
 
       let focusSeconds = 0;
       let restSeconds = taskId ? 0 : Math.max(detail?.restAccumulatedSeconds ?? 0, 0);
+      let focusStartCount = 0;
 
       const dayEndMs = parseInputDate(key).getTime() + 24 * 60 * 60 * 1000 - 1;
       for (const todo of detail?.todos?.filter((item) => matchesTask(item, taskId, taskLabel)) ?? []) {
+        const resumeCount = Math.max(todo.resumeCount ?? 0, 0);
+        const hasFocusActivity =
+          Boolean(todo.startedAt) || Math.max(todo.actualFocusSeconds ?? 0, 0) > 0 || resumeCount > 0;
+        if (hasFocusActivity) {
+          focusStartCount += 1;
+        }
+        let todoFocusSeconds = 0;
         if (todo.done) {
-          focusSeconds += Math.max(todo.actualFocusSeconds ?? 0, 0);
-          continue;
+          todoFocusSeconds = Math.max(todo.actualFocusSeconds ?? 0, 0);
+        } else {
+          const startedAt = toEpochMillis(todo.startedAt);
+          if (startedAt) {
+            const pausedAt = toEpochMillis(todo.pausedAt);
+            const completedAt = toEpochMillis(todo.completedAt);
+            const nowMs = Date.now();
+            const tentativeEnd = pausedAt ?? completedAt ?? (key === todayKey ? nowMs : dayEndMs);
+            const endMs = Math.min(tentativeEnd, dayEndMs);
+            const elapsedSeconds = Math.max(Math.floor((endMs - startedAt) / 1000), 0);
+            todoFocusSeconds = Math.max(
+              elapsedSeconds - Math.max(todo.deviationSeconds ?? 0, 0),
+              0
+            );
+          }
         }
+        focusSeconds += todoFocusSeconds;
 
-        const startedAt = toEpochMillis(todo.startedAt);
-        if (!startedAt) {
-          continue;
+        if (hasFocusActivity) {
+          focusResumePoints.push({
+            id: `${key}-${todo.id}`,
+            dateKey: key,
+            taskLabel: todo.titleSnapshot?.trim() || todo.content.trim() || "이름 없는 할 일",
+            focusMin: Math.round((todoFocusSeconds / 60) * 10) / 10,
+            resumeCount,
+            done: todo.done,
+          });
         }
-        const pausedAt = toEpochMillis(todo.pausedAt);
-        const completedAt = toEpochMillis(todo.completedAt);
-        const nowMs = Date.now();
-        const tentativeEnd = pausedAt ?? completedAt ?? (key === todayKey ? nowMs : dayEndMs);
-        const endMs = Math.min(tentativeEnd, dayEndMs);
-        const elapsedSeconds = Math.max(Math.floor((endMs - startedAt) / 1000), 0);
-        focusSeconds += elapsedSeconds;
       }
 
       if (!taskId && detail?.restStartedAt && key === todayKey) {
@@ -230,22 +257,26 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         key,
         focusMin: Math.floor((focusSeconds * 1000) / 60000),
         restMin: Math.floor((restSeconds * 1000) / 60000),
+        focusStartCount,
       });
     }
 
-    const monthlyMap = new Map<string, { focusMin: number; restMin: number }>();
+    const monthlyMap = new Map<string, { focusMin: number; restMin: number; focusStartCount: number }>();
     for (const item of dailySeries) {
       const monthKey = item.key.slice(0, 7);
-      const prev = monthlyMap.get(monthKey) ?? { focusMin: 0, restMin: 0 };
+      const prev = monthlyMap.get(monthKey) ?? { focusMin: 0, restMin: 0, focusStartCount: 0 };
       monthlyMap.set(monthKey, {
         focusMin: prev.focusMin + item.focusMin,
         restMin: prev.restMin + item.restMin,
+        focusStartCount: prev.focusStartCount + item.focusStartCount,
       });
     }
 
     return {
       totalFocus: dailySeries.reduce((acc, item) => acc + item.focusMin, 0),
       totalRest: dailySeries.reduce((acc, item) => acc + item.restMin, 0),
+      focusStartCount: dailySeries.reduce((acc, item) => acc + item.focusStartCount, 0),
+      focusResumePoints,
       dailySeries,
       monthlySeries: [...monthlyMap.entries()].map(([key, value]) => ({ key, ...value })),
       useMonthlyBar: rangeDays > 90,
@@ -274,6 +305,20 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         doneLabels: item.doneLabels,
         incompleteLabels: item.incompleteLabels,
       }));
+
+  const focusResumeStats = useMemo(() => {
+    const focusSegmentCount = timeStats.focusStartCount + countStats.resumeCount;
+    return {
+      averageResumesPerTask:
+        timeStats.focusStartCount > 0
+          ? countStats.resumeCount / timeStats.focusStartCount
+          : null,
+      averageFocusSegmentMinutes:
+        timeStats.totalFocus > 0 && focusSegmentCount > 0
+          ? timeStats.totalFocus / focusSegmentCount
+          : null,
+    };
+  }, [countStats.resumeCount, timeStats]);
 
   const activitySignal = useMemo(() => {
     const series: StatsDailyActivityDatum[] = countStats.dailySeries.map((countItem, index) => {
@@ -384,6 +429,13 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       totalRest: timeStats.totalRest,
       useMonthlyBar: timeStats.useMonthlyBar,
       data: timeBars,
+    },
+    focusResume: {
+      focusMinutes: timeStats.totalFocus,
+      resumeCount: countStats.resumeCount,
+      averageResumesPerTask: focusResumeStats.averageResumesPerTask,
+      averageFocusSegmentMinutes: focusResumeStats.averageFocusSegmentMinutes,
+      data: timeStats.focusResumePoints,
     },
     periodReview,
     signal: activitySignal,

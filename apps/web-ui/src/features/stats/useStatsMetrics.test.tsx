@@ -60,7 +60,7 @@ function buildMonthlyLog(done: boolean): MonthlyLogSnapshot {
   };
 }
 
-function buildDailyDetail(done: boolean): NonNullable<DailyLogByDate> {
+function buildDailyDetail(done: boolean, resumeCount = 0): NonNullable<DailyLogByDate> {
   return {
     dateKey: "2026-04-25",
     memo: null,
@@ -81,8 +81,22 @@ function buildDailyDetail(done: boolean): NonNullable<DailyLogByDate> {
         pausedAt: null,
         completedAt: done ? "2026-04-25T09:00:00.000Z" : null,
         deviationSeconds: 0,
-        resumeCount: 0,
+        resumeCount,
         actualFocusSeconds: done ? 3600 : null,
+      },
+    ],
+  };
+}
+
+function buildResumedIncompleteDailyDetail(): NonNullable<DailyLogByDate> {
+  return {
+    ...buildDailyDetail(false, 1),
+    todos: [
+      {
+        ...buildDailyDetail(false, 1).todos[0],
+        startedAt: "2026-04-25T08:00:00.000Z",
+        pausedAt: "2026-04-25T09:30:00.000Z",
+        deviationSeconds: 1800,
       },
     ],
   };
@@ -124,6 +138,69 @@ describe("useStatsMetrics cache recompute", () => {
     await waitFor(() => {
       expect(result.current.count.doneTodos).toBe(1);
       expect(result.current.count.incompleteTodos).toBe(0);
+    });
+  });
+
+  it("집중시간과 재개 횟수로 작업당 평균 재개와 평균 집중 구간을 계산한다", async () => {
+    const queryClient = createQueryClient();
+    const start = new Date(2026, 3, 25);
+    const end = new Date(2026, 3, 25);
+    const dateKey = "2026-04-25";
+
+    queryClient.setQueryData(dailyLogsByMonthQueryKey("2026-04"), [buildMonthlyLog(true)]);
+    queryClient.setQueryData(statsDailyDetailQueryKey(dateKey), buildDailyDetail(true, 2));
+
+    const { result } = renderHook(
+      () =>
+        useStatsMetrics({
+          start,
+          end,
+          todayKey: dateKey,
+          enabled: true,
+        }),
+      { wrapper: createWrapper(queryClient) }
+    );
+
+    await waitFor(() => {
+      expect(result.current.focusResume.focusMinutes).toBe(60);
+      expect(result.current.focusResume.resumeCount).toBe(2);
+      expect(result.current.focusResume.averageResumesPerTask).toBe(2);
+      expect(result.current.focusResume.averageFocusSegmentMinutes).toBe(20);
+      expect(result.current.focusResume.data).toEqual([
+        {
+          id: `${dateKey}-todo-1`,
+          dateKey,
+          taskLabel: "할일 1",
+          focusMin: 60,
+          resumeCount: 2,
+          done: true,
+        },
+      ]);
+    });
+  });
+
+  it("재개된 미완료 할일의 집중시간에서 이전 일시정지 누적시간을 제외한다", async () => {
+    const queryClient = createQueryClient();
+    const dateKey = "2026-04-25";
+
+    queryClient.setQueryData(dailyLogsByMonthQueryKey("2026-04"), [buildMonthlyLog(false)]);
+    queryClient.setQueryData(statsDailyDetailQueryKey(dateKey), buildResumedIncompleteDailyDetail());
+
+    const { result } = renderHook(
+      () =>
+        useStatsMetrics({
+          start: new Date(2026, 3, 25),
+          end: new Date(2026, 3, 25),
+          todayKey: "2026-04-26",
+          enabled: true,
+        }),
+      { wrapper: createWrapper(queryClient) }
+    );
+
+    await waitFor(() => {
+      expect(result.current.time.totalFocus).toBe(60);
+      expect(result.current.focusResume.averageResumesPerTask).toBe(1);
+      expect(result.current.focusResume.averageFocusSegmentMinutes).toBe(30);
     });
   });
 });

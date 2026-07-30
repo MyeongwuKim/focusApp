@@ -2,21 +2,18 @@ import Constants from "expo-constants";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ExpoLocation from "expo-location";
-import { Feather } from "@expo/vector-icons";
+import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
   Alert,
   AppState,
   type AppStateStatus,
   BackHandler,
-  Easing,
   Linking,
   NativeModules,
   PermissionsAndroid,
   Platform,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -51,7 +48,6 @@ import {
   readStoredWebUiReleaseSnapshot,
   resolveWebUiManifestUrl,
   resolveWebUiReleaseChannel,
-  type WebUiVersionProgress,
 } from "../src/features/webui/webUiVersionWorker";
 
 const BASE_WIDTH = 390;
@@ -64,13 +60,7 @@ const NATIVE_PROVIDER_FOREGROUND_CANCEL_GRACE_MS = 3000;
 const NOTIFICATION_PERMISSION_INTRO_FILE_URI = `${
   FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
 }native-notification-permission-intro-v1.json`;
-const LAUNCH_ANIMATION_RING_DURATION_MS = 900;
-const LAUNCH_ANIMATION_CHECK_DURATION_MS = 280;
-const LAUNCH_ANIMATION_PAUSE_MS = 280;
-const LAUNCH_OVERLAY_MIN_VISIBLE_MS = 800;
-const LAUNCH_PROGRESS_BAR_WIDTH = 196;
 const DEFAULT_NATIVE_APP_SCHEME = "mobile";
-const FORCE_LAUNCH_OVERLAY_FOR_TEST = process.env.EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY === "true";
 
 type NativePermissionState = "granted" | "denied" | "undetermined";
 type LocationPermissionSnapshot = {
@@ -726,21 +716,6 @@ function convertCalendarSheetPathToDateTasksPath(targetPath: string) {
   return `/date-tasks?${next.toString()}`;
 }
 
-function resolveLaunchProgressPercent(statusMessage: WebUiVersionProgress) {
-  switch (statusMessage) {
-    case "초기 번들 준비중...":
-      return 22;
-    case "버전 체크중...":
-      return 46;
-    case "앱 번들 설치중...":
-      return 78;
-    case "앱 시작중...":
-      return 100;
-    default:
-      return 0;
-  }
-}
-
 function resolveNativeAppVersion() {
   const expoVersion = Constants.expoConfig?.version;
   if (typeof expoVersion === "string" && expoVersion.trim()) {
@@ -1326,129 +1301,6 @@ async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot | nul
   };
 }
 
-function FocusLaunchOverlay({
-  statusMessage,
-  progressPercent,
-}: {
-  statusMessage: string;
-  progressPercent: number;
-}) {
-  const sweepProgress = useRef(new Animated.Value(0)).current;
-  const checkProgress = useRef(new Animated.Value(0)).current;
-  const pulseOpacity = useRef(new Animated.Value(0.88)).current;
-  const progressWidth = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(progressWidth, {
-      toValue: (LAUNCH_PROGRESS_BAR_WIDTH * Math.max(0, Math.min(progressPercent, 100))) / 100,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [progressPercent, progressWidth]);
-
-  useEffect(() => {
-    const animationLoop = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(sweepProgress, {
-            toValue: 1,
-            duration: LAUNCH_ANIMATION_RING_DURATION_MS,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseOpacity, {
-            toValue: 1,
-            duration: LAUNCH_ANIMATION_RING_DURATION_MS / 2,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.timing(checkProgress, {
-          toValue: 1,
-          duration: LAUNCH_ANIMATION_CHECK_DURATION_MS,
-          easing: Easing.out(Easing.back(1.6)),
-          useNativeDriver: true,
-        }),
-        Animated.delay(LAUNCH_ANIMATION_PAUSE_MS),
-        Animated.parallel([
-          Animated.timing(sweepProgress, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-          Animated.timing(checkProgress, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseOpacity, {
-            toValue: 0.88,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-
-    animationLoop.start();
-    return () => {
-      animationLoop.stop();
-    };
-  }, [checkProgress, pulseOpacity, sweepProgress]);
-
-  const ringRotate = sweepProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["-90deg", "270deg"],
-  });
-
-  const checkOpacity = checkProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-
-  const checkScale = checkProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.72, 1],
-  });
-
-  return (
-    <View style={styles.launchOverlay}>
-      <Animated.View style={[styles.launchBadge, { opacity: pulseOpacity }]}>
-        <View style={styles.launchRingTrack} />
-        <Animated.View
-          style={[
-            styles.launchRingSweep,
-            {
-              transform: [{ rotate: ringRotate }],
-            },
-          ]}
-        />
-        <View style={styles.launchCheckWrap}>
-        <Animated.View
-          style={[
-            styles.launchCheckIconWrap,
-            {
-              opacity: checkOpacity,
-              transform: [{ scale: checkScale }],
-            },
-          ]}
-        >
-          <Feather name="check" size={52} color="#F8FAFC" />
-        </Animated.View>
-        </View>
-      </Animated.View>
-      <View style={styles.launchProgressWrap}>
-        <View style={styles.launchProgressTrack}>
-          <Animated.View style={[styles.launchProgressFill, { width: progressWidth }]} />
-        </View>
-      </View>
-      <Text style={styles.launchStatusText}>{statusMessage}</Text>
-    </View>
-  );
-}
-
-
 export default function WebViewScreen() {
   const pendingNotificationPathRef = useRef<string | null>(null);
   const pendingAuthCallbackHashRef = useRef<string | null>(null);
@@ -1735,11 +1587,7 @@ export default function WebViewScreen() {
     shouldInlineTodoPromptInForeground,
   });
   const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
-  const [launchStatusMessage, setLaunchStatusMessage] = useState<WebUiVersionProgress>(
-    "초기 번들 준비중..."
-  );
   const [hasInitialWebViewLoaded, setHasInitialWebViewLoaded] = useState(false);
-  const [hasLaunchOverlayMinElapsed, setHasLaunchOverlayMinElapsed] = useState(false);
   const { width, fontScale } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
@@ -2002,7 +1850,6 @@ export default function WebViewScreen() {
   useEffect(() => {
     const prepareLocalHtmlFile = async () => {
       try {
-        setLaunchStatusMessage("초기 번들 준비중...");
         const nativeAppVersion = resolveNativeAppVersion() ?? "1.0.0";
         const prepared = await prepareWebUiBundleVersion({
           embeddedFiles: embeddedWebUiFiles,
@@ -2011,7 +1858,6 @@ export default function WebViewScreen() {
           fallbackCurrentVersion: nativeAppVersion,
           nativeAppVersion,
           nativePlatform,
-          onProgress: setLaunchStatusMessage,
         });
 
         console.log("Prepared local web-ui file:", prepared.localIndexUri);
@@ -2259,33 +2105,21 @@ export default function WebViewScreen() {
     }
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setHasLaunchOverlayMinElapsed(true);
-    }, LAUNCH_OVERLAY_MIN_VISIBLE_MS);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
-
   const showPermissionIntro = !isNativeUpdateRequired && isPermissionIntroReady && isPermissionIntroVisible;
   const isLaunchDestinationReady = isNativeUpdateRequired || showPermissionIntro || hasInitialWebViewLoaded;
-  const launchProgressPercent = useMemo(
-    () => resolveLaunchProgressPercent(launchStatusMessage),
-    [launchStatusMessage]
-  );
-  const shouldShowLaunchOverlay =
-    FORCE_LAUNCH_OVERLAY_FOR_TEST ||
-    isPreparingLocalFile ||
-    !hasLaunchOverlayMinElapsed ||
-    !isLaunchDestinationReady;
+
+  useEffect(() => {
+    if (isPreparingLocalFile || !isLaunchDestinationReady) {
+      return;
+    }
+
+    void SplashScreen.hideAsync().catch((error) => {
+      console.log("Failed to hide native splash screen:", error);
+    });
+  }, [isLaunchDestinationReady, isPreparingLocalFile]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {shouldShowLaunchOverlay ? (
-        <FocusLaunchOverlay statusMessage={launchStatusMessage} progressPercent={launchProgressPercent} />
-      ) : null}
       {source && !showPermissionIntro && !isNativeUpdateRequired ? (
         <View style={styles.webViewContainer}>
           <View
@@ -2426,77 +2260,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0B1220",
-  },
-  launchOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 30,
-    backgroundColor: "#0B1220",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchBadge: {
-    width: 164,
-    height: 164,
-    borderRadius: 48,
-    backgroundColor: "#0F172A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchRingTrack: {
-    position: "absolute",
-    width: 106,
-    height: 106,
-    borderRadius: 53,
-    borderWidth: 8,
-    borderColor: "rgba(44, 230, 166, 0.2)",
-  },
-  launchRingSweep: {
-    position: "absolute",
-    width: 106,
-    height: 106,
-    borderRadius: 53,
-    borderWidth: 8,
-    borderTopColor: "#2CE6A6",
-    borderRightColor: "#2CE6A6",
-    borderBottomColor: "transparent",
-    borderLeftColor: "transparent",
-  },
-  launchCheckWrap: {
-    position: "absolute",
-    width: 74,
-    height: 74,
-    left: 45,
-    top: 45,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchCheckIconWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchStatusText: {
-    marginTop: 14,
-    color: "rgba(226, 232, 240, 0.96)",
-    fontSize: 14,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
-  launchProgressWrap: {
-    marginTop: 18,
-    width: LAUNCH_PROGRESS_BAR_WIDTH,
-    alignItems: "flex-start",
-  },
-  launchProgressTrack: {
-    width: LAUNCH_PROGRESS_BAR_WIDTH,
-    height: 6,
-    borderRadius: 99,
-    backgroundColor: "rgba(148, 163, 184, 0.24)",
-    overflow: "hidden",
-  },
-  launchProgressFill: {
-    height: "100%",
-    borderRadius: 99,
-    backgroundColor: "#2CE6A6",
   },
   webViewContainer: {
     flex: 1,

@@ -3,6 +3,10 @@ import { getBearerToken, resolveUserIdFromSessionToken } from "../../common/auth
 import { captureServerError, resolveErrorCode } from "../../common/observability/sentry.js";
 import { prisma } from "../../common/prisma.js";
 import { env } from "../../config/env.js";
+import {
+  hasEmptyPlanRestSuggestion,
+  pickEmptyPlanFallback,
+} from "./motivation-message.utils.js";
 
 type ServiceErrorCode = "OPENAI_KEY_MISSING" | "OPENAI_REQUEST_FAILED" | "OPENAI_EMPTY_RESPONSE";
 type MotivationStyle = "plan-aware" | "gentle" | "direct";
@@ -304,6 +308,14 @@ function buildContextLines(context: MotivationContext) {
 
 function buildPrompt(input: { context: MotivationContext; style: MotivationStyle }) {
   const styleGuide = styleInstruction(input.style);
+  const emptyPlanGuide =
+    input.context.today.todoCount === 0
+      ? [
+          "오늘 할 일이 0개여도 쉬는 날이나 휴식이 필요하다고 추측하지 않는다.",
+          "쉬다, 쉬어도 된다, 휴식, 아무것도 하지 않아도 된다는 표현을 사용하지 않는다.",
+          "일정을 가볍게 확인하거나 필요한 할 일 하나를 고르는 방향으로 말한다.",
+        ]
+      : [];
   return [
     "너는 할 일 앱을 켠 사용자에게 짧게 말을 건네는 AI 코치다.",
     "반드시 한국어 한 문장만 출력한다.",
@@ -317,6 +329,7 @@ function buildPrompt(input: { context: MotivationContext; style: MotivationStyle
     "금지 표현: 동기부여, 생산성, 데이터, 분석, 확인했어요, 패턴, 목표를 향해, 성공, 파이팅, 화이팅, 할 수 있어요, 오늘도, 해보세요, 하세요.",
     "좋은 예시 톤: 가장 짧은 것부터 열어두면 오늘이 덜 무거워져요.",
     "좋은 예시 톤: 이미 하나 끝냈으니 다음은 가볍게 이어가도 돼요.",
+    ...emptyPlanGuide,
     ...styleGuide,
     "",
     "참고 상태:",
@@ -332,8 +345,11 @@ function normalizeMotivationText(text: string) {
     .trim();
 }
 
-function isNaturalMotivationMessage(text: string) {
+function isNaturalMotivationMessage(text: string, context: MotivationContext) {
   if (text.length < 10 || text.length > 80) {
+    return false;
+  }
+  if (context.today.todoCount === 0 && hasEmptyPlanRestSuggestion(text)) {
     return false;
   }
   return !UNNATURAL_MOTIVATION_PATTERNS.some((pattern) => pattern.test(text));
@@ -343,7 +359,7 @@ function buildFallbackMotivationMessage(context: MotivationContext) {
   const firstOpenTodo = context.today.openTodoLabels[0];
 
   if (context.today.todoCount === 0) {
-    return "오늘은 할 일 하나만 적어도 시작은 충분해요.";
+    return pickEmptyPlanFallback(context.dateKey);
   }
 
   if (context.today.openCount === 0) {
@@ -420,7 +436,9 @@ async function requestMotivationMessage(context: MotivationContext) {
   }
 
   const normalizedText = normalizeMotivationText(text);
-  return isNaturalMotivationMessage(normalizedText) ? normalizedText : buildFallbackMotivationMessage(context);
+  return isNaturalMotivationMessage(normalizedText, context)
+    ? normalizedText
+    : buildFallbackMotivationMessage(context);
 }
 
 export async function registerMotivationMessageRoute(app: FastifyInstance) {

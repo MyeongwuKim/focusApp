@@ -28,6 +28,34 @@ export type FocusLiveActivityBridgeHandlerDeps = {
   ackFocusLiveActivityControlEvent: (payload: FocusLiveActivityControlEventAckPayload) => void;
 };
 
+function readBoolean(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    return value.trim().toLowerCase() === "true";
+  }
+  return false;
+}
+
+function readPositiveNumber(value: unknown) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0;
+  }
+  return false;
+}
+
+function isPausedFocusLiveActivityPayload(payload: FocusLiveActivityPayload) {
+  return readBoolean(payload.isPaused) || readPositiveNumber(payload.pausedAtMs);
+}
+
 export async function handleFocusLiveActivityBridgeMessage(
   parsedData: ParsedBridgeMessage,
   deps: FocusLiveActivityBridgeHandlerDeps
@@ -45,6 +73,10 @@ export async function handleFocusLiveActivityBridgeMessage(
 
   if (messageType === "REST_FOCUS_LIVE_ACTIVITY_UPDATE") {
     const payload = (readBridgePayloadRecord(parsedData) ?? {}) as FocusLiveActivityPayload;
+    if (isPausedFocusLiveActivityPayload(payload)) {
+      await deps.endFocusLiveActivity({});
+      return true;
+    }
     await deps.updateFocusLiveActivity(payload);
     return true;
   }

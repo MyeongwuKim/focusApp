@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useReducer } from "react";
+import { lazy, Suspense, useEffect, useMemo, useReducer } from "react";
 import { useLocation } from "react-router-dom";
 import type { fetchTaskCollections } from "../api/taskApi";
+import { TaskStatsRouteFallback } from "../components/route-loading/RoutePageFallback";
 import { TaskManagementActions } from "../features/task-management/components/TaskManagementActions";
 import { TaskManagementBody } from "../features/task-management/components/TaskManagementBody";
 import { TaskManagementFooter } from "../features/task-management/components/TaskManagementFooter";
-import { TaskManagementStatsView } from "../features/task-management/components/TaskManagementStatsView";
 import { TaskManagementModalProvider } from "../features/task-management/providers/TaskManagementModalProvider";
 import { TaskManagementContextProvider } from "../features/task-management/providers/TaskManagementContextProvider";
 import {
@@ -18,6 +18,12 @@ import { taskCollectionsQueryKey } from "../queries/task-collection/queries";
 import { queryClient } from "../queryClient";
 import { toast, useTaskManagementViewStore } from "../stores";
 import { getUserFacingErrorMessage } from "../utils/errorMessage";
+
+const LazyTaskManagementStatsView = lazy(() =>
+  import("../features/task-management/components/TaskManagementStatsView").then((module) => ({
+    default: module.TaskManagementStatsView,
+  }))
+);
 
 const DEFAULT_COLLECTION_ID = "collection-default";
 type TaskCollectionsData = Awaited<ReturnType<typeof fetchTaskCollections>>;
@@ -491,13 +497,20 @@ function TaskManagementRouteContent({
       <div
         aria-hidden={!isTaskStatsRoute}
         className={[
-          "absolute inset-0 transition-all duration-300 ease-out",
+          "absolute inset-0 flex min-h-0 flex-col overflow-hidden transition-all duration-300 ease-out",
           isTaskStatsRoute
             ? "translate-x-0 opacity-100 pointer-events-auto"
             : "translate-x-6 opacity-0 pointer-events-none",
         ].join(" ")}
       >
-        <TaskManagementStatsView forcedSearch={effectiveSearch} isActive={isActive && isTaskStatsRoute} />
+        {isTaskStatsRoute ? (
+          <Suspense fallback={<TaskStatsRouteFallback />}>
+            <LazyTaskManagementStatsView
+              forcedSearch={effectiveSearch}
+              isActive={isActive}
+            />
+          </Suspense>
+        ) : null}
       </div>
     </div>
   );

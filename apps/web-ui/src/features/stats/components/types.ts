@@ -15,6 +15,15 @@ export type TimeBarDatum = {
   restMin: number;
 };
 
+export type FocusResumeDatum = {
+  id: string;
+  dateKey: string;
+  taskLabel: string;
+  focusMin: number;
+  resumeCount: number;
+  done: boolean;
+};
+
 export type StatsDailyActivityDatum = {
   key: string;
   done: number;

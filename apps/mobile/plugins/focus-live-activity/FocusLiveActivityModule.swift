@@ -231,6 +231,11 @@ class FocusLiveActivityModule: NSObject {
     do {
       let input = try FocusLiveActivityInput(payload: payload)
       Task {
+        if input.isPaused {
+          await Self.endActivities(todoId: "", dateKey: "")
+          resolve(["supported": true, "updated": false, "ended": true])
+          return
+        }
         await Self.updateActivity(input)
         resolve(["supported": true, "updated": true])
       }

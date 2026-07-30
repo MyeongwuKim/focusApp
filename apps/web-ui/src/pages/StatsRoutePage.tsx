@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { FocusResumeRelationCard } from "../features/stats/components/FocusResumeRelationCard";
 import { StatsAiCommentaryCard } from "../features/stats/components/StatsAiCommentaryCard";
 import { StatsCountSection } from "../features/stats/components/StatsCountSection";
 import { MetricCardGrid } from "../features/stats/components/MetricCardGrid";
@@ -24,7 +25,7 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
     () => normalizeStatsSearchParams(effectiveSearchParams),
     [effectiveSearchParams]
   );
-  const { count, time, periodReview, signal, isFetching } = useStatsMetrics({
+  const { count, time, focusResume, periodReview, signal, isFetching } = useStatsMetrics({
     start: normalized.start,
     end: normalized.end,
     todayKey: normalized.todayKey,
@@ -121,7 +122,6 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
           completionRate={count.completionRate}
           incompleteRate={count.incompleteRate}
           doneTodos={count.doneTodos}
-          resumeCount={count.resumeCount}
           useMonthlyBar={count.useMonthlyBar}
           donePercent={count.donePercent}
           incompletePercent={count.incompletePercent}
@@ -132,6 +132,15 @@ export function StatsRoutePage({ forcedSearch }: StatsRoutePageProps) {
           totalRest={time.totalRest}
           useMonthlyBar={time.useMonthlyBar}
           data={time.data}
+        />
+        <FocusResumeRelationCard
+          scope="all"
+          focusMinutes={focusResume.focusMinutes}
+          resumeCount={focusResume.resumeCount}
+          averageResumesPerTask={focusResume.averageResumesPerTask}
+          averageFocusSegmentMinutes={focusResume.averageFocusSegmentMinutes}
+          useMonthlyBar={time.useMonthlyBar}
+          data={focusResume.data}
         />
         <StatsAiCommentaryCard
           payload={aiCommentaryPayload}

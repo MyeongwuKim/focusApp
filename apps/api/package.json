@@ -12,7 +12,8 @@
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "seed:user-rich-data": "node scripts/seed-user-rich-data.mjs"
+    "seed:user-rich-data": "node scripts/seed-user-rich-data.mjs",
+    "seed:stats-showcase": "node scripts/seed-stats-showcase.mjs"
   },
   "dependencies": {
     "@apollo/server": "^5.1.0",

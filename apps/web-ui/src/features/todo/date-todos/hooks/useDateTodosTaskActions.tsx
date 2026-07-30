@@ -4,6 +4,7 @@ import { actionSheet, confirm, toast } from "../../../../stores";
 import { getUserFacingErrorMessage } from "../../../../utils/errorMessage";
 import { formatDateKey } from "../../../../utils/holidays";
 import {
+  endAllNativeFocusLiveActivities,
   endNativeFocusLiveActivity,
   startNativeFocusLiveActivity,
   updateNativeFocusLiveActivity,
@@ -219,7 +220,7 @@ export function useDateTodosTaskActions({
         try {
           const nextLog = await pauseTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
-          syncNativeFocusLiveActivityFromLog(dateKey, nextLog, taskId);
+          endAllNativeFocusLiveActivities();
         } catch (error) {
           const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
           toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
