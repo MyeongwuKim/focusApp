@@ -2,18 +2,19 @@ import Constants from "expo-constants";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ExpoLocation from "expo-location";
-import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppState,
   type AppStateStatus,
   BackHandler,
+  Image,
   Linking,
   NativeModules,
   PermissionsAndroid,
   Platform,
   StyleSheet,
+  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -42,12 +43,16 @@ import type {
   AuthStateSyncPayload,
   TodoViewSyncPayload,
 } from "../src/features/bridge/handlers/syncBridgeHandlers";
-import { embeddedWebUiFiles } from "../src/features/webui/embeddedWebUiBundle";
+import {
+  embeddedWebUiBundleHash,
+  embeddedWebUiFiles,
+} from "../src/features/webui/embeddedWebUiBundle";
 import {
   prepareWebUiBundleVersion,
   readStoredWebUiReleaseSnapshot,
   resolveWebUiManifestUrl,
   resolveWebUiReleaseChannel,
+  type WebUiVersionProgress,
 } from "../src/features/webui/webUiVersionWorker";
 
 const BASE_WIDTH = 390;
@@ -60,7 +65,10 @@ const NATIVE_PROVIDER_FOREGROUND_CANCEL_GRACE_MS = 3000;
 const NOTIFICATION_PERMISSION_INTRO_FILE_URI = `${
   FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
 }native-notification-permission-intro-v1.json`;
+const LAUNCH_OVERLAY_MIN_VISIBLE_MS = 800;
+const LAUNCH_PROGRESS_BAR_WIDTH = 168;
 const DEFAULT_NATIVE_APP_SCHEME = "mobile";
+const FORCE_LAUNCH_OVERLAY_FOR_TEST = process.env.EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY === "true";
 
 type NativePermissionState = "granted" | "denied" | "undetermined";
 type LocationPermissionSnapshot = {
@@ -716,6 +724,21 @@ function convertCalendarSheetPathToDateTasksPath(targetPath: string) {
   return `/date-tasks?${next.toString()}`;
 }
 
+function resolveLaunchProgressPercent(statusMessage: WebUiVersionProgress) {
+  switch (statusMessage) {
+    case "초기 번들 준비중...":
+      return 22;
+    case "버전 체크중...":
+      return 46;
+    case "앱 번들 설치중...":
+      return 78;
+    case "앱 시작중...":
+      return 100;
+    default:
+      return 0;
+  }
+}
+
 function resolveNativeAppVersion() {
   const expoVersion = Constants.expoConfig?.version;
   if (typeof expoVersion === "string" && expoVersion.trim()) {
@@ -1301,6 +1324,41 @@ async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot | nul
   };
 }
 
+function FocusLaunchOverlay({
+  statusMessage,
+  progressPercent,
+}: {
+  statusMessage: string;
+  progressPercent: number;
+}) {
+  const progressWidth =
+    (LAUNCH_PROGRESS_BAR_WIDTH * Math.max(0, Math.min(progressPercent, 100))) / 100;
+
+  return (
+    <View style={styles.launchOverlay}>
+      <View style={styles.launchLogoFrame}>
+        <Image
+          source={require("../assets/images/splash-icon.png")}
+          style={styles.launchLogo}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+      </View>
+      <View
+        style={styles.launchProgressGroup}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel={statusMessage}
+        accessibilityValue={{ min: 0, max: 100, now: progressPercent }}>
+        <View style={styles.launchProgressTrack}>
+          <View style={[styles.launchProgressFill, { width: progressWidth }]} />
+        </View>
+        <Text style={styles.launchStatusText}>{statusMessage}</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function WebViewScreen() {
   const pendingNotificationPathRef = useRef<string | null>(null);
   const pendingAuthCallbackHashRef = useRef<string | null>(null);
@@ -1324,6 +1382,7 @@ export default function WebViewScreen() {
   const lastFocusLiveActivitySnapshotKeyRef = useRef<string | null>(null);
   const focusLiveActivitySnapshotRefreshUntilRef = useRef(0);
   const hasShownFatalStartupAlertRef = useRef(false);
+  const hasPreparedEmbeddedWebUiRef = useRef(false);
   const [localFileUri, setLocalFileUri] = useState<string | null>(null);
   const [webUiEntryUri, setWebUiEntryUri] = useState<string | null>(null);
   const [webViewUri, setWebViewUri] = useState<string | null>(null);
@@ -1587,7 +1646,11 @@ export default function WebViewScreen() {
     shouldInlineTodoPromptInForeground,
   });
   const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
+  const [launchStatusMessage, setLaunchStatusMessage] = useState<WebUiVersionProgress>(
+    "초기 번들 준비중..."
+  );
   const [hasInitialWebViewLoaded, setHasInitialWebViewLoaded] = useState(false);
+  const [hasLaunchOverlayMinElapsed, setHasLaunchOverlayMinElapsed] = useState(false);
   const { width, fontScale } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
@@ -1850,6 +1913,7 @@ export default function WebViewScreen() {
   useEffect(() => {
     const prepareLocalHtmlFile = async () => {
       try {
+        setLaunchStatusMessage("초기 번들 준비중...");
         const nativeAppVersion = resolveNativeAppVersion() ?? "1.0.0";
         const prepared = await prepareWebUiBundleVersion({
           embeddedFiles: embeddedWebUiFiles,
@@ -1858,12 +1922,19 @@ export default function WebViewScreen() {
           fallbackCurrentVersion: nativeAppVersion,
           nativeAppVersion,
           nativePlatform,
+          forceEmbeddedRefresh: __DEV__,
+          onProgress: setLaunchStatusMessage,
         });
 
         console.log("Prepared local web-ui file:", prepared.localIndexUri);
+        const shouldReloadWebView = hasPreparedEmbeddedWebUiRef.current;
+        hasPreparedEmbeddedWebUiRef.current = true;
         setLocalFileUri(prepared.localIndexUri);
         setWebUiEntryUri(prepared.entryUri);
         setWebViewUri(prepared.entryUri);
+        if (shouldReloadWebView) {
+          requestAnimationFrame(() => webViewRef.current?.reload());
+        }
       } catch (error) {
         console.log("Failed to prepare local web-ui file:", error);
         if (!hasShownFatalStartupAlertRef.current) {
@@ -1880,7 +1951,7 @@ export default function WebViewScreen() {
     };
 
     prepareLocalHtmlFile();
-  }, [nativePlatform, webUiManifestUrl, webUiReleaseChannel]);
+  }, [embeddedWebUiBundleHash, nativePlatform, webUiManifestUrl, webUiReleaseChannel]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -2109,17 +2180,33 @@ export default function WebViewScreen() {
   const isLaunchDestinationReady = isNativeUpdateRequired || showPermissionIntro || hasInitialWebViewLoaded;
 
   useEffect(() => {
-    if (isPreparingLocalFile || !isLaunchDestinationReady) {
-      return;
-    }
+    const timer = setTimeout(() => {
+      setHasLaunchOverlayMinElapsed(true);
+    }, LAUNCH_OVERLAY_MIN_VISIBLE_MS);
 
-    void SplashScreen.hideAsync().catch((error) => {
-      console.log("Failed to hide native splash screen:", error);
-    });
-  }, [isLaunchDestinationReady, isPreparingLocalFile]);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const launchProgressPercent = useMemo(
+    () => resolveLaunchProgressPercent(launchStatusMessage),
+    [launchStatusMessage]
+  );
+  const shouldShowLaunchOverlay =
+    FORCE_LAUNCH_OVERLAY_FOR_TEST ||
+    isPreparingLocalFile ||
+    !hasLaunchOverlayMinElapsed ||
+    !isLaunchDestinationReady;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {shouldShowLaunchOverlay ? (
+        <FocusLaunchOverlay
+          statusMessage={launchStatusMessage}
+          progressPercent={launchProgressPercent}
+        />
+      ) : null}
       {source && !showPermissionIntro && !isNativeUpdateRequired ? (
         <View style={styles.webViewContainer}>
           <View
@@ -2260,6 +2347,49 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0B1220",
+  },
+  launchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+    backgroundColor: "#0B1220",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  launchLogoFrame: {
+    width: 200,
+    height: 200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  launchLogo: {
+    width: 200,
+    height: 200,
+  },
+  launchStatusText: {
+    marginTop: 10,
+    color: "rgba(226, 232, 240, 0.86)",
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
+  launchProgressGroup: {
+    position: "absolute",
+    top: "50%",
+    marginTop: 108,
+    width: LAUNCH_PROGRESS_BAR_WIDTH,
+    alignItems: "center",
+  },
+  launchProgressTrack: {
+    width: LAUNCH_PROGRESS_BAR_WIDTH,
+    height: 4,
+    borderRadius: 99,
+    backgroundColor: "rgba(148, 163, 184, 0.24)",
+    overflow: "hidden",
+  },
+  launchProgressFill: {
+    height: "100%",
+    borderRadius: 99,
+    backgroundColor: "#2CE6A6",
   },
   webViewContainer: {
     flex: 1,

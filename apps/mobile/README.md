@@ -67,26 +67,97 @@ EXPO_PUBLIC_NAVER_URL_SCHEME=
 
 ```bash
 pnpm install
-pnpm mobile:start
 ```
 
-앱 디렉터리 기준으로는 아래 명령을 사용할 수 있습니다.
+설치된 Dev Client에서 Metro만 다시 실행할 때는 아래 명령을 사용합니다.
 
 ```bash
-pnpm -C apps/mobile start
+pnpm native:start
 ```
 
-LAN/dev-client 기준 실행은 아래 명령을 사용합니다.
+실행 중인 앱에 Web UI 변경사항을 다시 빌드해 반영할 때는 아래 명령을 사용합니다.
 
 ```bash
-pnpm mobile:start:lan
+pnpm native:sync:web
 ```
 
-Web UI를 빌드해 앱에 임베드한 뒤 실행할 때는 아래 명령을 사용합니다.
+## iOS 테스트 및 배포 순서
+
+네이티브 변경은 아래 순서로 확인합니다.
+
+| 순서 | 명령어 | 확인 환경 | API origin |
+| --- | --- | --- | --- |
+| 1 | `pnpm native:ios:local` | iOS 시뮬레이터 | Mac에서 실행 중인 로컬 API 주소 |
+| 2 | `pnpm native:ios:device` | 현재 연결된 iPhone과 Metro | iPhone에서 접근할 수 있는 Mac의 로컬 API 주소 |
+| 3 | `pnpm native:ios:dev` | 로컬 Xcode archive와 수동 TestFlight 업로드 | Cloud Run API 주소 |
+| 4 | `pnpm native:ios:prod` | Expo EAS production 원격 빌드 | EAS production 환경변수 |
+
+로컬 테스트용 값은 커밋되지 않는 `apps/mobile/.env.test.local`에 두는 것을 권장합니다. `EXPO_PUBLIC_API_ORIGIN`에는 `/graphql`을 붙이지 않고 API origin만 입력합니다.
+
+### 1. 시뮬레이터 테스트: `native:ios:local`
+
+iOS 시뮬레이터에서 test variant를 먼저 확인합니다. 시뮬레이터는 Mac의 `localhost`에 접근할 수 있으므로 `EXPO_PUBLIC_API_ORIGIN`을 로컬 API 주소로 설정합니다.
 
 ```bash
-pnpm hybrid:start
+# apps/mobile/.env.test.local
+EXPO_PUBLIC_API_ORIGIN=http://localhost:4000
 ```
+
+API 서버를 실행한 뒤 시뮬레이터를 시작합니다.
+
+```bash
+pnpm api:dev
+pnpm native:ios:local
+```
+
+`native:ios:local`은 Web UI를 빌드해 앱에 임베드하고, test 네이티브 설정을 동기화한 뒤 iOS 시뮬레이터와 Metro를 실행합니다.
+
+### 2. 연결된 iPhone 테스트: `native:ios:device`
+
+현재 Mac에 연결된 iPhone에서 Dev Client와 Metro를 사용해 테스트할 때 실행합니다. 실제 iPhone에서 `localhost`는 iPhone 자신을 가리키므로, `EXPO_PUBLIC_API_ORIGIN`에는 iPhone에서 접근 가능한 Mac의 LAN 주소를 입력합니다.
+
+```bash
+# apps/mobile/.env.test.local
+EXPO_PUBLIC_API_ORIGIN=http://<Mac의-LAN-IP>:4000
+```
+
+```bash
+pnpm api:dev
+pnpm native:ios:device
+```
+
+명령을 실행하면 Expo 기기 선택 화면에서 연결된 iPhone을 고르고, test 앱을 빌드·설치한 뒤 Metro에 연결합니다. iPhone과 Mac은 같은 네트워크를 사용해야 하며, 로컬 API 포트에 접근할 수 있어야 합니다. 앱이 이미 설치되어 있다면 `pnpm native:start`로 Metro만 다시 실행할 수 있습니다.
+
+Web UI만 수정한 경우에는 Metro가 실행 중인 상태에서 `pnpm native:sync:web`을 실행하면 Web UI 재빌드 후 연결된 앱을 재시작합니다.
+
+### 3. Xcode archive 및 수동 TestFlight 테스트: `native:ios:dev`
+
+Xcode 프로젝트를 기준으로 archive를 만들고 직접 TestFlight에 올려 확인할 때 사용합니다. 로컬 API가 아닌 Cloud Run에 배포된 API 주소를 넣고 빌드합니다.
+
+```bash
+# apps/mobile/.env.test.local
+EXPO_PUBLIC_API_ORIGIN=https://<Cloud-Run-API-도메인>
+```
+
+```bash
+pnpm native:ios:dev
+```
+
+이 명령은 Web UI 임베드와 test 네이티브 설정 동기화 후 `apps/mobile/ios/T.xcworkspace`를 사용해 Xcode archive와 IPA를 생성합니다. archive는 `apps/mobile/dist/ios-dev-<빌드 시각>.xcarchive`, IPA는 `apps/mobile/dist/ios-dev-<빌드 시각>/`에 생성됩니다.
+
+Expo/EAS에는 업로드하지 않으므로 TestFlight 배포는 생성된 archive를 Xcode Organizer에서 열어 App Store Connect에 직접 업로드합니다.
+
+### 4. Expo production 빌드: `native:ios:prod`
+
+최종 production 배포 단계에서는 프로젝트를 Expo EAS에 업로드하고 production profile로 원격 빌드를 진행합니다.
+
+```bash
+pnpm native:ios:prod
+```
+
+`eas.json`의 `production` profile이 `APP_VARIANT=prod`와 EAS의 `production` environment를 사용합니다. `EXPO_PUBLIC_API_ORIGIN`을 포함한 production 값은 Expo에 설정된 환경변수에서 읽으므로 로컬 `.env`를 production 값으로 바꿀 필요가 없습니다.
+
+현재 `ios:prod` 스크립트는 `eas build --platform ios --profile production`을 실행합니다. Expo에서 원격 빌드는 자동으로 진행하지만 App Store Connect/TestFlight 자동 제출은 포함하지 않습니다.
 
 ## 환경변수 로드 방식
 
@@ -159,8 +230,6 @@ pnpm -C apps/mobile native:sync:test
 pnpm -C apps/mobile native:sync:prod
 ```
 
-호환용 alias인 `native:version:sync`, `native:version:sync:test`, `native:version:sync:prod`도 유지되어 있습니다.
-
 ## WebUI 번들 업데이트
 
 앱은 시작 시 내장 WebUI 번들을 active 디렉터리에 준비합니다. `EXPO_PUBLIC_WEBUI_CHANNEL`이 `none`이 아니고 `EXPO_PUBLIC_WEBUI_MANIFEST_URL`이 있으면 원격 manifest를 조회합니다.
@@ -168,6 +237,8 @@ pnpm -C apps/mobile native:sync:prod
 원격 manifest 버전이 현재 저장된 버전보다 높으면 `web-ui.zip`을 staging 경로에 내려받아 압축 해제합니다. 압축 안에 `index.html`이 있는지 확인한 뒤 active 번들로 교체하고, `crossorigin` 속성은 로컬 파일 실행에 맞게 제거합니다.
 
 manifest의 `minimumNativeVersion`이 현재 앱 버전보다 높으면 번들을 적용하지 않고 업데이트 안내를 표시합니다. 원격 manifest 조회나 bundle 설치에 실패하면 시작 오류 alert를 띄웁니다. 채널이 `none`이거나 manifest URL이 없으면 내장 번들을 기준으로 실행합니다.
+
+실행 중인 Metro 앱에 Web UI 변경사항을 반영할 때는 저장소 루트에서 `pnpm native:sync:web`을 실행합니다. 웹 빌드와 임베드 번들 생성이 끝나면 연결된 iOS·Android 앱 프로세스를 재시작해 최신 Metro 번들과 WebView 파일을 자동으로 적용합니다.
 
 WebUI 버전과 앱 버전은 서로 다르게 관리합니다.
 
@@ -200,42 +271,68 @@ Web UI와 Mobile은 WebView bridge를 통해 JSON 문자열을 주고받습니�
 | 버전 | `REST_APP_VERSION_INFO_REQUEST` | 앱 버전, WebUI 버전, 채널 정보를 반환합니다. |
 | Live Activity | `REST_FOCUS_LIVE_ACTIVITY_*` | iOS Live Activity를 시작, 갱신, 종료하거나 control event ack를 처리합니다. |
 
+## 알림 처리
+
+로컬 알림과 서버 푸시는 용도에 따라 나눠 처리합니다.
+
+| 알림 | 처리 위치 | 동작 |
+| --- | --- | --- |
+| 휴식 종료 | Native | 휴식 시작 시 기기에 로컬 알림을 예약하고, 휴식을 취소하거나 끝내면 예약 상태를 정리합니다. |
+| 집중 시작 | API | Cloud Scheduler가 실행한 서버 배치가 오늘 할 일이 비어 있는 사용자를 확인해 Expo Push API로 알림을 보냅니다. |
+| 미완료 할 일 | API | 서버 배치가 아직 완료하지 않은 할 일과 사용자 설정을 확인해 Expo Push API로 알림을 보냅니다. |
+
+Native는 알림 권한을 확인하고 Expo push token을 API에 등록합니다. 운영 환경에서는 Cloud Scheduler가 5분마다 `POST /api/notifications/batch/run`을 호출합니다. 배치가 실행되는 간격과 사용자가 설정한 리마인드 간격은 다르며, 실제 발송은 저장된 `nextReminderAt`이 지난 경우에만 진행됩니다.
+
+관련 코드는 다음 위치에 있습니다.
+
+- `src/features/notifications/hooks/useRestNotificationBridge.ts`: 로컬 알림과 push token 브릿지
+- `../api/src/modules/notification-batch`: 서버 푸시 발송 대상 계산과 Expo Push API 호출
+- `../api/src/modules/notification-settings`: 사용자별 알림 설정과 다음 발송 시각 저장
+
 ## EAS 빌드
 
-`eas.json`은 profile별로 `APP_VARIANT`를 설정합니다.
+`eas.json`은 Expo 원격 빌드에 사용하는 production profile만 관리합니다.
 
 | profile | distribution | environment | APP_VARIANT |
 | --- | --- | --- | --- |
-| `development` | `store` | `development` | `test` |
-| `preview` | `internal` | `preview` | `test` |
 | `production` | 기본값 | `production` | `prod` |
 
 production 빌드가 prod R2 manifest를 읽으려면 EAS production env에 아래 값이 포함되어야 합니다.
 
 ```bash
+EXPO_PUBLIC_API_ORIGIN=https://<Cloud-Run-API-도메인>
 EXPO_PUBLIC_WEBUI_CHANNEL=prod
 EXPO_PUBLIC_WEBUI_MANIFEST_URL=https://<prod-r2-public-base-url>/latest/manifest.json
 ```
+
+위 값은 Expo EAS의 `production` environment에서 관리합니다. `native:ios:prod` 실행 전 로컬 환경변수 파일을 수정할 필요는 없습니다.
 
 ## 주요 스크립트
 
 | 명령어 | 설명 |
 | --- | --- |
 | `pnpm -C apps/mobile start` | Expo 개발 서버를 실행합니다. |
-| `pnpm -C apps/mobile hybrid` | dev-client, LAN, 8081 기준 Expo 서버를 실행합니다. |
 | `pnpm -C apps/mobile android` | Android 네이티브 앱을 실행합니다. |
-| `pnpm -C apps/mobile ios` | iOS 네이티브 앱을 실행합니다. |
+| `pnpm native:start` | 설치된 Dev Client가 연결할 Metro를 LAN 모드로 실행합니다. |
+| `pnpm native:sync:web` | Web UI를 다시 빌드하고 연결된 iOS·Android 앱을 재시작해 Metro 앱에 자동 반영합니다. |
+| `pnpm native:ios:local` | iOS 시뮬레이터에서 test 앱과 Metro를 실행합니다. |
+| `pnpm native:ios:device` | 연결된 iPhone에 test 앱을 빌드·설치하고 Metro에 연결합니다. |
+| `pnpm native:ios:dev` | Xcode 프로젝트로 archive와 IPA를 생성해 수동 TestFlight 테스트를 준비합니다. |
+| `pnpm native:ios:prod` | EAS production 환경변수로 Expo 원격 iOS 빌드를 요청합니다. |
+| `pnpm native:android:local` | Android 로컬 기기 또는 에뮬레이터에서 test 앱을 실행합니다. |
 | `pnpm -C apps/mobile web` | Expo web 실행을 시작합니다. |
 | `pnpm -C apps/mobile lint` | Expo lint를 실행합니다. |
-| `pnpm -C apps/mobile native:sync` | 기본 variant 기준으로 네이티브 설정을 동기화합니다. |
 | `pnpm -C apps/mobile native:sync:test` | test variant 네이티브 설정을 동기화합니다. |
 | `pnpm -C apps/mobile native:sync:prod` | prod variant 네이티브 설정을 동기화합니다. |
-| `pnpm -C apps/mobile reset-project` | Expo 기본 프로젝트 reset 스크립트를 실행합니다. |
 
-## 테스트
+## 검증
 
-현재 `apps/mobile`에는 별도 테스트 스크립트가 없습니다. 정적 확인은 lint를 사용합니다.
+현재 `apps/mobile`에는 별도 단위 테스트 스크립트가 없습니다. 정적 확인 후 iOS 환경을 `local → device → dev → prod` 순서로 검증합니다.
 
 ```bash
 pnpm -C apps/mobile lint
+pnpm native:ios:local
+pnpm native:ios:device
+pnpm native:ios:dev
+pnpm native:ios:prod
 ```

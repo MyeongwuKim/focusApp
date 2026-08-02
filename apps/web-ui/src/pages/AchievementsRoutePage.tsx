@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchAchievementHistory, fetchAchievementProgressList, syncAchievements } from "../api/achievementApi";
+import {
+  fetchAchievementHistory,
+  fetchAchievementProgressList,
+  syncAchievements,
+  type AchievementProgressRecord,
+} from "../api/achievementApi";
 import { RobotCharacter } from "../components/RobotCharacter";
 import { Button } from "../components/ui/Button";
 import { AchievementHistoryTab } from "../features/achievement/components/AchievementHistoryTab";
 import { AchievementProgressTab } from "../features/achievement/components/AchievementProgressTab";
+import { toast } from "../stores";
+import { getUserFacingErrorMessage } from "../utils/errorMessage";
 
 type AchievementsRoutePageProps = {
   forcedSearch?: string;
@@ -24,6 +31,22 @@ function resolveBestStreak(
 ) {
   const target = progressRows.find((row) => row.badgeId === badgePrefix);
   return target?.currentValue ?? 0;
+}
+
+function progressRatio(row: AchievementProgressRecord) {
+  return row.goal > 0 ? Math.min(row.currentValue / row.goal, 1) : 0;
+}
+
+function sortAchievementRows(rows: AchievementProgressRecord[]) {
+  return [...rows].sort((left, right) => {
+    if (left.isAchieved !== right.isAchieved) {
+      return left.isAchieved ? 1 : -1;
+    }
+    if (!left.isAchieved) {
+      return progressRatio(right) - progressRatio(left) || left.goal - right.goal;
+    }
+    return (right.lastAchievedAt ?? "").localeCompare(left.lastAchievedAt ?? "") || right.goal - left.goal;
+  });
 }
 
 function AchievementLoadingSignal() {
@@ -51,6 +74,31 @@ function AchievementInitialLoadingState() {
         <p className="text-sm font-semibold text-base-content">업적 데이터 불러오는 중...</p>
         <p className="text-xs text-base-content/60">이번 주 진행 상황을 정리하고 있어요.</p>
       </div>
+    </div>
+  );
+}
+
+function AchievementErrorState({
+  error,
+  isRetrying,
+  onRetry,
+}: {
+  error: unknown;
+  isRetrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center" role="alert">
+      <RobotCharacter className="h-24 w-24" ariaLabel="업적 불러오기 실패 캐릭터" mood="sad" />
+      <div className="space-y-1">
+        <p className="m-0 text-sm font-semibold text-base-content/85">업적을 불러오지 못했어요.</p>
+        <p className="m-0 text-xs text-base-content/60">
+          {getUserFacingErrorMessage(error, "잠시 후 다시 시도해 주세요.")}
+        </p>
+      </div>
+      <Button size="sm" variant="primary" onClick={onRetry} disabled={isRetrying}>
+        {isRetrying ? "다시 불러오는 중..." : "다시 시도"}
+      </Button>
     </div>
   );
 }
@@ -85,16 +133,23 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
       }
       return allPages.reduce((acc, page) => acc + page.length, 0);
     },
+    enabled: activeTab === "history",
     staleTime: 10 * 1000,
   });
 
   const syncMutation = useMutation({
     mutationFn: syncAchievements,
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: HISTORY_QUERY_KEY }),
       ]);
+      if (result.newEventCount > 0) {
+        toast.positive(
+          `새 업적 ${result.newEventCount}개를 달성했어요. 히스토리에서 확인해 보세요.`,
+          "업적 달성"
+        );
+      }
       setHasCompletedInitialSync(true);
     },
     onError: () => {
@@ -136,11 +191,20 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
     return () => observer.disconnect();
   }, [activeTab, historyQuery]);
 
-  const progressRows = progressQuery.data ?? [];
-  const historyRows = historyQuery.data?.pages.flatMap((page) => page) ?? [];
+  const progressRows = useMemo(() => progressQuery.data ?? [], [progressQuery.data]);
+  const historyRows = useMemo(
+    () => historyQuery.data?.pages.flatMap((page) => page) ?? [],
+    [historyQuery.data]
+  );
 
-  const permanentRows = progressRows.filter((row) => row.scope !== "weekly");
-  const weeklyChallengeRows = progressRows.filter((row) => row.scope === "weekly");
+  const permanentRows = useMemo(
+    () => progressRows.filter((row) => row.scope !== "weekly"),
+    [progressRows]
+  );
+  const weeklyChallengeRows = useMemo(
+    () => progressRows.filter((row) => row.scope === "weekly"),
+    [progressRows]
+  );
 
   const unlockedCount = permanentRows.filter((row) => row.isAchieved).length;
   const totalCount = permanentRows.length;
@@ -150,31 +214,58 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
     .filter((row) => row.scope === "weekly")
     .reduce((acc, row) => Math.max(acc, row.bestWeeklyStreak), 0);
   const weeklyAchievedCount = weeklyChallengeRows.filter((row) => row.isAchieved).length;
+  const nextAchievement = useMemo(
+    () =>
+      permanentRows
+        .filter((row) => !row.isAchieved)
+        .sort((left, right) => progressRatio(right) - progressRatio(left) || left.goal - right.goal)[0] ??
+      null,
+    [permanentRows]
+  );
 
   const filteredProgressRows = useMemo(() => {
-    if (activeCategory === "all") {
-      return permanentRows;
-    }
-    return permanentRows.filter((row) => row.category === activeCategory);
+    const categoryRows =
+      activeCategory === "all"
+        ? permanentRows
+        : permanentRows.filter((row) => row.category === activeCategory);
+    return sortAchievementRows(categoryRows);
   }, [activeCategory, permanentRows]);
 
-  const permanentHistoryRows = historyRows.filter((row) => row.scope !== "weekly");
-  const weeklyHistoryRows = historyRows.filter((row) => row.scope === "weekly");
   const filteredHistoryRows =
     activeHistoryFilter === "permanent"
-      ? permanentHistoryRows
+      ? historyRows.filter((row) => row.scope !== "weekly")
       : activeHistoryFilter === "weekly"
-        ? weeklyHistoryRows
+        ? historyRows.filter((row) => row.scope === "weekly")
         : historyRows;
 
-  const isBusy = progressQuery.isFetching || historyQuery.isFetching || syncMutation.isPending;
+  const isBusy =
+    progressQuery.isFetching ||
+    (activeTab === "history" && historyQuery.isFetching) ||
+    syncMutation.isPending;
   const isInitialAchievementLoading =
-    !hasCompletedInitialSync || progressQuery.isLoading || historyQuery.isLoading;
+    !hasCompletedInitialSync || progressQuery.isLoading;
+  const isProgressUnavailable =
+    progressRows.length === 0 && (progressQuery.isError || syncMutation.isError);
+
+  const retryAchievementData = () => {
+    setHasCompletedInitialSync(false);
+    void progressQuery.refetch();
+    if (activeTab === "history") {
+      void historyQuery.refetch();
+    }
+    syncMutation.mutate();
+  };
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-base-300 bg-base-100/80 p-4 md:p-5">
       {isInitialAchievementLoading ? (
         <AchievementInitialLoadingState />
+      ) : isProgressUnavailable ? (
+        <AchievementErrorState
+          error={progressQuery.error ?? syncMutation.error}
+          isRetrying={progressQuery.isFetching || syncMutation.isPending}
+          onRetry={retryAchievementData}
+        />
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-base-300/80 bg-base-200/35 p-1">
@@ -203,16 +294,25 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
               weeklyBestStreak={weeklyBestStreak}
               weeklyAchievedCount={weeklyAchievedCount}
               weeklyChallengeRows={weeklyChallengeRows}
+              nextAchievement={nextAchievement}
               activeCategory={activeCategory}
               onChangeCategory={setActiveCategory}
               filteredProgressRows={filteredProgressRows}
+            />
+          ) : historyQuery.isLoading ? (
+            <div className="flex min-h-40 items-center justify-center" aria-live="polite">
+              <p className="text-xs text-base-content/60">업적 히스토리 불러오는 중...</p>
+            </div>
+          ) : historyQuery.isError ? (
+            <AchievementErrorState
+              error={historyQuery.error}
+              isRetrying={historyQuery.isFetching}
+              onRetry={() => void historyQuery.refetch()}
             />
           ) : (
             <AchievementHistoryTab
               activeHistoryFilter={activeHistoryFilter}
               onChangeHistoryFilter={setActiveHistoryFilter}
-              permanentHistoryRows={permanentHistoryRows}
-              weeklyHistoryRows={weeklyHistoryRows}
               filteredHistoryRows={filteredHistoryRows}
               loadMoreRef={loadMoreRef}
               isFetchingNextPage={historyQuery.isFetchingNextPage}
@@ -220,6 +320,14 @@ export function AchievementsRoutePage({ forcedSearch }: AchievementsRoutePagePro
           )}
 
           {isBusy ? <p className="text-xs text-base-content/60">업적 데이터 동기화 중...</p> : null}
+          {syncMutation.isError && progressRows.length > 0 ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2">
+              <p className="m-0 text-xs text-error">최신 업적 반영에 실패했어요.</p>
+              <Button size="xs" variant="default" onClick={() => syncMutation.mutate()}>
+                다시 동기화
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

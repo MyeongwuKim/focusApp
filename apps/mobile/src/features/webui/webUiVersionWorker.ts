@@ -68,12 +68,15 @@ export async function prepareWebUiBundleVersion(input: {
   fallbackCurrentVersion: string;
   nativeAppVersion?: string | null;
   nativePlatform?: WebUiNativePlatform;
+  forceEmbeddedRefresh?: boolean;
   onProgress?: (message: WebUiVersionProgress) => void;
 }) {
   input.onProgress?.("초기 번들 준비중...");
   await FileSystem.makeDirectoryAsync(WEB_UI_ROOT_DIR, { intermediates: true });
 
-  const shouldRefreshFromEmbedded = input.releaseChannel === "none" || !input.manifestUrl;
+  const manifestUrl = input.forceEmbeddedRefresh ? null : input.manifestUrl;
+  const shouldRefreshFromEmbedded =
+    input.forceEmbeddedRefresh || input.releaseChannel === "none" || !manifestUrl;
   const activeIndexUri = `${WEB_UI_ACTIVE_DIR}index.html`;
   const activeIndexInfo = await FileSystem.getInfoAsync(activeIndexUri);
   if (!activeIndexInfo.exists || shouldRefreshFromEmbedded) {
@@ -94,10 +97,10 @@ export async function prepareWebUiBundleVersion(input: {
   let nextEntryUri = activeIndexUri;
 
   try {
-    if (input.manifestUrl) {
+    if (manifestUrl) {
       input.onProgress?.("버전 체크중...");
       const manifestResponse = await withTimeout(
-        fetch(input.manifestUrl),
+        fetch(manifestUrl),
         WEB_UI_MANIFEST_FETCH_TIMEOUT_MS,
         "WEB_UI_MANIFEST_FETCH_TIMEOUT"
       );
@@ -178,7 +181,7 @@ export async function prepareWebUiBundleVersion(input: {
           channel: input.releaseChannel,
           from: currentVersion,
           to: remoteVersion,
-          manifestUrl: input.manifestUrl,
+          manifestUrl,
           bundleUrl: remoteBundleUrl,
         });
       } else if (compared < 0) {

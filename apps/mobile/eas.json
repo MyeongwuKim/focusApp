@@ -4,23 +4,6 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "development": {
-      "distribution": "store",
-      "environment": "development",
-      "autoIncrement": false,
-      "env": {
-        "APP_VARIANT": "test",
-        "EAS_NO_FROZEN_LOCKFILE": "1"
-      }
-    },
-    "preview": {
-      "distribution": "internal",
-      "environment": "preview",
-      "env": {
-        "APP_VARIANT": "test",
-        "EAS_NO_FROZEN_LOCKFILE": "1"
-      }
-    },
     "production": {
       "autoIncrement": true,
       "environment": "production",

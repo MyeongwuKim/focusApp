@@ -1,6 +1,7 @@
 import { Button } from "../../../components/ui/Button";
 import type { AchievementProgressRecord } from "../../../api/achievementApi";
 import { MetricCardGrid } from "../../stats/components/MetricCardGrid";
+import { AchievementNextGoalCard } from "./AchievementNextGoalCard";
 import { AchievementProgressBadgeCard } from "./AchievementProgressBadgeCard";
 import { AchievementWeeklyChallengeCard } from "./AchievementWeeklyChallengeCard";
 
@@ -14,6 +15,7 @@ type AchievementProgressTabProps = {
   weeklyBestStreak: number;
   weeklyAchievedCount: number;
   weeklyChallengeRows: AchievementProgressRecord[];
+  nextAchievement: AchievementProgressRecord | null;
   activeCategory: CategoryFilter;
   onChangeCategory: (value: CategoryFilter) => void;
   filteredProgressRows: AchievementProgressRecord[];
@@ -40,6 +42,7 @@ export function AchievementProgressTab({
   weeklyBestStreak,
   weeklyAchievedCount,
   weeklyChallengeRows,
+  nextAchievement,
   activeCategory,
   onChangeCategory,
   filteredProgressRows,
@@ -56,12 +59,14 @@ export function AchievementProgressTab({
         ]}
       />
 
+      <AchievementNextGoalCard badge={nextAchievement} />
+
       <article className="rounded-xl border border-base-300/80 bg-base-200/40 p-3">
         <div className="flex items-center justify-between gap-2">
           <h3 className="m-0 text-sm font-semibold text-base-content/85">주간 도전</h3>
           <span className="text-xs text-base-content/60">최고 연속 {weeklyBestStreak}주</span>
         </div>
-        <p className="m-0 mt-1 text-[11px] text-base-content/60">주간 도전은 매주 초기화되며, 히스토리에 달성 기록이 누적됩니다.</p>
+        <p className="m-0 mt-1 text-[11px] text-base-content/60">주간 도전은 한국 시간 월요일에 초기화되며, 히스토리에 달성 기록이 누적됩니다.</p>
         <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
           {weeklyChallengeRows.map((badge) => (
             <AchievementWeeklyChallengeCard key={badge.id} badge={badge} />
@@ -82,7 +87,7 @@ export function AchievementProgressTab({
         ))}
       </div>
 
-      <p className="m-0 text-xs text-base-content/60">달성 배지(영구): 누적/연속 카테고리만 집계</p>
+      <p className="m-0 text-xs text-base-content/60">미달성 배지는 목표에 가까운 순서로 표시됩니다.</p>
       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
         {filteredProgressRows.map((badge) => (
           <AchievementProgressBadgeCard key={badge.id} badge={badge} />

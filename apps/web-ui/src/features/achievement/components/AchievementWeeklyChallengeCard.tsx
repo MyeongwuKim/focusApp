@@ -1,5 +1,6 @@
 import type { AchievementProgressRecord } from "../../../api/achievementApi";
 import { achievementTierClassName } from "./achievementCardStyles";
+import { formatAchievementProgress } from "./achievementProgressFormat";
 
 type AchievementWeeklyChallengeCardProps = {
   badge: AchievementProgressRecord;
@@ -32,7 +33,7 @@ export function AchievementWeeklyChallengeCard({ badge }: AchievementWeeklyChall
       </div>
       <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-base-content/55">
         <span>
-          {badge.currentValue}/{badge.goal}
+          {formatAchievementProgress(badge)}
         </span>
         <span>{badge.achievedCount}회 달성</span>
       </div>

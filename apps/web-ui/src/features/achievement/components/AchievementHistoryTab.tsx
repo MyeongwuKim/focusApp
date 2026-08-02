@@ -9,8 +9,6 @@ type HistoryFilter = "all" | "permanent" | "weekly";
 type AchievementHistoryTabProps = {
   activeHistoryFilter: HistoryFilter;
   onChangeHistoryFilter: (value: HistoryFilter) => void;
-  permanentHistoryRows: AchievementEventRecord[];
-  weeklyHistoryRows: AchievementEventRecord[];
   filteredHistoryRows: AchievementEventRecord[];
   loadMoreRef: RefObject<HTMLDivElement | null>;
   isFetchingNextPage: boolean;
@@ -19,8 +17,6 @@ type AchievementHistoryTabProps = {
 export function AchievementHistoryTab({
   activeHistoryFilter,
   onChangeHistoryFilter,
-  permanentHistoryRows,
-  weeklyHistoryRows,
   filteredHistoryRows,
   loadMoreRef,
   isFetchingNextPage,
@@ -53,23 +49,6 @@ export function AchievementHistoryTab({
 
       {filteredHistoryRows.length === 0 ? (
         <AchievementHistoryEmptyState variant={activeHistoryFilter === "all" ? "all" : activeHistoryFilter} />
-      ) : activeHistoryFilter === "all" ? (
-        <>
-          <div className="space-y-2">
-            {permanentHistoryRows.length > 0 ? (
-              permanentHistoryRows.map((event) => <AchievementHistoryEventCard key={event.id} event={event} />)
-            ) : (
-              <AchievementHistoryEmptyState variant="permanent" />
-            )}
-          </div>
-          <div className="space-y-2">
-            {weeklyHistoryRows.length > 0 ? (
-              weeklyHistoryRows.map((event) => <AchievementHistoryEventCard key={event.id} event={event} />)
-            ) : (
-              <AchievementHistoryEmptyState variant="weekly" />
-            )}
-          </div>
-        </>
       ) : (
         <div className="space-y-2">
           {filteredHistoryRows.map((event) => (

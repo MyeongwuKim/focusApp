@@ -15,9 +15,13 @@ function formatAchievedAt(value: string) {
 }
 
 function renderHistoryMeta(event: AchievementEventRecord) {
-  const parts = [`${event.cycleIndex}번째 달성`];
+  const parts: string[] = [];
+  if (event.scope === "weekly") {
+    parts.push(`${event.cycleIndex}번째 달성`);
+  }
   if (event.weekKey) {
-    parts.push(event.weekKey);
+    const weekMatch = /^(\d{4})-W(\d{2})$/.exec(event.weekKey);
+    parts.push(weekMatch ? `${weekMatch[1]}년 ${Number(weekMatch[2])}주차` : event.weekKey);
   }
   if (typeof event.weeklyStreak === "number" && event.weeklyStreak > 0) {
     parts.push(`연속 ${event.weeklyStreak}주`);
@@ -30,6 +34,8 @@ type AchievementHistoryEventCardProps = {
 };
 
 export function AchievementHistoryEventCard({ event }: AchievementHistoryEventCardProps) {
+  const historyMeta = renderHistoryMeta(event);
+
   return (
     <article className="rounded-xl border border-base-300/80 bg-base-200/40 p-3">
       <div className="flex items-start gap-2">
@@ -39,9 +45,11 @@ export function AchievementHistoryEventCard({ event }: AchievementHistoryEventCa
         <div className="min-w-0 flex-1">
           <p className="m-0 text-sm font-semibold text-base-content/90">{event.title}</p>
           <p className="m-0 mt-0.5 text-[11px] text-base-content/65">{event.description}</p>
-          <p className="m-0 mt-1 text-[11px] text-base-content/60">{renderHistoryMeta(event)}</p>
+          {historyMeta ? <p className="m-0 mt-1 text-[11px] text-base-content/60">{historyMeta}</p> : null}
         </div>
-        <span className="text-[10px] text-base-content/55">{formatAchievedAt(event.achievedAt)}</span>
+        <span className="shrink-0 text-right text-[10px] text-base-content/55">
+          {formatAchievedAt(event.achievedAt)}
+        </span>
       </div>
     </article>
   );

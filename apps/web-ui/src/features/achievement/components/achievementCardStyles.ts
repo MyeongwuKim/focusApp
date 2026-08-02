@@ -19,11 +19,14 @@ export function achievementTierClassName(tier: AchievementProgressRecord["tier"]
   return "border-amber-600/40 bg-amber-600/10";
 }
 
-export function achievementScopeLabel(scope: AchievementProgressRecord["scope"]) {
-  if (scope === "total") {
+export function achievementScopeLabel(badge: AchievementProgressRecord) {
+  if (badge.badgeId.endsWith("-first")) {
+    return "시작";
+  }
+  if (badge.scope === "total") {
     return "누적";
   }
-  if (scope === "streak") {
+  if (badge.scope === "streak") {
     return "연속";
   }
   return "주간";

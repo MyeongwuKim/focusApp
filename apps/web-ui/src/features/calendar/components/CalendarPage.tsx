@@ -172,23 +172,31 @@ export function CalendarPage({
       { month: viewMonth, cells: currentCells },
       { month: nextMonth, cells: nextCells },
     ];
-    const currentMonthTemplate = buildRowTemplate(currentCells, getSelectedRowIndex(currentCells, selectedDateKey));
+    const currentExpandedRowIndex = getSelectedRowIndex(currentCells, selectedDateKey);
+    const currentMonthTemplate = buildRowTemplate(currentCells, currentExpandedRowIndex);
 
     return panelInputs.map(({ month, cells }, panelIndex) => {
       const baseTemplate = buildRowTemplate(cells, null);
+      const expandedRowIndex = isMonthSwipeActive
+        ? panelIndex === 1
+          ? currentExpandedRowIndex
+          : null
+        : getSelectedRowIndex(cells, selectedDateKey);
       if (isMonthSwipeActive) {
         return {
           key: toMonthPanelKey(month),
           cells,
           // 스와이프 중에는 현재 달(가운데)만 선택 행 확장, 좌우 달은 기본 높이 유지
           rowTemplate: panelIndex === 1 ? currentMonthTemplate : baseTemplate,
+          expandedRowIndex,
         };
       }
 
       return {
         key: toMonthPanelKey(month),
         cells,
-        rowTemplate: buildRowTemplate(cells, getSelectedRowIndex(cells, selectedDateKey)),
+        rowTemplate: buildRowTemplate(cells, expandedRowIndex),
+        expandedRowIndex,
       };
     });
   }, [currentCells, isMonthSwipeActive, nextCells, nextMonth, prevCells, prevMonth, selectedDateKey, viewMonth]);
@@ -563,7 +571,7 @@ export function CalendarPage({
                     gridTemplateRows: panel.rowTemplate,
                   }}
                 >
-                  {panel.cells.map((cell) => {
+                  {panel.cells.map((cell, cellIndex) => {
                     const dateKey = formatDateKey(cell.date);
                     const previewBars = logsByDate[dateKey]?.previewBars ?? [];
                     const isAllDone = logsByDate[dateKey]?.allDone ?? false;
@@ -589,6 +597,7 @@ export function CalendarPage({
                         inCurrentMonth={cell.inCurrentMonth}
                         isToday={isToday}
                         isSelected={isSelected}
+                        isRowExpanded={panel.expandedRowIndex === Math.floor(cellIndex / 7)}
                         isRangeSelected={isRangeSelected}
                         isRangeBoundary={isRangeBoundary}
                         holidayName={holidayName}

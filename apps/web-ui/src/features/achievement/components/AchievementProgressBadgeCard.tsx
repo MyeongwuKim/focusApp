@@ -1,5 +1,10 @@
 import type { AchievementProgressRecord } from "../../../api/achievementApi";
 import { achievementScopeLabel, achievementTierClassName } from "./achievementCardStyles";
+import {
+  formatAchievementDate,
+  formatAchievementProgress,
+  formatAchievementRemaining,
+} from "./achievementProgressFormat";
 
 type AchievementProgressBadgeCardProps = {
   badge: AchievementProgressRecord;
@@ -7,6 +12,7 @@ type AchievementProgressBadgeCardProps = {
 
 export function AchievementProgressBadgeCard({ badge }: AchievementProgressBadgeCardProps) {
   const progressPercent = Math.max(0, Math.min(100, badge.goal > 0 ? (badge.currentValue / badge.goal) * 100 : 0));
+  const achievedDate = formatAchievementDate(badge.lastAchievedAt);
 
   return (
     <article
@@ -24,7 +30,7 @@ export function AchievementProgressBadgeCard({ badge }: AchievementProgressBadge
           <div className="flex items-center gap-1.5">
             <p className="m-0 text-sm font-semibold text-base-content/90">{badge.title}</p>
             <span className="rounded-full bg-base-100/75 px-1.5 py-0.5 text-[10px] text-base-content/60">
-              {achievementScopeLabel(badge.scope)}
+              {achievementScopeLabel(badge)}
             </span>
           </div>
           <p className="m-0 mt-0.5 text-[11px] text-base-content/65">{badge.description}</p>
@@ -46,9 +52,9 @@ export function AchievementProgressBadgeCard({ badge }: AchievementProgressBadge
       </div>
       <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-base-content/55">
         <span>
-          {badge.currentValue}/{badge.goal}
+          {formatAchievementProgress(badge)}
         </span>
-        <span>{badge.achievedCount}회 달성</span>
+        <span>{badge.isAchieved ? (achievedDate ? `${achievedDate} 달성` : "달성 완료") : formatAchievementRemaining(badge)}</span>
       </div>
     </article>
   );

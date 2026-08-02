@@ -1,6 +1,15 @@
 import { gql } from "graphql-tag";
 import type { GraphQLContext } from "../../graphql/context.js";
 import { requireUserId } from "../../common/utils/require-user-id.js";
+import { env } from "../../config/env.js";
+import {
+  buildAchievementMetrics,
+  getDateKeyInTimeZone,
+  getIsoWeekKeyFromDateKey,
+  shiftDateKey,
+  type AchievementDayStat,
+  type AchievementMetrics,
+} from "./achievement.utils.js";
 
 type BadgeDefinition = {
   id: string;
@@ -13,6 +22,7 @@ type BadgeDefinition = {
   goal: number;
   metric:
     | "focus_total"
+    | "focus_day_best"
     | "done_total"
     | "focus_streak"
     | "done_streak"
@@ -20,23 +30,8 @@ type BadgeDefinition = {
     | "weekly_focus_minutes";
 };
 
-type DayStat = {
-  doneCount: number;
-  focusMinutes: number;
-};
-
-type AchievementMetrics = {
-  totalFocusMinutes: number;
-  totalDoneTodos: number;
-  focusStreakCurrent: number;
-  focusStreakBest: number;
-  doneStreakCurrent: number;
-  doneStreakBest: number;
-  weeklyDoneDays: number;
-  weeklyFocusMinutes: number;
-};
-
 const BADGE_DEFINITIONS: BadgeDefinition[] = [
+  { id: "focus-first", title: "첫 몰입", description: "하루 집중 25분 달성", icon: "🌱", category: "focus", scope: "total", tier: "bronze", goal: 25, metric: "focus_day_best" },
   { id: "focus-bronze", title: "집중 브론즈", description: "누적 집중 300분", icon: "🥉", category: "focus", scope: "total", tier: "bronze", goal: 300, metric: "focus_total" },
   { id: "focus-silver", title: "집중 실버", description: "누적 집중 1200분", icon: "🥈", category: "focus", scope: "total", tier: "silver", goal: 1200, metric: "focus_total" },
   { id: "focus-gold", title: "집중 골드", description: "누적 집중 3000분", icon: "🥇", category: "focus", scope: "total", tier: "gold", goal: 3000, metric: "focus_total" },
@@ -44,6 +39,7 @@ const BADGE_DEFINITIONS: BadgeDefinition[] = [
   { id: "focus-ruby", title: "집중 루비", description: "누적 집중 10000분", icon: "♦️", category: "focus", scope: "total", tier: "ruby", goal: 10000, metric: "focus_total" },
   { id: "focus-diamond", title: "집중 다이아몬드", description: "누적 집중 15000분", icon: "💎", category: "focus", scope: "total", tier: "diamond", goal: 15000, metric: "focus_total" },
 
+  { id: "done-first", title: "첫 체크", description: "할 일 첫 완료", icon: "✅", category: "done", scope: "total", tier: "bronze", goal: 1, metric: "done_total" },
   { id: "done-bronze", title: "완료 브론즈", description: "완료 할일 20개", icon: "🥉", category: "done", scope: "total", tier: "bronze", goal: 20, metric: "done_total" },
   { id: "done-silver", title: "완료 실버", description: "완료 할일 60개", icon: "🥈", category: "done", scope: "total", tier: "silver", goal: 60, metric: "done_total" },
   { id: "done-gold", title: "완료 골드", description: "완료 할일 150개", icon: "🥇", category: "done", scope: "total", tier: "gold", goal: 150, metric: "done_total" },
@@ -51,26 +47,26 @@ const BADGE_DEFINITIONS: BadgeDefinition[] = [
   { id: "done-ruby", title: "완료 루비", description: "완료 할일 500개", icon: "♦️", category: "done", scope: "total", tier: "ruby", goal: 500, metric: "done_total" },
   { id: "done-diamond", title: "완료 다이아몬드", description: "완료 할일 1000개", icon: "💎", category: "done", scope: "total", tier: "diamond", goal: 1000, metric: "done_total" },
 
-  { id: "focus-streak-bronze", title: "집중 연속일 브론즈", description: "집중 연속일 3일", icon: "🥉", category: "streak", scope: "streak", tier: "bronze", goal: 3, metric: "focus_streak" },
-  { id: "focus-streak-silver", title: "집중 연속일 실버", description: "집중 연속일 7일", icon: "🥈", category: "streak", scope: "streak", tier: "silver", goal: 7, metric: "focus_streak" },
-  { id: "focus-streak-gold", title: "집중 연속일 골드", description: "집중 연속일 14일", icon: "🥇", category: "streak", scope: "streak", tier: "gold", goal: 14, metric: "focus_streak" },
-  { id: "focus-streak-platinum", title: "집중 연속일 플래티넘", description: "집중 연속일 30일", icon: "🔷", category: "streak", scope: "streak", tier: "platinum", goal: 30, metric: "focus_streak" },
-  { id: "focus-streak-ruby", title: "집중 연속일 루비", description: "집중 연속일 60일", icon: "♦️", category: "streak", scope: "streak", tier: "ruby", goal: 60, metric: "focus_streak" },
-  { id: "focus-streak-diamond", title: "집중 연속일 다이아몬드", description: "집중 연속일 100일", icon: "💎", category: "streak", scope: "streak", tier: "diamond", goal: 100, metric: "focus_streak" },
+  { id: "focus-streak-bronze", title: "집중 연속일 브론즈", description: "하루 25분 또는 집중 15분+완료 1개, 3일 연속", icon: "🥉", category: "streak", scope: "streak", tier: "bronze", goal: 3, metric: "focus_streak" },
+  { id: "focus-streak-silver", title: "집중 연속일 실버", description: "하루 25분 또는 집중 15분+완료 1개, 7일 연속", icon: "🥈", category: "streak", scope: "streak", tier: "silver", goal: 7, metric: "focus_streak" },
+  { id: "focus-streak-gold", title: "집중 연속일 골드", description: "하루 25분 또는 집중 15분+완료 1개, 14일 연속", icon: "🥇", category: "streak", scope: "streak", tier: "gold", goal: 14, metric: "focus_streak" },
+  { id: "focus-streak-platinum", title: "집중 연속일 플래티넘", description: "하루 25분 또는 집중 15분+완료 1개, 30일 연속", icon: "🔷", category: "streak", scope: "streak", tier: "platinum", goal: 30, metric: "focus_streak" },
+  { id: "focus-streak-ruby", title: "집중 연속일 루비", description: "하루 25분 또는 집중 15분+완료 1개, 60일 연속", icon: "♦️", category: "streak", scope: "streak", tier: "ruby", goal: 60, metric: "focus_streak" },
+  { id: "focus-streak-diamond", title: "집중 연속일 다이아몬드", description: "하루 25분 또는 집중 15분+완료 1개, 100일 연속", icon: "💎", category: "streak", scope: "streak", tier: "diamond", goal: 100, metric: "focus_streak" },
 
-  { id: "done-streak-bronze", title: "완료 연속일 브론즈", description: "완료 연속일 3일", icon: "🥉", category: "streak", scope: "streak", tier: "bronze", goal: 3, metric: "done_streak" },
-  { id: "done-streak-silver", title: "완료 연속일 실버", description: "완료 연속일 7일", icon: "🥈", category: "streak", scope: "streak", tier: "silver", goal: 7, metric: "done_streak" },
-  { id: "done-streak-gold", title: "완료 연속일 골드", description: "완료 연속일 14일", icon: "🥇", category: "streak", scope: "streak", tier: "gold", goal: 14, metric: "done_streak" },
-  { id: "done-streak-platinum", title: "완료 연속일 플래티넘", description: "완료 연속일 30일", icon: "🔷", category: "streak", scope: "streak", tier: "platinum", goal: 30, metric: "done_streak" },
-  { id: "done-streak-ruby", title: "완료 연속일 루비", description: "완료 연속일 60일", icon: "♦️", category: "streak", scope: "streak", tier: "ruby", goal: 60, metric: "done_streak" },
-  { id: "done-streak-diamond", title: "완료 연속일 다이아몬드", description: "완료 연속일 100일", icon: "💎", category: "streak", scope: "streak", tier: "diamond", goal: 100, metric: "done_streak" },
+  { id: "done-streak-bronze", title: "완료 연속일 브론즈", description: "하루 할 일 1개 이상 완료, 3일 연속", icon: "🥉", category: "streak", scope: "streak", tier: "bronze", goal: 3, metric: "done_streak" },
+  { id: "done-streak-silver", title: "완료 연속일 실버", description: "하루 할 일 1개 이상 완료, 7일 연속", icon: "🥈", category: "streak", scope: "streak", tier: "silver", goal: 7, metric: "done_streak" },
+  { id: "done-streak-gold", title: "완료 연속일 골드", description: "하루 할 일 1개 이상 완료, 14일 연속", icon: "🥇", category: "streak", scope: "streak", tier: "gold", goal: 14, metric: "done_streak" },
+  { id: "done-streak-platinum", title: "완료 연속일 플래티넘", description: "하루 할 일 1개 이상 완료, 30일 연속", icon: "🔷", category: "streak", scope: "streak", tier: "platinum", goal: 30, metric: "done_streak" },
+  { id: "done-streak-ruby", title: "완료 연속일 루비", description: "하루 할 일 1개 이상 완료, 60일 연속", icon: "♦️", category: "streak", scope: "streak", tier: "ruby", goal: 60, metric: "done_streak" },
+  { id: "done-streak-diamond", title: "완료 연속일 다이아몬드", description: "하루 할 일 1개 이상 완료, 100일 연속", icon: "💎", category: "streak", scope: "streak", tier: "diamond", goal: 100, metric: "done_streak" },
 
-  { id: "weekly-done-bronze", title: "주간 완료 브론즈", description: "최근 7일 중 완료일 3일", icon: "🥉", category: "weekly", scope: "weekly", tier: "bronze", goal: 3, metric: "weekly_done_days" },
-  { id: "weekly-done-silver", title: "주간 완료 실버", description: "최근 7일 중 완료일 5일", icon: "🥈", category: "weekly", scope: "weekly", tier: "silver", goal: 5, metric: "weekly_done_days" },
-  { id: "weekly-done-gold", title: "주간 완료 골드", description: "최근 7일 중 완료일 7일", icon: "🥇", category: "weekly", scope: "weekly", tier: "gold", goal: 7, metric: "weekly_done_days" },
-  { id: "weekly-focus-bronze", title: "주간 집중 브론즈", description: "최근 7일 집중 150분", icon: "🥉", category: "weekly", scope: "weekly", tier: "bronze", goal: 150, metric: "weekly_focus_minutes" },
-  { id: "weekly-focus-silver", title: "주간 집중 실버", description: "최근 7일 집중 300분", icon: "🥈", category: "weekly", scope: "weekly", tier: "silver", goal: 300, metric: "weekly_focus_minutes" },
-  { id: "weekly-focus-gold", title: "주간 집중 골드", description: "최근 7일 집중 600분", icon: "🥇", category: "weekly", scope: "weekly", tier: "gold", goal: 600, metric: "weekly_focus_minutes" },
+  { id: "weekly-done-bronze", title: "주간 완료 브론즈", description: "이번 주(월~일) 완료일 3일", icon: "🥉", category: "weekly", scope: "weekly", tier: "bronze", goal: 3, metric: "weekly_done_days" },
+  { id: "weekly-done-silver", title: "주간 완료 실버", description: "이번 주(월~일) 완료일 5일", icon: "🥈", category: "weekly", scope: "weekly", tier: "silver", goal: 5, metric: "weekly_done_days" },
+  { id: "weekly-done-gold", title: "주간 완료 골드", description: "이번 주(월~일) 완료일 7일", icon: "🥇", category: "weekly", scope: "weekly", tier: "gold", goal: 7, metric: "weekly_done_days" },
+  { id: "weekly-focus-bronze", title: "주간 집중 브론즈", description: "이번 주(월~일) 집중 150분", icon: "🥉", category: "weekly", scope: "weekly", tier: "bronze", goal: 150, metric: "weekly_focus_minutes" },
+  { id: "weekly-focus-silver", title: "주간 집중 실버", description: "이번 주(월~일) 집중 300분", icon: "🥈", category: "weekly", scope: "weekly", tier: "silver", goal: 300, metric: "weekly_focus_minutes" },
+  { id: "weekly-focus-gold", title: "주간 집중 골드", description: "이번 주(월~일) 집중 600분", icon: "🥇", category: "weekly", scope: "weekly", tier: "gold", goal: 600, metric: "weekly_focus_minutes" },
 ];
 
 export const achievementTypeDefs = gql`
@@ -131,115 +127,16 @@ function getUserId(context: GraphQLContext) {
   return requireUserId(context);
 }
 
-function parseDateKeyToUtc(dateKey: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
-  if (!match) {
-    return null;
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return null;
-  }
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function formatUtcDateKey(date: Date) {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
-}
-
-function addUtcDays(date: Date, days: number) {
-  const next = new Date(date.getTime());
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
-
-function getIsoWeekKey(date: Date) {
-  const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayNr = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - dayNr + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const firstDayNr = (firstThursday.getUTCDay() + 6) % 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNr + 3);
-  const weekNumber = 1 + Math.round((target.getTime() - firstThursday.getTime()) / 604800000);
-  return `${target.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
-}
-
 function toIsoStringOrNull(value: Date | null | undefined) {
   return value ? value.toISOString() : null;
-}
-
-function buildMetrics(dayMap: Map<string, DayStat>) {
-  const today = new Date();
-  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-
-  const dateKeys = [...dayMap.keys()].sort();
-  const firstDate = dateKeys.length > 0 ? parseDateKeyToUtc(dateKeys[0] as string) : null;
-
-  let focusStreakCurrent = 0;
-  let focusStreakBest = 0;
-  let doneStreakCurrent = 0;
-  let doneStreakBest = 0;
-
-  let focusRun = 0;
-  let doneRun = 0;
-
-  if (firstDate) {
-    for (
-      let cursor = new Date(firstDate.getTime());
-      cursor.getTime() <= todayUtc.getTime();
-      cursor = addUtcDays(cursor, 1)
-    ) {
-      const key = formatUtcDateKey(cursor);
-      const day = dayMap.get(key) ?? { doneCount: 0, focusMinutes: 0 };
-
-      const doneSuccess = day.doneCount >= 1;
-      const focusSuccess = day.focusMinutes >= 25 || (day.focusMinutes >= 15 && day.doneCount >= 1);
-
-      doneRun = doneSuccess ? doneRun + 1 : 0;
-      focusRun = focusSuccess ? focusRun + 1 : 0;
-
-      doneStreakBest = Math.max(doneStreakBest, doneRun);
-      focusStreakBest = Math.max(focusStreakBest, focusRun);
-    }
-  }
-
-  doneStreakCurrent = doneRun;
-  focusStreakCurrent = focusRun;
-
-  let weeklyDoneDays = 0;
-  let weeklyFocusMinutes = 0;
-  for (let i = 6; i >= 0; i -= 1) {
-    const key = formatUtcDateKey(addUtcDays(todayUtc, -i));
-    const day = dayMap.get(key);
-    if (!day) {
-      continue;
-    }
-    if (day.doneCount >= 1) {
-      weeklyDoneDays += 1;
-    }
-    weeklyFocusMinutes += Math.max(day.focusMinutes, 0);
-  }
-
-  const totalDoneTodos = [...dayMap.values()].reduce((acc, day) => acc + day.doneCount, 0);
-  const totalFocusMinutes = [...dayMap.values()].reduce((acc, day) => acc + day.focusMinutes, 0);
-
-  return {
-    totalDoneTodos,
-    totalFocusMinutes,
-    doneStreakCurrent,
-    doneStreakBest,
-    focusStreakCurrent,
-    focusStreakBest,
-    weeklyDoneDays,
-    weeklyFocusMinutes,
-  } as AchievementMetrics;
 }
 
 function getBadgeCurrentValue(definition: BadgeDefinition, metrics: AchievementMetrics) {
   if (definition.metric === "focus_total") {
     return metrics.totalFocusMinutes;
+  }
+  if (definition.metric === "focus_day_best") {
+    return metrics.bestDailyFocusMinutes;
   }
   if (definition.metric === "done_total") {
     return metrics.totalDoneTodos;
@@ -265,7 +162,7 @@ async function syncAchievementsForUser(context: GraphQLContext, userId: string) 
     },
   });
 
-  const dayMap = new Map<string, DayStat>();
+  const dayMap = new Map<string, AchievementDayStat>();
   for (const log of dailyLogs) {
     const doneCount = log.todos.filter((todo) => todo.done).length;
     const focusMinutes = Math.floor(
@@ -274,7 +171,9 @@ async function syncAchievementsForUser(context: GraphQLContext, userId: string) 
     dayMap.set(log.dateKey, { doneCount, focusMinutes });
   }
 
-  const metrics = buildMetrics(dayMap);
+  const now = new Date();
+  const todayKey = getDateKeyInTimeZone(now, env.NOTIFICATION_BATCH_TIMEZONE);
+  const metrics = buildAchievementMetrics(dayMap, todayKey);
 
   const existingProgressRows = await context.prisma.achievementProgress.findMany({
     where: { userId },
@@ -297,9 +196,14 @@ async function syncAchievementsForUser(context: GraphQLContext, userId: string) 
     }
   }
 
-  const now = new Date();
-  const currentWeekKey = getIsoWeekKey(now);
-  const previousWeekKey = getIsoWeekKey(addUtcDays(now, -7));
+  const previousWeekDateKey = shiftDateKey(todayKey, -7);
+  const currentWeekKey = getIsoWeekKeyFromDateKey(todayKey);
+  const previousWeekKey = previousWeekDateKey
+    ? getIsoWeekKeyFromDateKey(previousWeekDateKey)
+    : null;
+  if (!currentWeekKey || !previousWeekKey) {
+    throw new Error(`Failed to resolve achievement week key for ${todayKey}`);
+  }
 
   let newEventCount = 0;
 
