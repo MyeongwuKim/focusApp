@@ -214,8 +214,10 @@ Web UI 원격 번들은 GitHub Actions로 Cloudflare R2에 배포합니다.
 
 | 워크플로 | 실행 조건 | 대상 |
 | --- | --- | --- |
-| `deploy-webui-dev-r2.yml` | `develop` 브랜치에서 Web UI, lockfile, Native 최소 버전 설정이 변경될 때 | 개발용 R2 버킷 |
+| `deploy-webui-dev-r2.yml` | `develop` 브랜치에서 Web UI 또는 lockfile이 변경될 때 | 개발용 R2 버킷 |
 | `deploy-webui-prod-r2.yml` | `master` 브랜치에서 같은 범위의 파일이 변경될 때 | 운영용 R2 버킷 |
+| `deploy-native-version-dev-r2.yml` | `develop` 브랜치에서 Native 최소 버전 정책이 변경될 때 | 개발용 R2 버킷의 `native/` 경로 |
+| `deploy-native-version-prod-r2.yml` | `master` 브랜치에서 Native 최소 버전 정책이 변경될 때 | 운영용 R2 버킷의 `native/` 경로 |
 
 두 워크플로는 필요할 때 `workflow_dispatch`로도 직접 실행할 수 있습니다. 같은 채널의 새 배포가 시작되면 진행 중인 이전 작업은 취소합니다.
 
@@ -224,9 +226,11 @@ Web UI 원격 번들은 GitHub Actions로 Cloudflare R2에 배포합니다.
 1. pnpm 의존성을 설치하고 Web UI를 빌드합니다.
 2. R2의 `latest/manifest.json`을 읽어 patch 버전을 하나 올립니다.
 3. 빌드 결과를 `web-ui.zip`으로 묶고 SHA-256을 계산합니다.
-4. `native.config.json`의 `minimumNativeVersion`을 포함한 manifest를 생성합니다.
+4. Web UI manifest를 생성합니다.
 5. `releases/<version>/`과 `latest/manifest.json`을 R2에 업로드합니다.
 6. 이전 릴리즈를 정리하고 최근 5개만 남깁니다.
+
+단일 Native 최소 버전 정책 파일에서 현재 브랜치의 환경 항목만 추출해 각 환경 R2의 `native/minimum-app-version.json`에 업로드합니다.
 
 R2 접근 정보와 dev/prod 버킷 주소는 GitHub Actions secrets로 관리합니다.
 

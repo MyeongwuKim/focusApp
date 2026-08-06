@@ -21,6 +21,7 @@ type TodoItemCardProps = {
   onEditActualFocus?: (taskId: string) => void;
   onOpenMenu: (taskId: string) => void;
   disableActions?: boolean;
+  canRunFocus?: boolean;
   isDragging?: boolean;
   isLongPressActive?: boolean;
 };
@@ -89,7 +90,8 @@ function renderTaskActions(
   item: TaskItem,
   onTaskAction: TodoItemCardProps["onTaskAction"],
   onEditActualFocus?: TodoItemCardProps["onEditActualFocus"],
-  disableActions = false
+  disableActions = false,
+  canRunFocus = true
 ) {
   if (item.status === "overdue") {
     return (
@@ -103,6 +105,15 @@ function renderTaskActions(
   }
 
   if (item.status === "todo") {
+    if (!canRunFocus) {
+      return (
+        <div className="inline-flex items-center gap-1 rounded-full border border-base-300/80 bg-base-200/65 px-2.5 py-1 text-xs font-semibold text-base-content/65">
+          <FiClock size={12} />
+          예정
+        </div>
+      );
+    }
+
     return (
       <Button
         size="sm"
@@ -147,7 +158,7 @@ function renderTaskActions(
         <Button
           size="sm"
           className="h-8 min-h-8 rounded-full border-info/35 bg-info/15 px-3 text-info"
-          disabled={disableActions}
+          disabled={disableActions || !canRunFocus}
           onClick={() => onTaskAction(item.id, "resume")}
         >
           <FiPlay size={13} />
@@ -192,6 +203,7 @@ export function TodoItemCard({
   onEditActualFocus,
   onOpenMenu,
   disableActions = false,
+  canRunFocus = true,
   isDragging = false,
   isLongPressActive = false,
 }: TodoItemCardProps) {
@@ -259,7 +271,9 @@ export function TodoItemCard({
           <FiMoreVertical size={13} />
         </Button>
       </div>
-      <div className="mt-2">{renderTaskActions(item, onTaskAction, onEditActualFocus, disableActions)}</div>
+      <div className="mt-2">
+        {renderTaskActions(item, onTaskAction, onEditActualFocus, disableActions, canRunFocus)}
+      </div>
     </div>
   );
 }

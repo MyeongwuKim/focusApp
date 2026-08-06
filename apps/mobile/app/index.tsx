@@ -34,6 +34,10 @@ import {
   NativeUpdateRequiredModal,
 } from "../src/features/version/components/NativeUpdateRequiredModal";
 import {
+  checkNativeAppVersionPolicy,
+  resolveNativeAppVersionPolicyUrl,
+} from "../src/features/version/nativeAppVersionPolicy";
+import {
   applyNativeWeatherSettings,
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
@@ -136,9 +140,13 @@ type FocusLiveActivityNativeModule = {
 const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
 const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
 const NAVER_NATIVE_URL_SCHEME = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim() ?? "";
+const NATIVE_DISPLAY_NAME =
+  typeof Constants.expoConfig?.extra?.nativeDisplayName === "string"
+    ? Constants.expoConfig.extra.nativeDisplayName.trim()
+    : "";
 const NAVER_NATIVE_APP_NAME =
   process.env.EXPO_PUBLIC_NAVER_APP_NAME?.trim() ??
-  (Constants.expoConfig?.name?.trim() || "focus-hybrid");
+  (NATIVE_DISPLAY_NAME || Constants.expoConfig?.name?.trim() || "focus-hybrid");
 const NAVER_DISABLE_APP_AUTH_IOS = process.env.EXPO_PUBLIC_NAVER_DISABLE_APP_AUTH_IOS === "true";
 const IOS_APP_STORE_URL = process.env.EXPO_PUBLIC_IOS_APP_STORE_URL?.trim() ?? "";
 const ANDROID_PLAY_STORE_URL = process.env.EXPO_PUBLIC_ANDROID_PLAY_STORE_URL?.trim() ?? "";
@@ -317,15 +325,7 @@ function resolveWebUiStartupErrorMessage(error: unknown) {
     return "웹 번들 다운로드에 실패했습니다. 다시 실행해주세요.";
   }
 
-  if (code.startsWith("WEB_UI_NATIVE_VERSION_UNSUPPORTED")) {
-    return "앱 업데이트가 필요합니다. 최신 버전으로 업데이트한 뒤 다시 실행해주세요.";
-  }
-
   return "앱 시작에 실패했습니다. 다시 실행해주세요.";
-}
-
-function isNativeVersionUnsupportedStartupError(error: unknown) {
-  return resolveWebUiStartupErrorCode(error).startsWith("WEB_UI_NATIVE_VERSION_UNSUPPORTED");
 }
 
 function resolveAndroidPackageName() {
@@ -504,10 +504,13 @@ async function openUrlOutsideWebView(rawUrl: string) {
   }
 }
 
-async function openNativeAppMarket() {
+async function openNativeAppMarket(remoteStoreUrl?: string | null) {
+  const configuredStoreUrl = remoteStoreUrl?.trim();
+
   if (Platform.OS === "android") {
     const packageName = resolveAndroidPackageName();
-    const primaryUrl = ANDROID_PLAY_STORE_URL || `market://details?id=${packageName}`;
+    const primaryUrl =
+      configuredStoreUrl || ANDROID_PLAY_STORE_URL || `market://details?id=${packageName}`;
     const fallbackUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
 
     try {
@@ -520,7 +523,7 @@ async function openNativeAppMarket() {
   }
 
   if (Platform.OS === "ios") {
-    const storeUrl = IOS_APP_STORE_URL || "itms-apps://itunes.apple.com";
+    const storeUrl = configuredStoreUrl || IOS_APP_STORE_URL || "itms-apps://itunes.apple.com";
     await Linking.openURL(storeUrl);
   }
 }
@@ -1327,9 +1330,11 @@ async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot | nul
 function FocusLaunchOverlay({
   statusMessage,
   progressPercent,
+  showProgress = true,
 }: {
   statusMessage: string;
   progressPercent: number;
+  showProgress?: boolean;
 }) {
   const progressWidth =
     (LAUNCH_PROGRESS_BAR_WIDTH * Math.max(0, Math.min(progressPercent, 100))) / 100;
@@ -1344,17 +1349,19 @@ function FocusLaunchOverlay({
           accessibilityIgnoresInvertColors
         />
       </View>
-      <View
-        style={styles.launchProgressGroup}
-        accessible
-        accessibilityRole="progressbar"
-        accessibilityLabel={statusMessage}
-        accessibilityValue={{ min: 0, max: 100, now: progressPercent }}>
-        <View style={styles.launchProgressTrack}>
-          <View style={[styles.launchProgressFill, { width: progressWidth }]} />
+      {showProgress ? (
+        <View
+          style={styles.launchProgressGroup}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel={statusMessage}
+          accessibilityValue={{ min: 0, max: 100, now: progressPercent }}>
+          <View style={styles.launchProgressTrack}>
+            <View style={[styles.launchProgressFill, { width: progressWidth }]} />
+          </View>
+          <Text style={styles.launchStatusText}>{statusMessage}</Text>
         </View>
-        <Text style={styles.launchStatusText}>{statusMessage}</Text>
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -1370,6 +1377,7 @@ export default function WebViewScreen() {
   const [isPermissionIntroVisible, setIsPermissionIntroVisible] = useState(false);
   const [isRequestingNotificationPermission, setIsRequestingNotificationPermission] = useState(false);
   const [isNativeUpdateRequired, setIsNativeUpdateRequired] = useState(false);
+  const [nativeUpdateStoreUrl, setNativeUpdateStoreUrl] = useState<string | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const nativeTodoViewRef = useRef<NativeTodoViewSnapshot>({
     isViewingTodayTodoSurface: false,
@@ -1645,7 +1653,8 @@ export default function WebViewScreen() {
     onNavigate: navigateWebViewByTargetPath,
     shouldInlineTodoPromptInForeground,
   });
-  const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(true);
+  const [isCheckingNativeVersion, setIsCheckingNativeVersion] = useState(true);
+  const [isPreparingLocalFile, setIsPreparingLocalFile] = useState(false);
   const [launchStatusMessage, setLaunchStatusMessage] = useState<WebUiVersionProgress>(
     "초기 번들 준비중..."
   );
@@ -1669,6 +1678,14 @@ export default function WebViewScreen() {
         manifestUrl: process.env.EXPO_PUBLIC_WEBUI_MANIFEST_URL,
       }),
     [webUiReleaseChannel]
+  );
+  const nativeAppVersionPolicyUrl = useMemo(
+    () =>
+      resolveNativeAppVersionPolicyUrl({
+        explicitUrl: process.env.EXPO_PUBLIC_MINIMUM_APP_VERSION_URL,
+        webUiManifestUrl,
+      }),
+    [webUiManifestUrl]
   );
 
   const uiScale = useMemo(() => {
@@ -1911,20 +1928,57 @@ export default function WebViewScreen() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const prepareLocalHtmlFile = async () => {
+      const nativeAppVersion = resolveNativeAppVersion() ?? "1.0.0";
+
+      setIsCheckingNativeVersion(true);
+      setIsPreparingLocalFile(false);
+      setIsNativeUpdateRequired(false);
+      setNativeUpdateStoreUrl(null);
+
+      try {
+        const updateRequirement = await checkNativeAppVersionPolicy({
+          policyUrl: nativeAppVersionPolicyUrl,
+          channel: webUiReleaseChannel,
+          platform: nativePlatform,
+          currentVersion: nativeAppVersion,
+        });
+        if (cancelled) {
+          return;
+        }
+        if (updateRequirement) {
+          setNativeUpdateStoreUrl(updateRequirement.storeUrl);
+          setIsNativeUpdateRequired(true);
+          setIsCheckingNativeVersion(false);
+          return;
+        }
+      } catch (error) {
+        console.log("Failed to check native app version policy:", error);
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      setIsCheckingNativeVersion(false);
+      setIsPreparingLocalFile(true);
+
       try {
         setLaunchStatusMessage("초기 번들 준비중...");
-        const nativeAppVersion = resolveNativeAppVersion() ?? "1.0.0";
         const prepared = await prepareWebUiBundleVersion({
           embeddedFiles: embeddedWebUiFiles,
           releaseChannel: webUiReleaseChannel,
           manifestUrl: webUiManifestUrl,
           fallbackCurrentVersion: nativeAppVersion,
-          nativeAppVersion,
-          nativePlatform,
           forceEmbeddedRefresh: __DEV__,
           onProgress: setLaunchStatusMessage,
         });
+
+        if (cancelled) {
+          return;
+        }
 
         console.log("Prepared local web-ui file:", prepared.localIndexUri);
         const shouldReloadWebView = hasPreparedEmbeddedWebUiRef.current;
@@ -1937,21 +1991,28 @@ export default function WebViewScreen() {
         }
       } catch (error) {
         console.log("Failed to prepare local web-ui file:", error);
-        if (!hasShownFatalStartupAlertRef.current) {
+        if (!cancelled && !hasShownFatalStartupAlertRef.current) {
           hasShownFatalStartupAlertRef.current = true;
-          if (isNativeVersionUnsupportedStartupError(error)) {
-            setIsNativeUpdateRequired(true);
-          } else {
-            showWebUiStartupErrorAlert(error);
-          }
+          showWebUiStartupErrorAlert(error);
         }
       } finally {
-        setIsPreparingLocalFile(false);
+        if (!cancelled) {
+          setIsPreparingLocalFile(false);
+        }
       }
     };
 
-    prepareLocalHtmlFile();
-  }, [embeddedWebUiBundleHash, nativePlatform, webUiManifestUrl, webUiReleaseChannel]);
+    void prepareLocalHtmlFile();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    embeddedWebUiBundleHash,
+    nativeAppVersionPolicyUrl,
+    nativePlatform,
+    webUiManifestUrl,
+    webUiReleaseChannel,
+  ]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -2176,7 +2237,11 @@ export default function WebViewScreen() {
     }
   };
 
-  const showPermissionIntro = !isNativeUpdateRequired && isPermissionIntroReady && isPermissionIntroVisible;
+  const showPermissionIntro =
+    !isCheckingNativeVersion &&
+    !isNativeUpdateRequired &&
+    isPermissionIntroReady &&
+    isPermissionIntroVisible;
   const isLaunchDestinationReady = isNativeUpdateRequired || showPermissionIntro || hasInitialWebViewLoaded;
 
   useEffect(() => {
@@ -2194,6 +2259,7 @@ export default function WebViewScreen() {
     [launchStatusMessage]
   );
   const shouldShowLaunchOverlay =
+    isCheckingNativeVersion ||
     FORCE_LAUNCH_OVERLAY_FOR_TEST ||
     isPreparingLocalFile ||
     !hasLaunchOverlayMinElapsed ||
@@ -2205,9 +2271,10 @@ export default function WebViewScreen() {
         <FocusLaunchOverlay
           statusMessage={launchStatusMessage}
           progressPercent={launchProgressPercent}
+          showProgress={!isCheckingNativeVersion}
         />
       ) : null}
-      {source && !showPermissionIntro && !isNativeUpdateRequired ? (
+      {source && !isCheckingNativeVersion && !showPermissionIntro && !isNativeUpdateRequired ? (
         <View style={styles.webViewContainer}>
           <View
             pointerEvents="none"
@@ -2333,7 +2400,7 @@ export default function WebViewScreen() {
       {isNativeUpdateRequired ? (
         <NativeUpdateRequiredModal
           onUpdatePress={() => {
-            void openNativeAppMarket().catch((openError) => {
+            void openNativeAppMarket(nativeUpdateStoreUrl).catch((openError) => {
               console.log("Failed to open app market:", openError);
             });
           }}

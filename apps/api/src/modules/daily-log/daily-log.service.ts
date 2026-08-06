@@ -48,7 +48,10 @@ interface UpdateTodoTargetFocusInput extends BaseInput {
 }
 
 export class DailyLogService {
-  constructor(private readonly repository: DailyLogRepository) {}
+  constructor(
+    private readonly repository: DailyLogRepository,
+    private readonly timezone = "Asia/Seoul"
+  ) {}
 
   getDailyLog(userId: string, dateKey: string) {
     return this.repository.findByDate(userId, dateKey);
@@ -239,6 +242,10 @@ export class DailyLogService {
   }
 
   async startTodo(input: CompleteTodoInput) {
+    if (isFutureDateKey(input.dateKey, new Date(), this.timezone)) {
+      throw new Error("FUTURE_TODO_CANNOT_START");
+    }
+
     const log = await this.repository.findByDate(input.userId, input.dateKey);
     if (!log) {
       throw new Error("DAILY_LOG_NOT_FOUND");
@@ -299,6 +306,10 @@ export class DailyLogService {
   }
 
   async resumeTodo(input: CompleteTodoInput) {
+    if (isFutureDateKey(input.dateKey, new Date(), this.timezone)) {
+      throw new Error("FUTURE_TODO_CANNOT_START");
+    }
+
     const log = await this.repository.findByDate(input.userId, input.dateKey);
     if (!log) {
       throw new Error("DAILY_LOG_NOT_FOUND");
@@ -670,6 +681,20 @@ function hasAnotherInProgressTodo(todos: TodoItemRecord[], excludeTodoId: string
 
 function getMonthKey(dateKey: string) {
   return dateKey.slice(0, 7);
+}
+
+function isFutureDateKey(dateKey: string, now: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(now);
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const todayKey = `${partValue("year")}-${partValue("month")}-${partValue("day")}`;
+  return dateKey > todayKey;
 }
 
 function getTodayDateKey() {

@@ -168,7 +168,7 @@ pnpm native:ios:prod
 3. `APP_VARIANT`에 맞는 variant env
 4. variant env의 `.local` 파일
 
-`APP_VARIANT` 기본값은 `test`입니다. `prod` 또는 `production`에서는 `.env.production`, `.env.prod`를 읽고, `test`에서는 `.env.test`를 읽습니다. variant env와 variant local env는 기존 값보다 우선합니다.
+`APP_VARIANT` 기본값은 `test`입니다. `prod` 또는 `production`에서는 `.env.production`, `.env.prod`를 읽고, `dev` 또는 `test`에서는 `.env.test`를 읽습니다. `dev`에서는 `.env.dev`가 있으면 추가로 읽습니다. variant env와 variant local env는 기존 값보다 우선합니다.
 
 ## 환경변수
 
@@ -193,8 +193,9 @@ pnpm native:ios:prod
 | `EXPO_PUBLIC_NAVER_DISABLE_APP_AUTH_IOS` | iOS에서 네이버 앱 인증을 비활성화할지 결정합니다. |
 | `EXPO_PUBLIC_WEBUI_CHANNEL` | WebUI 업데이트 채널입니다. `dev`, `prod`, `none`을 사용할 수 있습니다. |
 | `EXPO_PUBLIC_WEBUI_MANIFEST_URL` | 원격 WebUI `latest/manifest.json` URL입니다. |
-| `EXPO_PUBLIC_IOS_APP_STORE_URL` | 강제 업데이트 안내에서 이동할 iOS App Store URL입니다. |
-| `EXPO_PUBLIC_ANDROID_PLAY_STORE_URL` | 강제 업데이트 안내에서 이동할 Android Play Store URL입니다. |
+| `EXPO_PUBLIC_MINIMUM_APP_VERSION_URL` | R2의 `native/minimum-app-version.json` URL입니다. 없으면 WebUI manifest URL에서 자동으로 계산합니다. |
+| `EXPO_PUBLIC_IOS_APP_STORE_URL` | 버전 정책에 `storeUrl`이 없을 때 사용할 iOS App Store URL입니다. |
+| `EXPO_PUBLIC_ANDROID_PLAY_STORE_URL` | 버전 정책에 `storeUrl`이 없을 때 사용할 Android Play Store URL입니다. |
 | `EXPO_PUBLIC_WEATHER_RENDERER` | 날씨 레이어 renderer를 `legacy` 또는 `skia`로 override합니다. |
 
 `EXPO_PUBLIC_` 값은 앱 JS 번들에 빌드 시점에 포함됩니다. EAS 환경변수를 바꿔도 기존 설치 앱에 바로 반영되지 않으므로 새 빌드가 필요합니다.
@@ -212,31 +213,53 @@ pnpm native:ios:prod
 
 ## 네이티브 설정
 
-`native.config.json`은 test/prod 네이티브 설정과 WebUI 최소 네이티브 버전을 관리합니다.
+`app-version.json`은 dev/prod 앱 버전의 단일 기준입니다. `dev` 버전은 test 네이티브 variant에, `prod` 버전은 prod 네이티브 variant에 적용합니다. iOS와 Android 버전을 따로 지정할 수 있으며, 빌드 명령이 선택한 플랫폼 버전을 Expo 설정과 네이티브 프로젝트에 반영합니다.
+
+`minimum-app-version.json`은 dev/prod 환경별 iOS·Android 최소 앱 버전 정책을 한곳에서 관리합니다. 각 플랫폼은 `enabled`, `minimumVersion`, `storeUrl`을 가지며, `enabled`가 `true`일 때만 강제 업데이트를 적용합니다. `develop`에서는 `dev` 항목만 개발용 R2로, `master`에서는 `prod` 항목만 운영용 R2의 `native/minimum-app-version.json`으로 업로드됩니다. develop에서 prod 항목을 수정해도 운영용 R2에는 반영되지 않으며 해당 변경이 master에 병합된 뒤 배포됩니다.
+
+`native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 빌드 번호 설정을 관리합니다. dev iOS 프로젝트는 Xcode에서 `timestackT`로 표시되지만 기기 홈 화면에서는 기존대로 `타임스택 (T)`를 사용합니다.
+
+네이티브 빌드 명령을 실행하면 Web UI 빌드나 네이티브 설정 변경 전에 환경, 플랫폼, 앱 버전을 확인합니다. `y` 또는 `yes`를 입력해야 계속 진행하며, 그 외 입력은 전체 명령을 중단합니다.
+
+```text
+[native-sync] dev iOS 1.0.0 패키지를 생성할까요? (y/N)
+```
+
+CI처럼 대화형 입력을 사용할 수 없는 환경에서는 동기화 명령에 `--yes`를 전달합니다.
+
+```bash
+pnpm -C apps/mobile native:sync:prod -- --yes
+```
 
 | 항목 | 기준 |
 | --- | --- |
+| dev/test 내부 프로젝트명 | `native.config.json`의 `test.projectName`을 사용합니다. |
+| prod 내부 프로젝트명 | `native.config.json`의 `prod.projectName`을 사용합니다. |
 | prod 앱 이름, scheme, bundle id, package | `native.config.json`의 `prod` 값입니다. |
 | test 앱 이름, scheme, bundle id, package | `native.config.json`의 `test` 값입니다. |
-| prod 사용자 표시 버전 | `app.json`의 `expo.version`을 사용합니다. |
+| dev/test 사용자 표시 버전 | `app-version.json`의 `dev.ios`, `dev.android`를 사용합니다. |
+| prod 사용자 표시 버전 | `app-version.json`의 `prod.ios`, `prod.android`를 사용합니다. |
 | prod iOS buildNumber, Android versionCode | EAS remote와 `production.autoIncrement`를 사용합니다. |
-| test 버전과 build number | `native.config.json`의 `test.ios`, `test.android` 값을 사용합니다. |
-| WebUI 최소 네이티브 버전 | `native.config.json`의 `webUi.minimumNativeVersion`을 사용합니다. |
+| test buildNumber, versionCode | `native.config.json`의 `test.ios`, `test.android` 값을 사용합니다. |
+| dev 최소 앱 버전 정책 | `minimum-app-version.json`의 `dev` 설정을 사용합니다. |
+| prod 최소 앱 버전 정책 | `minimum-app-version.json`의 `prod` 설정을 사용합니다. |
 
 로컬 Xcode 또는 Android Studio 프로젝트를 열기 전에 variant 기준으로 설정을 동기화합니다.
 
 ```bash
-pnpm -C apps/mobile native:sync:test
+pnpm -C apps/mobile native:sync:dev
 pnpm -C apps/mobile native:sync:prod
 ```
 
 ## WebUI 번들 업데이트
 
-앱은 시작 시 내장 WebUI 번들을 active 디렉터리에 준비합니다. `EXPO_PUBLIC_WEBUI_CHANNEL`이 `none`이 아니고 `EXPO_PUBLIC_WEBUI_MANIFEST_URL`이 있으면 원격 manifest를 조회합니다.
+앱은 진행 표시를 띄우기 전에 연결된 R2의 `native/minimum-app-version.json`을 조회합니다. 현재 플랫폼의 `enabled`가 `true`이고 설치된 앱 버전이 `minimumVersion`보다 낮으면 업데이트 안내를 표시하며, 버튼은 해당 정책의 `storeUrl`로 이동합니다. 정책 조회에 실패하거나 `enabled`가 `false`이면 WebUI 준비를 계속합니다.
+
+버전 확인을 통과하면 내장 WebUI 번들을 active 디렉터리에 준비합니다. `EXPO_PUBLIC_WEBUI_CHANNEL`이 `none`이 아니고 `EXPO_PUBLIC_WEBUI_MANIFEST_URL`이 있으면 원격 manifest를 조회합니다.
 
 원격 manifest 버전이 현재 저장된 버전보다 높으면 `web-ui.zip`을 staging 경로에 내려받아 압축 해제합니다. 압축 안에 `index.html`이 있는지 확인한 뒤 active 번들로 교체하고, `crossorigin` 속성은 로컬 파일 실행에 맞게 제거합니다.
 
-manifest의 `minimumNativeVersion`이 현재 앱 버전보다 높으면 번들을 적용하지 않고 업데이트 안내를 표시합니다. 원격 manifest 조회나 bundle 설치에 실패하면 시작 오류 alert를 띄웁니다. 채널이 `none`이거나 manifest URL이 없으면 내장 번들을 기준으로 실행합니다.
+원격 manifest 조회나 bundle 설치에 실패하면 시작 오류 alert를 띄웁니다. 채널이 `none`이거나 manifest URL이 없으면 내장 번들을 기준으로 실행합니다.
 
 실행 중인 Metro 앱에 Web UI 변경사항을 반영할 때는 저장소 루트에서 `pnpm native:sync:web`을 실행합니다. 웹 빌드와 임베드 번들 생성이 끝나면 연결된 iOS·Android 앱 프로세스를 재시작해 최신 Metro 번들과 WebView 파일을 자동으로 적용합니다.
 
@@ -244,9 +267,9 @@ WebUI 버전과 앱 버전은 서로 다르게 관리합니다.
 
 | 값 | 기준 |
 | --- | --- |
-| 앱 버전 | `app.json`의 `expo.version` 또는 test variant의 `native.config.json` 버전입니다. |
+| 앱 버전 | `app-version.json`의 dev/prod 플랫폼별 버전입니다. |
 | WebUI 버전 | R2 `latest/manifest.json`의 `version`입니다. |
-| 최소 네이티브 버전 | R2 manifest의 `minimumNativeVersion`입니다. |
+| 최소 앱 버전 | 현재 환경 R2 `native/minimum-app-version.json`의 플랫폼별 `minimumVersion`입니다. |
 
 ## 브릿지 메시지
 
@@ -303,6 +326,7 @@ production 빌드가 prod R2 manifest를 읽으려면 EAS production env에 아�
 EXPO_PUBLIC_API_ORIGIN=https://<Cloud-Run-API-도메인>
 EXPO_PUBLIC_WEBUI_CHANNEL=prod
 EXPO_PUBLIC_WEBUI_MANIFEST_URL=https://<prod-r2-public-base-url>/latest/manifest.json
+EXPO_PUBLIC_MINIMUM_APP_VERSION_URL=https://<prod-r2-public-base-url>/native/minimum-app-version.json
 ```
 
 위 값은 Expo EAS의 `production` environment에서 관리합니다. `native:ios:prod` 실행 전 로컬 환경변수 파일을 수정할 필요는 없습니다.
@@ -322,7 +346,8 @@ EXPO_PUBLIC_WEBUI_MANIFEST_URL=https://<prod-r2-public-base-url>/latest/manifest
 | `pnpm native:android:local` | Android 로컬 기기 또는 에뮬레이터에서 test 앱을 실행합니다. |
 | `pnpm -C apps/mobile web` | Expo web 실행을 시작합니다. |
 | `pnpm -C apps/mobile lint` | Expo lint를 실행합니다. |
-| `pnpm -C apps/mobile native:sync:test` | test variant 네이티브 설정을 동기화합니다. |
+| `pnpm -C apps/mobile native:sync:dev` | `app-version.json`의 dev 버전과 test variant 네이티브 설정을 동기화합니다. |
+| `pnpm -C apps/mobile native:sync:test` | 기존 test 명령 호환용이며 dev 버전을 동기화합니다. |
 | `pnpm -C apps/mobile native:sync:prod` | prod variant 네이티브 설정을 동기화합니다. |
 
 ## 검증

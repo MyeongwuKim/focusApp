@@ -155,6 +155,7 @@ function SortableTaskRow({
   onEditActualFocus,
   onTaskMenuAction,
   disableActions,
+  canRunFocus,
   isLongPressActive,
 }: {
   item: TaskItem;
@@ -162,6 +163,7 @@ function SortableTaskRow({
   onEditActualFocus: (taskId: string) => void;
   onTaskMenuAction: (taskId: string) => void;
   disableActions: boolean;
+  canRunFocus: boolean;
   isLongPressActive: boolean;
 }) {
   const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
@@ -176,6 +178,7 @@ function SortableTaskRow({
         onEditActualFocus={onEditActualFocus}
         onOpenMenu={onTaskMenuAction}
         disableActions={disableActions}
+        canRunFocus={canRunFocus}
         isDragging={isDragging}
         isLongPressActive={isLongPressActive}
       />
@@ -218,6 +221,7 @@ function PreviewTaskList({ items, isLoading }: { items: TaskItem[]; isLoading: b
             // preview panel interactions are intentionally disabled
           }}
           disableActions
+          canRunFocus={false}
         />
       ))}
     </div>
@@ -623,6 +627,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
                           onEditActualFocus={handleEditActualFocus}
                           onTaskMenuAction={handleDateTaskMenuAction}
                           disableActions={Boolean(draggingId)}
+                          canRunFocus={!isFutureDate}
                           isLongPressActive={longPressActivatedId === item.id}
                         />
                       ))}

@@ -98,6 +98,19 @@ describe("DailyLogService", () => {
     expect(repository.replaceTodos).not.toHaveBeenCalled();
   });
 
+  it("미래 날짜의 todo는 시작할 수 없다", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-29T10:00:00.000Z"));
+
+    const { service, repository } = createService();
+
+    await expect(
+      service.startTodo({ userId: "user-1", dateKey: "2026-04-30", todoId: "todo-1" })
+    ).rejects.toThrow("FUTURE_TODO_CANNOT_START");
+    expect(repository.findByDate).not.toHaveBeenCalled();
+    expect(repository.replaceTodos).not.toHaveBeenCalled();
+  });
+
   it("이미 일시정지된 todo는 pauseTodo 호출 시 원본 로그를 반환한다", async () => {
     const { service, repository } = createService();
     const log = createLog([
@@ -194,6 +207,19 @@ describe("DailyLogService", () => {
       scheduledStartAt: null,
       deviationSeconds: 90,
     });
+  });
+
+  it("미래 날짜의 todo는 재개할 수 없다", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-29T10:00:00.000Z"));
+
+    const { service, repository } = createService();
+
+    await expect(
+      service.resumeTodo({ userId: "user-1", dateKey: "2026-04-30", todoId: "todo-1" })
+    ).rejects.toThrow("FUTURE_TODO_CANNOT_START");
+    expect(repository.findByDate).not.toHaveBeenCalled();
+    expect(repository.replaceTodos).not.toHaveBeenCalled();
   });
 
   it("reorderTodos 호출 시 유효하지 않은 todoIds를 거부한다", async () => {

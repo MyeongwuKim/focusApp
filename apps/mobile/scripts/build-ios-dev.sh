@@ -12,8 +12,8 @@ EXPORT_OPTIONS_PATH="${MOBILE_ROOT}/scripts/ios-dev-export-options.plist"
 mkdir -p "${OUTPUT_ROOT}"
 
 xcodebuild \
-  -workspace "${MOBILE_ROOT}/ios/T.xcworkspace" \
-  -scheme T \
+  -workspace "${MOBILE_ROOT}/ios/timestackT.xcworkspace" \
+  -scheme timestackT \
   -configuration Release \
   -sdk iphoneos \
   -destination "generic/platform=iOS" \

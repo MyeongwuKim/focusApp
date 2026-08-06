@@ -18,11 +18,11 @@
     "native:prepare:web": "pnpm web:build && pnpm web:sync-mobile",
     "native:sync:web": "pnpm native:prepare:web && node scripts/reload-native-app.mjs",
     "native:start": "pnpm -C apps/mobile start -c --dev-client --host lan --port 8081",
-    "native:ios:device": "pnpm native:prepare:web && pnpm -C apps/mobile native:sync:test && pnpm -C apps/mobile ios:device",
-    "native:ios:local": "pnpm native:prepare:web && pnpm -C apps/mobile native:sync:test && pnpm -C apps/mobile ios:local",
-    "native:ios:dev": "pnpm native:prepare:web && pnpm -C apps/mobile native:sync:test && pnpm -C apps/mobile ios:dev",
-    "native:ios:prod": "pnpm native:prepare:web && pnpm -C apps/mobile native:sync:prod && pnpm -C apps/mobile ios:prod",
-    "native:android:local": "pnpm native:prepare:web && pnpm -C apps/mobile native:sync:test && pnpm -C apps/mobile android"
+    "native:ios:device": "APP_PLATFORM=ios pnpm -C apps/mobile native:sync:dev && pnpm native:prepare:web && APP_VARIANT=dev APP_PLATFORM=ios pnpm -C apps/mobile ios:device",
+    "native:ios:local": "APP_PLATFORM=ios pnpm -C apps/mobile native:sync:dev && pnpm native:prepare:web && APP_VARIANT=dev APP_PLATFORM=ios pnpm -C apps/mobile ios:local",
+    "native:ios:dev": "APP_PLATFORM=ios pnpm -C apps/mobile native:sync:dev && pnpm native:prepare:web && pnpm -C apps/mobile ios:dev",
+    "native:ios:prod": "APP_PLATFORM=ios pnpm -C apps/mobile native:sync:prod && pnpm native:prepare:web && pnpm -C apps/mobile ios:prod",
+    "native:android:local": "APP_PLATFORM=android pnpm -C apps/mobile native:sync:dev && pnpm native:prepare:web && APP_VARIANT=dev APP_PLATFORM=android pnpm -C apps/mobile android"
   },
   "keywords": [],
   "author": "",

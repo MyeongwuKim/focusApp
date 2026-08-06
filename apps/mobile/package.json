@@ -4,13 +4,14 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "native:sync:prod": "node ./scripts/sync-native-config.js prod",
+    "native:sync:dev": "node ./scripts/sync-native-config.js dev",
     "native:sync:test": "node ./scripts/sync-native-config.js test",
+    "native:sync:prod": "node ./scripts/sync-native-config.js prod",
     "android": "expo run:android",
     "ios:device": "expo run:ios --device",
     "ios:local": "expo run:ios",
     "ios:dev": "bash ./scripts/build-ios-dev.sh",
-    "ios:prod": "eas build --platform ios --profile production",
+    "ios:prod": "APP_VARIANT=prod APP_PLATFORM=ios eas build --platform ios --profile production",
     "web": "expo start --web",
     "lint": "expo lint"
   },

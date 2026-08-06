@@ -6,6 +6,8 @@ const KAKAO_MAVEN_REPO = "https://devrepo.kakao.com/nexus/content/groups/public/
 const APP_ROOT = process.cwd();
 const PROD_APP_NAME = "타임스택";
 const TEST_APP_NAME = "타임스택 (T)";
+const PROD_PROJECT_NAME = "timestack";
+const TEST_PROJECT_NAME = "timestackT";
 const PROD_BUNDLE_ID = "com.myeongwu.focushybrid";
 const TEST_BUNDLE_ID = "com.myeongwu.focushybrid.t";
 const PROD_ANDROID_PACKAGE = "com.myeongwu.focushybrid";
@@ -13,15 +15,15 @@ const TEST_ANDROID_PACKAGE = "com.myeongwu.focushybrid.t";
 const PROD_APP_SCHEME = "mobile";
 const TEST_APP_SCHEME = "mobile-test";
 const NATIVE_CONFIG_FILE = join(APP_ROOT, "native.config.json");
+const APP_VERSION_FILE = join(APP_ROOT, "app-version.json");
 const ENV_FILE_NAMES_BY_VARIANT: Record<string, string[]> = {
   prod: [".env.production", ".env.prod"],
   production: [".env.production", ".env.prod"],
+  dev: [".env.test", ".env.dev"],
   test: [".env.test"],
 };
 
 type NativePlatformConfig = {
-  versionSource?: string;
-  version?: string;
   buildNumberSource?: string;
   buildNumber?: string;
   versionCodeSource?: string;
@@ -31,22 +33,27 @@ type NativePlatformConfig = {
 };
 
 type NativeVariantConfig = {
+  projectName?: string;
   appName?: string;
   appScheme?: string;
-  versionSource?: string;
   ios?: NativePlatformConfig;
   android?: NativePlatformConfig;
 };
 
 type NativeConfig = {
-  test?: {
-    appName?: string;
-    appScheme?: string;
-    ios?: NativePlatformConfig;
-    android?: NativePlatformConfig;
-  };
+  test?: NativeVariantConfig;
   prod?: NativeVariantConfig;
 };
+
+type AppVersionEnvironment = "dev" | "prod";
+
+type AppVersionConfig = Record<
+  AppVersionEnvironment,
+  {
+    ios: string;
+    android: string;
+  }
+>;
 
 function parseEnvFile(filePath: string) {
   const values: Record<string, string> = {};
@@ -138,35 +145,60 @@ function loadNativeConfig(): NativeConfig {
   }
 }
 
+function loadAppVersionConfig(): AppVersionConfig {
+  if (!existsSync(APP_VERSION_FILE)) {
+    throw new Error("[mobile] app-version.json is missing.");
+  }
+
+  try {
+    return JSON.parse(readFileSync(APP_VERSION_FILE, "utf8")) as AppVersionConfig;
+  } catch {
+    throw new Error("[mobile] app-version.json is invalid JSON.");
+  }
+}
+
 function readConfigString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function resolveTestExpoVersion(input: {
-  iosVersion?: string;
-  androidVersion?: string;
-}) {
-  const iosVersion = input.iosVersion?.trim();
-  const androidVersion = input.androidVersion?.trim();
-  if (!iosVersion && !androidVersion) {
-    return undefined;
+function resolveVersionEnvironment(appVariant: string): AppVersionEnvironment {
+  if (appVariant === "test" || appVariant === "dev") {
+    return "dev";
   }
+  if (appVariant === "prod" || appVariant === "production") {
+    return "prod";
+  }
+  throw new Error(`[mobile] Unknown APP_VARIANT: ${appVariant}`);
+}
 
-  const buildPlatform = process.env.EAS_BUILD_PLATFORM?.trim().toLowerCase();
-  if (buildPlatform === "ios") {
-    return iosVersion || androidVersion;
-  }
-  if (buildPlatform === "android") {
-    return androidVersion || iosVersion;
-  }
+function resolveExpoVersion(appVersionConfig: AppVersionConfig, environment: AppVersionEnvironment) {
+  const iosVersion = readConfigString(appVersionConfig[environment]?.ios);
+  const androidVersion = readConfigString(appVersionConfig[environment]?.android);
+  const semverPattern = /^\d+\.\d+\.\d+$/;
 
-  if (iosVersion && androidVersion && iosVersion !== androidVersion) {
+  if (!semverPattern.test(iosVersion) || !semverPattern.test(androidVersion)) {
     throw new Error(
-      "[mobile] test ios.version and android.version differ. Set EAS_BUILD_PLATFORM or align them before resolving expo.version."
+      `[mobile] app-version.json ${environment}.ios and ${environment}.android must use x.y.z format.`
     );
   }
 
-  return iosVersion || androidVersion;
+  const buildPlatform = (
+    process.env.EAS_BUILD_PLATFORM?.trim() || process.env.APP_PLATFORM?.trim() || ""
+  ).toLowerCase();
+  if (buildPlatform === "ios") {
+    return iosVersion;
+  }
+  if (buildPlatform === "android") {
+    return androidVersion;
+  }
+
+  if (iosVersion !== androidVersion) {
+    throw new Error(
+      `[mobile] app-version.json ${environment} iOS and Android versions differ. Set APP_PLATFORM or EAS_BUILD_PLATFORM.`
+    );
+  }
+
+  return iosVersion;
 }
 
 function hasPlugin(
@@ -186,14 +218,19 @@ function hasPlugin(
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appVariant = resolveAppVariant();
-  const isTestVariant = appVariant === "test";
+  const versionEnvironment = resolveVersionEnvironment(appVariant);
+  const isTestVariant = versionEnvironment === "dev";
   const kakaoAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY?.trim();
   const naverConsumerKey = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim();
   const naverConsumerSecret = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim();
   const naverUrlScheme = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim();
   const plugins = [...(config.plugins ?? [])];
   const nativeConfig = loadNativeConfig();
+  const appVersionConfig = loadAppVersionConfig();
   const variantConfig = isTestVariant ? nativeConfig.test : nativeConfig.prod;
+  const projectName =
+    readConfigString(variantConfig?.projectName) ||
+    (isTestVariant ? TEST_PROJECT_NAME : PROD_PROJECT_NAME);
   const appName =
     readConfigString(variantConfig?.appName) || (isTestVariant ? TEST_APP_NAME : PROD_APP_NAME);
   const iosBundleIdentifier =
@@ -215,11 +252,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EXPO_PUBLIC_APP_SCHEME?.trim() ||
     readConfigString(variantConfig?.appScheme) ||
     (isTestVariant ? TEST_APP_SCHEME : PROD_APP_SCHEME);
+  const appVersion = resolveExpoVersion(appVersionConfig, versionEnvironment);
   const testVersionConfig = isTestVariant ? nativeConfig.test : undefined;
-  const testVersion = resolveTestExpoVersion({
-    iosVersion: testVersionConfig?.ios?.version,
-    androidVersion: testVersionConfig?.android?.version,
-  });
   const testIosBuildNumber = testVersionConfig?.ios?.buildNumber?.trim();
   const testAndroidVersionCode = testVersionConfig?.android?.versionCode;
 
@@ -265,6 +299,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins.push("./plugins/with-focus-live-activity");
   }
 
+  if (!hasPlugin(plugins, "./plugins/with-native-display-name")) {
+    plugins.push([
+      "./plugins/with-native-display-name",
+      {
+        displayName: appName,
+      },
+    ]);
+  }
+
   const expoBuildPropertiesPluginIndex = plugins.findIndex((plugin) => {
     if (!Array.isArray(plugin)) {
       return false;
@@ -306,9 +349,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
-    name: appName,
+    name: projectName,
     scheme: appScheme,
-    version: testVersion || config.version,
+    version: appVersion,
+    extra: {
+      ...(config.extra ?? {}),
+      nativeDisplayName: appName,
+    },
     ios: {
       ...(config.ios ?? {}),
       appleTeamId: "23598J95N3",

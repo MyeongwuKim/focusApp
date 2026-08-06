@@ -233,19 +233,14 @@ export function useDateTodosTaskActions({
       try {
         if (action === "start") {
           const todayKey = formatDateKey(new Date());
-          if (dateKey !== todayKey) {
-            const confirmed = await confirm({
-              title: "오늘 날짜가 아니에요",
-              message: "선택한 날짜의 할일을 시작할까요?",
-              buttons: [
-                { label: "취소", value: "cancel", tone: "neutral" },
-                { label: "시작", value: "start", tone: "primary" },
-              ],
+          if (dateKey > todayKey) {
+            toast.show({
+              type: "error",
+              title: "시작할 수 없음",
+              message: "미래 날짜의 할일은 날짜가 된 이후에 시작할 수 있어요.",
+              duration: 2200,
             });
-
-            if (confirmed !== "start") {
-              return;
-            }
+            return;
           }
 
           if (isRestActive) {
@@ -259,6 +254,17 @@ export function useDateTodosTaskActions({
         }
 
         if (action === "resume") {
+          const todayKey = formatDateKey(new Date());
+          if (dateKey > todayKey) {
+            toast.show({
+              type: "error",
+              title: "재개할 수 없음",
+              message: "미래 날짜의 할일은 날짜가 된 이후에 재개할 수 있어요.",
+              duration: 2200,
+            });
+            return;
+          }
+
           if (isRestActive) {
             await stopRestSessionRef.current({ dateKey });
             setActiveRestDurationMin(null);

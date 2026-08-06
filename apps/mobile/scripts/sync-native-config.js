@@ -1,13 +1,16 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const readline = require("node:readline/promises");
 
 const appRoot = path.resolve(__dirname, "..");
 const variant = (process.argv[2] || process.env.APP_VARIANT || "test").trim().toLowerCase();
 const appJsonPath = path.join(appRoot, "app.json");
 const configPath = path.join(appRoot, "native.config.json");
+const appVersionPath = path.join(appRoot, "app-version.json");
 const envFileNamesByVariant = {
   prod: [".env.production", ".env.prod"],
   production: [".env.production", ".env.prod"],
+  dev: [".env.test", ".env.dev"],
   test: [".env.test"],
 };
 
@@ -167,6 +170,7 @@ function resolveIosProjectFiles() {
   ]);
 
   return {
+    projectName: preferredProject.baseName,
     appDirectoryName: preferredAppDirectoryName,
     projectPath: preferredProject.projectPath,
     plistPath: path.join(appDirectoryPath, "Info.plist"),
@@ -235,28 +239,78 @@ function escapeXml(value) {
     .replaceAll(">", "&gt;");
 }
 
-function resolvePlatformVersion(appJson, platformConfig, label) {
-  if (platformConfig?.versionSource === "expo") {
-    const expoVersion = appJson.expo?.version;
-    if (typeof expoVersion !== "string" || !expoVersion.trim()) {
-      throw new Error("expo.version is missing in app.json.");
-    }
-    return expoVersion.trim();
+function resolveVersionEnvironment() {
+  if (variant === "test" || variant === "dev") {
+    return "dev";
   }
-
-  if (typeof platformConfig?.version !== "string" || !platformConfig.version.trim()) {
-    throw new Error(`native.config.json ${label}.version is missing.`);
+  if (variant === "prod" || variant === "production") {
+    return "prod";
   }
-
-  return platformConfig.version.trim();
+  throw new Error(`Unknown native config variant: ${variant}`);
 }
 
 function resolveVariantConfig(nativeConfig) {
-  const variantConfig = nativeConfig[variant];
+  const nativeConfigVariant = resolveVersionEnvironment() === "dev" ? "test" : "prod";
+  const variantConfig = nativeConfig[nativeConfigVariant];
   if (!variantConfig) {
-    throw new Error(`Unknown native config variant: ${variant}`);
+    throw new Error(`native.config.json ${nativeConfigVariant} config is missing.`);
   }
   return variantConfig;
+}
+
+function resolveAppVersion(appVersionConfig, platform) {
+  const environment = resolveVersionEnvironment();
+  const version = readConfigString(appVersionConfig?.[environment]?.[platform]);
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(`app-version.json ${environment}.${platform} must use x.y.z format.`);
+  }
+  return version;
+}
+
+function resolveTargetPlatform() {
+  const platform = readConfigString(process.env.APP_PLATFORM).toLowerCase();
+  if (!platform) {
+    return null;
+  }
+  if (platform !== "ios" && platform !== "android") {
+    throw new Error(`Unknown APP_PLATFORM: ${platform}`);
+  }
+  return platform;
+}
+
+async function confirmAppVersion(input) {
+  if (process.argv.includes("--yes")) {
+    return true;
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error(
+      "Version confirmation requires an interactive terminal. Pass --yes for an automated run."
+    );
+  }
+
+  const platformLabel =
+    input.platform === "ios"
+      ? `iOS ${input.iosVersion}`
+      : input.platform === "android"
+        ? `Android ${input.androidVersion}`
+        : `iOS ${input.iosVersion} / Android ${input.androidVersion}`;
+  const prompt = `[native-sync] ${input.environment} ${platformLabel} 패키지를 생성할까요? (y/N) `;
+  const terminal = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const answer = (await terminal.question(prompt)).trim().toLowerCase();
+    if (answer !== "y" && answer !== "yes") {
+      console.log("[native-sync] 패키지 생성을 취소했습니다.");
+      return false;
+    }
+    return true;
+  } finally {
+    terminal.close();
+  }
 }
 
 function resolveNativeIdentity(appJson, variantConfig) {
@@ -423,7 +477,7 @@ function syncIos(input) {
       didUpdateWidgetEntitlements
         ? "updated"
         : "already synced"
-    } (${iosProjectFiles.appDirectoryName}): ${
+    } (${iosProjectFiles.projectName}): ${
       input.bundleIdentifier
     }, ${input.appScheme}, ${input.naverUrlScheme}, ${input.version}${
       buildNumber ? ` (${buildNumber})` : ""
@@ -491,29 +545,55 @@ function syncAndroid(input) {
   );
 }
 
-loadMobileEnvFiles();
+async function main() {
+  loadMobileEnvFiles();
 
-const appJson = readJson(appJsonPath);
-const nativeConfig = readJson(configPath);
-const variantConfig = resolveVariantConfig(nativeConfig);
-const identity = resolveNativeIdentity(appJson, variantConfig);
-const providerIdentity = resolveProviderIdentity();
-const iosVersion = resolvePlatformVersion(appJson, variantConfig.ios, `${variant}.ios`);
-const androidVersion = resolvePlatformVersion(appJson, variantConfig.android, `${variant}.android`);
+  const appJson = readJson(appJsonPath);
+  const nativeConfig = readJson(configPath);
+  const appVersionConfig = readJson(appVersionPath);
+  const variantConfig = resolveVariantConfig(nativeConfig);
+  const identity = resolveNativeIdentity(appJson, variantConfig);
+  const providerIdentity = resolveProviderIdentity();
+  const environment = resolveVersionEnvironment();
+  const targetPlatform = resolveTargetPlatform();
+  const iosVersion = resolveAppVersion(appVersionConfig, "ios");
+  const androidVersion = resolveAppVersion(appVersionConfig, "android");
 
-syncIos({
-  version: iosVersion,
-  iosConfig: variantConfig.ios,
-  appName: identity.appName,
-  appScheme: identity.appScheme,
-  bundleIdentifier: identity.iosBundleIdentifier,
-  naverUrlScheme: providerIdentity.naverUrlScheme,
-  kakaoAppKey: providerIdentity.kakaoAppKey,
-});
-syncAndroid({
-  version: androidVersion,
-  androidConfig: variantConfig.android,
-  appName: identity.appName,
-  appScheme: identity.appScheme,
-  packageName: identity.androidPackage,
+  const isConfirmed = await confirmAppVersion({
+    environment,
+    platform: targetPlatform,
+    iosVersion,
+    androidVersion,
+  });
+  if (!isConfirmed) {
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!targetPlatform || targetPlatform === "ios") {
+    syncIos({
+      version: iosVersion,
+      iosConfig: variantConfig.ios,
+      appName: identity.appName,
+      appScheme: identity.appScheme,
+      bundleIdentifier: identity.iosBundleIdentifier,
+      naverUrlScheme: providerIdentity.naverUrlScheme,
+      kakaoAppKey: providerIdentity.kakaoAppKey,
+    });
+  }
+
+  if (!targetPlatform || targetPlatform === "android") {
+    syncAndroid({
+      version: androidVersion,
+      androidConfig: variantConfig.android,
+      appName: identity.appName,
+      appScheme: identity.appScheme,
+      packageName: identity.androidPackage,
+    });
+  }
+}
+
+main().catch((error) => {
+  console.error(`[native-sync] ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
 });

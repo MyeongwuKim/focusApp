@@ -60,14 +60,19 @@ UI는 `apps/web-ui`에서 Vite, React, Tailwind CSS로 구현했습니다. Nativ
 
 Native에는 빌드 시점의 Web UI를 기본 번들로 포함합니다. 이후 Web UI만 수정한 경우에는 네이티브 앱을 다시 배포하지 않고 Cloudflare R2에 새 번들을 올립니다. `develop`과 `master` 브랜치의 관련 파일이 변경되면 GitHub Actions가 Web UI를 빌드하고 dev 또는 prod R2 버킷에 자동으로 업로드합니다.
 
-Native가 시작되면 `latest/manifest.json`의 버전과 현재 설치된 Web UI 버전을 비교합니다. 새 버전이 있으면 `web-ui.zip`을 staging 경로에 내려받아 압축을 풀고, `index.html`과 파일 경로를 확인한 뒤 active 번들로 교체합니다.
+Native가 시작되면 먼저 연결된 R2의 `native/minimum-app-version.json`에서 현재 플랫폼 정책을 읽습니다. 강제 업데이트가 활성화되어 있고 설치된 앱 버전이 최소 버전보다 낮으면 Web UI 준비 전에 앱 업데이트를 안내합니다.
 
-Web UI에서 새 네이티브 기능을 사용하면 이전 앱에서는 실행할 수 없습니다. 이를 막기 위해 manifest의 `minimumNativeVersion`을 현재 앱 버전과 비교하고, 호환되지 않으면 번들을 설치하지 않고 앱 업데이트를 안내합니다. manifest 조회나 번들 설치에 실패한 경우에도 그대로 실행하지 않고 시작 오류를 표시합니다.
+버전 확인을 통과하면 `latest/manifest.json`의 버전과 현재 설치된 Web UI 버전을 비교합니다. 새 버전이 있으면 `web-ui.zip`을 staging 경로에 내려받아 압축을 풀고, `index.html`과 파일 경로를 확인한 뒤 active 번들로 교체합니다.
+
+Web UI에서 새 네이티브 기능을 사용하면 이전 앱에서는 실행할 수 없습니다. 이를 막기 위한 최소 앱 버전 정책은 Web UI manifest와 분리해 변경 시 Web UI 릴리즈 버전이 불필요하게 올라가지 않도록 했습니다. Web UI manifest 조회나 번들 설치에 실패한 경우에는 그대로 실행하지 않고 시작 오류를 표시합니다.
 
 관련 코드:
 
 - `scripts/sync-web-to-mobile.mjs`
+- `apps/mobile/src/features/version/nativeAppVersionPolicy.ts`
 - `apps/mobile/src/features/webui/webUiVersionWorker.ts`
+- `.github/workflows/deploy-native-version-dev-r2.yml`
+- `.github/workflows/deploy-native-version-prod-r2.yml`
 - `.github/workflows/deploy-webui-dev-r2.yml`
 - `.github/workflows/deploy-webui-prod-r2.yml`
 
@@ -125,16 +130,20 @@ Web UI에서는 날짜별 기록을 기준으로 완료·미완료 수, 집중·
 | --- | --- | --- |
 | Web UI 개발 채널 | `develop` 브랜치의 Web UI 관련 파일 변경 | GitHub Actions가 Web UI를 빌드하고 개발용 Cloudflare R2 버킷에 업로드합니다. |
 | Web UI 운영 채널 | `master` 브랜치의 Web UI 관련 파일 변경 | GitHub Actions가 Web UI를 빌드하고 운영용 Cloudflare R2 버킷에 업로드합니다. |
+| Native dev 최소 버전 정책 | `develop` 브랜치의 정책 파일 변경 | GitHub Actions가 `dev` 항목을 개발용 R2 버킷의 `native/minimum-app-version.json`으로 갱신합니다. |
+| Native prod 최소 버전 정책 | `master` 브랜치의 정책 파일 변경 | GitHub Actions가 `prod` 항목을 운영용 R2 버킷의 `native/minimum-app-version.json`으로 갱신합니다. |
 | API | Google Cloud의 Cloud Build 트리거 | `apps/api/Dockerfile`로 이미지를 만들어 Cloud Run에서 실행합니다. 트리거의 브랜치와 배포 조건은 저장소가 아닌 Google Cloud에서 관리합니다. |
 | 서버 푸시 배치 | Cloud Scheduler 5분 주기 | 배치 엔드포인트를 호출해 오늘 할 일 등록과 미완료 할 일 리마인드 대상을 확인합니다. |
 | Native | `pnpm native:ios:prod` 수동 실행 | EAS production 환경변수와 프로필을 사용해 iOS 원격 빌드를 시작합니다. |
 
-R2 배포 워크플로는 현재 manifest의 patch 버전을 올리고, Web UI 빌드 결과를 `web-ui.zip`으로 묶어 SHA-256과 최소 Native 버전이 포함된 새 manifest를 만듭니다. 버전별 경로와 `latest/manifest.json`을 함께 갱신한 뒤 최근 5개 릴리즈만 남깁니다.
+Web UI R2 배포 워크플로는 현재 manifest의 patch 버전을 올리고, 빌드 결과를 `web-ui.zip`으로 묶어 SHA-256이 포함된 새 manifest를 만듭니다. 버전별 경로와 `latest/manifest.json`을 함께 갱신한 뒤 최근 5개 릴리즈만 남깁니다. Native 최소 버전 정책은 별도 워크플로가 `native/minimum-app-version.json`으로 배포합니다.
 
 관련 파일:
 
 - `.github/workflows/deploy-webui-dev-r2.yml`
 - `.github/workflows/deploy-webui-prod-r2.yml`
+- `.github/workflows/deploy-native-version-dev-r2.yml`
+- `.github/workflows/deploy-native-version-prod-r2.yml`
 - `scripts/prune-r2-webui-releases.mjs`
 - `apps/api/Dockerfile`
 

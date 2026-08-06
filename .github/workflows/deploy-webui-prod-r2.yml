@@ -8,7 +8,6 @@ on:
       - "apps/web-ui/**"
       - "package.json"
       - "pnpm-lock.yaml"
-      - "apps/mobile/native.config.json"
       - ".github/workflows/deploy-webui-prod-r2.yml"
   workflow_dispatch:
 
@@ -109,20 +108,12 @@ jobs:
           MANIFEST_PATH="$RELEASE_DIR/manifest.json"
           node - <<NODE
           const fs = require("node:fs");
-          const nativeConfig = JSON.parse(
-            fs.readFileSync("apps/mobile/native.config.json", "utf8")
-          );
-          const minimumNativeVersion = nativeConfig?.webUi?.minimumNativeVersion ?? {
-            ios: "1.0.0",
-            android: "1.0.0"
-          };
           const manifest = {
             version: "${VERSION}",
             bundleUrl: "${BUNDLE_URL}",
             entryUrl: "${ENTRY_URL}",
             sha256: "${SHA256}",
-            createdAt: "${CREATED_AT}",
-            minimumNativeVersion
+            createdAt: "${CREATED_AT}"
           };
           fs.writeFileSync("${MANIFEST_PATH}", JSON.stringify(manifest, null, 2));
           NODE

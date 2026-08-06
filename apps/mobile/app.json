@@ -2,7 +2,6 @@
   "expo": {
     "name": "타임스택",
     "slug": "timestack",
-    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",

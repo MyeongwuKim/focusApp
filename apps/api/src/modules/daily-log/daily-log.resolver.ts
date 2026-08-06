@@ -139,7 +139,7 @@ export const dailyLogTypeDefs = gql`
 
 function buildService(context: GraphQLContext) {
   const repository = new DailyLogRepository(context.prisma);
-  return new DailyLogService(repository);
+  return new DailyLogService(repository, env.NOTIFICATION_BATCH_TIMEZONE);
 }
 
 function toISOStringOrNull(value: Date | null) {
@@ -150,6 +150,7 @@ const dailyLogErrorMapping = {
   DAILY_LOG_NOT_FOUND: { message: "데일리 로그를 찾을 수 없어요." },
   TODO_NOT_FOUND: { message: "할일을 찾을 수 없어요." },
   ANOTHER_TODO_ALREADY_IN_PROGRESS: { message: "진행 중인 할일이 있어요." },
+  FUTURE_TODO_CANNOT_START: { message: "미래 날짜의 할일은 시작하거나 재개할 수 없어요." },
   TODO_NOT_IN_PROGRESS: { message: "진행 중인 할일이 아니에요." },
   TODO_NOT_DONE: { message: "완료된 할일만 수정할 수 있어요." },
   INVALID_TODO_ORDER_IDS: { message: "정렬할 할일 목록이 올바르지 않아요." },

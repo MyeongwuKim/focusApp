@@ -12,7 +12,6 @@ const WEB_UI_MANIFEST_FETCH_TIMEOUT_MS = 5000;
 const WEB_UI_BUNDLE_FETCH_TIMEOUT_MS = 15000;
 
 export type WebUiReleaseChannel = "dev" | "prod" | "none";
-export type WebUiNativePlatform = "ios" | "android" | "unknown";
 export type WebUiVersionProgress =
   | "초기 번들 준비중..."
   | "버전 체크중..."
@@ -25,7 +24,6 @@ type WebUiManifest = {
   entryUrl?: string;
   sha256?: string;
   createdAt?: string;
-  minimumNativeVersion?: Partial<Record<"ios" | "android", string>>;
 };
 
 type StoredWebUiReleaseState = {
@@ -66,8 +64,6 @@ export async function prepareWebUiBundleVersion(input: {
   releaseChannel: WebUiReleaseChannel;
   manifestUrl: string | null;
   fallbackCurrentVersion: string;
-  nativeAppVersion?: string | null;
-  nativePlatform?: WebUiNativePlatform;
   forceEmbeddedRefresh?: boolean;
   onProgress?: (message: WebUiVersionProgress) => void;
 }) {
@@ -120,18 +116,6 @@ export async function prepareWebUiBundleVersion(input: {
         typeof manifest.version === "string" ? manifest.version.trim() : "";
       if (!parseSemver(remoteVersion)) {
         throw new Error("WEB_UI_MANIFEST_VERSION_INVALID");
-      }
-
-      const nativePlatform = input.nativePlatform ?? "unknown";
-      const nativeAppVersion = input.nativeAppVersion?.trim() || input.fallbackCurrentVersion;
-      const minimumNativeVersion = resolveMinimumNativeVersion(manifest, nativePlatform);
-      if (minimumNativeVersion) {
-        if (!parseSemver(minimumNativeVersion)) {
-          throw new Error("WEB_UI_MANIFEST_MIN_NATIVE_VERSION_INVALID");
-        }
-        if (compareSemver(nativeAppVersion, minimumNativeVersion) < 0) {
-          throw new Error(`WEB_UI_NATIVE_VERSION_UNSUPPORTED:${minimumNativeVersion}`);
-        }
       }
 
       const remoteBundleUrl = resolveWebUiBundleUrl(manifest);
@@ -231,19 +215,6 @@ function normalizeOptionalUrl(value: string | undefined) {
 
 function resolveWebUiBundleUrl(manifest: WebUiManifest) {
   return normalizeOptionalUrl(manifest.bundleUrl);
-}
-
-function resolveMinimumNativeVersion(manifest: WebUiManifest, platform: WebUiNativePlatform) {
-  if (platform !== "ios" && platform !== "android") {
-    return null;
-  }
-
-  const version = manifest.minimumNativeVersion?.[platform];
-  if (typeof version !== "string" || !version.trim()) {
-    return null;
-  }
-
-  return version.trim();
 }
 
 function parseSemver(version: string) {
