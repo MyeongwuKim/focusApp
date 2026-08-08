@@ -3,22 +3,22 @@
     "ios": {
       "enabled": true,
       "minimumVersion": "1.0.0",
-      "storeUrl": "https://developer.apple.com/kr/testflight/"
+      "storeUrl": "https://testflight.apple.com/"
     },
     "android": {
-      "enabled": true,
+      "enabled": false,
       "minimumVersion": "1.0.0",
-      "storeUrl": "www.naver.com"
+      "storeUrl": null
     }
   },
   "prod": {
     "ios": {
-      "enabled": true,
+      "enabled": false,
       "minimumVersion": "1.0.0",
       "storeUrl": null
     },
     "android": {
-      "enabled": true,
+      "enabled": false,
       "minimumVersion": "1.0.0",
       "storeUrl": null
     }

@@ -1,1369 +1,98 @@
-import Constants from "expo-constants";
-import * as AppleAuthentication from "expo-apple-authentication";
 import * as FileSystem from "expo-file-system/legacy";
-import * as ExpoLocation from "expo-location";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppState,
   type AppStateStatus,
   BackHandler,
-  Image,
   Linking,
-  NativeModules,
-  PermissionsAndroid,
-  Platform,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import {
-  login as loginWithKakaoTalk,
-  unlink as unlinkKakao,
-  type KakaoOAuthToken,
-} from "@react-native-seoul/kakao-login";
-import NaverLogin from "@react-native-seoul/naver-login";
+  buildAuthCallbackHash,
+  createNativeAuthBridgeDeps,
+  resolveAuthCallbackHashFromUrl,
+  resolveProviderFromBridgeLoginResultType,
+} from "../src/features/auth/nativeAuthBridge";
+import { createNativeLocationBridgeDeps } from "../src/features/location/nativeLocationBridge";
+import {
+  callFocusLiveActivityModule,
+  consumePendingFocusLiveActivityControlEvent,
+  createNativeFocusLiveActivityBridgeDeps,
+  getCurrentFocusLiveActivitySnapshot,
+} from "../src/features/focus-live-activity/nativeFocusLiveActivityBridge";
 import { useRestNotificationBridge } from "../src/features/notifications/hooks/useRestNotificationBridge";
+import { PermissionIntroModal } from "../src/features/permissions/components/PermissionIntroModal";
 import {
-  PermissionIntroModal,
-} from "../src/features/permissions/components/PermissionIntroModal";
-import {
-  NativeUpdateRequiredModal,
-} from "../src/features/version/components/NativeUpdateRequiredModal";
+  hasSeenNativePermissionIntro,
+  markNativePermissionIntroAsSeen,
+} from "../src/features/permissions/nativePermissionIntroStorage";
+import { NativeUpdateRequiredModal } from "../src/features/version/components/NativeUpdateRequiredModal";
 import {
   checkNativeAppVersionPolicy,
   resolveNativeAppVersionPolicyUrl,
 } from "../src/features/version/nativeAppVersionPolicy";
 import {
+  createNativeVersionBridgeDeps,
+  openNativeAppMarket,
+  resolveNativeAppVersion,
+} from "../src/features/version/nativeAppRuntime";
+import {
   applyNativeWeatherSettings,
   NativeWeatherLayer,
 } from "../src/features/weather/components/NativeWeatherLayer";
+import {
+  fetchNativeWeatherSnapshot,
+  WEATHER_REFRESH_MS,
+  type NativeWeatherSnapshot,
+} from "../src/features/weather/nativeWeather";
 import { routeWebViewBridgeMessage } from "../src/features/bridge/routeWebViewBridgeMessage";
-import type { FocusLiveActivityPayload } from "../src/features/bridge/handlers/focusLiveActivityBridgeHandlers";
-import type {
-  AuthStateSyncPayload,
-  TodoViewSyncPayload,
-} from "../src/features/bridge/handlers/syncBridgeHandlers";
+import type { RouteWebViewBridgeDeps } from "../src/features/bridge/routeWebViewBridgeMessage";
+import type { TodoViewSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
+import {
+  buildWebUiUriWithHash,
+  convertCalendarSheetPathToDateTasksPath,
+  formatLocalDateKey,
+  hasNativeAppProtocol,
+  isMainFrameWebViewRequest,
+  openUrlOutsideWebView,
+  parseTodoViewSnapshotFromWebViewUrl,
+  resolveHybridApiOrigin,
+  resolveNativeAppScheme,
+  resolveNativePlatform,
+  resolveNativeRoutePathFromUrl,
+  shouldOpenUrlOutsideWebView,
+  type NativeTodoViewSnapshot,
+} from "../src/features/webview/nativeWebViewNavigation";
 import {
   embeddedWebUiBundleHash,
   embeddedWebUiFiles,
 } from "../src/features/webui/embeddedWebUiBundle";
 import {
   prepareWebUiBundleVersion,
-  readStoredWebUiReleaseSnapshot,
   resolveWebUiManifestUrl,
   resolveWebUiReleaseChannel,
   type WebUiVersionProgress,
 } from "../src/features/webui/webUiVersionWorker";
+import {
+  FocusLaunchOverlay,
+  resolveLaunchProgressPercent,
+} from "../src/features/webui/components/FocusLaunchOverlay";
+import { showWebUiStartupErrorAlert } from "../src/features/webui/nativeWebUiStartup";
+import { readUnknownRecord, readUnknownString } from "../src/shared/nativeValues";
 
 const BASE_WIDTH = 390;
 const MIN_SCALE = 0.9;
 const MAX_SCALE = 1.08;
-const WEATHER_REFRESH_MS = 30 * 60 * 1000;
-const NATIVE_PROVIDER_LOGIN_TIMEOUT_MS = 35000;
-const NATIVE_SESSION_EXCHANGE_TIMEOUT_MS = 30000;
-const NATIVE_PROVIDER_FOREGROUND_CANCEL_GRACE_MS = 3000;
-const NOTIFICATION_PERMISSION_INTRO_FILE_URI = `${
-  FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""
-}native-notification-permission-intro-v1.json`;
 const LAUNCH_OVERLAY_MIN_VISIBLE_MS = 800;
-const LAUNCH_PROGRESS_BAR_WIDTH = 168;
-const DEFAULT_NATIVE_APP_SCHEME = "mobile";
 const FORCE_LAUNCH_OVERLAY_FOR_TEST = process.env.EXPO_PUBLIC_FORCE_LAUNCH_OVERLAY === "true";
-
-type NativePermissionState = "granted" | "denied" | "undetermined";
-type LocationPermissionSnapshot = {
-  granted: boolean;
-  canAskAgain: boolean;
-  status: NativePermissionState;
-};
-type NativeCoordinates = {
-  latitude: number;
-  longitude: number;
-};
-type LocationCoordinatesSnapshot = LocationPermissionSnapshot & {
-  coordinates: NativeCoordinates | null;
-};
-type GeolocationLike = {
-  getCurrentPosition: (
-    success: (position: { coords?: { latitude?: number; longitude?: number } }) => void,
-    failure: (error?: unknown) => void,
-    options?: { enableHighAccuracy?: boolean; timeout?: number; maximumAge?: number }
-  ) => void;
-};
-
-type NativeTodoViewSnapshot = {
-  isViewingTodayTodoSurface: boolean;
-  source: "date-tasks" | "calendar-sheet" | "none";
-  dateKey: string | null;
-  routePath: string | null;
-};
-
-type NativeWeatherSnapshot = {
-  temperature: number;
-  weatherCode: number;
-  isDay: number;
-  coordinates: NativeCoordinates;
-  source: "device";
-  updatedAt: string;
-};
-
-type NativeKakaoAuthResult = {
-  token: string;
-  userId: string;
-};
-type NativeNaverAuthResult = {
-  token: string;
-  userId: string;
-};
-type NativeAppleCredential = {
-  identityToken: string;
-  fullName: string | null;
-};
-type NativeAppleAuthResult = {
-  token: string;
-  userId: string;
-};
-type AuthProvider = "apple" | "kakao" | "naver";
-type FocusLiveActivityNativeModule = {
-  isSupported?: () => Promise<unknown>;
-  configure?: (payload: AuthStateSyncPayload) => Promise<unknown>;
-  start?: (payload: FocusLiveActivityPayload) => Promise<unknown>;
-  update?: (payload: FocusLiveActivityPayload) => Promise<unknown>;
-  end?: (payload: Pick<FocusLiveActivityPayload, "todoId" | "dateKey">) => Promise<unknown>;
-  consumePendingControlEvent?: () => Promise<unknown>;
-  currentActivitySnapshot?: () => Promise<unknown>;
-};
-const NAVER_NATIVE_CONSUMER_KEY = process.env.EXPO_PUBLIC_NAVER_CONSUMER_KEY?.trim() ?? "";
-const NAVER_NATIVE_CONSUMER_SECRET = process.env.EXPO_PUBLIC_NAVER_CONSUMER_SECRET?.trim() ?? "";
-const NAVER_NATIVE_URL_SCHEME = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME?.trim() ?? "";
-const NATIVE_DISPLAY_NAME =
-  typeof Constants.expoConfig?.extra?.nativeDisplayName === "string"
-    ? Constants.expoConfig.extra.nativeDisplayName.trim()
-    : "";
-const NAVER_NATIVE_APP_NAME =
-  process.env.EXPO_PUBLIC_NAVER_APP_NAME?.trim() ??
-  (NATIVE_DISPLAY_NAME || Constants.expoConfig?.name?.trim() || "focus-hybrid");
-const NAVER_DISABLE_APP_AUTH_IOS = process.env.EXPO_PUBLIC_NAVER_DISABLE_APP_AUTH_IOS === "true";
-const IOS_APP_STORE_URL = process.env.EXPO_PUBLIC_IOS_APP_STORE_URL?.trim() ?? "";
-const ANDROID_PLAY_STORE_URL = process.env.EXPO_PUBLIC_ANDROID_PLAY_STORE_URL?.trim() ?? "";
-let isNaverLoginInitialized = false;
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorCode: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error(errorCode));
-    }, timeoutMs);
-
-    promise
-      .then((value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
-  });
-}
-
-function withForegroundResumeCancel<T>(promise: Promise<T>, errorCode: string): Promise<T> {
-  if (Platform.OS !== "ios" && Platform.OS !== "android") {
-    return promise;
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    let didLeaveForeground = AppState.currentState !== "active";
-    let cancelTimerId: ReturnType<typeof setTimeout> | null = null;
-
-    const clearCancelTimer = () => {
-      if (cancelTimerId === null) {
-        return;
-      }
-      clearTimeout(cancelTimerId);
-      cancelTimerId = null;
-    };
-
-    const cleanUp = () => {
-      clearCancelTimer();
-      subscription.remove();
-    };
-
-    const resolveOnce = (value: T) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      cleanUp();
-      resolve(value);
-    };
-
-    const rejectOnce = (error: unknown) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      cleanUp();
-      reject(error);
-    };
-
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      if (settled) {
-        return;
-      }
-
-      if (nextState !== "active") {
-        didLeaveForeground = true;
-        clearCancelTimer();
-        return;
-      }
-
-      if (!didLeaveForeground) {
-        return;
-      }
-
-      clearCancelTimer();
-      cancelTimerId = setTimeout(() => {
-        rejectOnce(new Error(errorCode));
-      }, NATIVE_PROVIDER_FOREGROUND_CANCEL_GRACE_MS);
-    });
-
-    promise.then(resolveOnce).catch(rejectOnce);
-  });
-}
-
-function readUnknownRecord(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function readUnknownString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function resolveNativeErrorSignals(error: unknown) {
-  const signals = new Set<string>();
-
-  if (error instanceof Error) {
-    const errorMessage = readUnknownString(error.message);
-    if (errorMessage) {
-      signals.add(errorMessage.toLowerCase());
-    }
-  }
-
-  const errorRecord = readUnknownRecord(error);
-  if (errorRecord) {
-    const message = readUnknownString(errorRecord.message);
-    const code = readUnknownString(errorRecord.code);
-    if (message) {
-      signals.add(message.toLowerCase());
-    }
-    if (code) {
-      signals.add(code.toLowerCase());
-    }
-
-    const userInfo = readUnknownRecord(errorRecord.userInfo);
-    const nativeMessage = readUnknownString(userInfo?.nativeErrorMessage);
-    if (nativeMessage) {
-      signals.add(nativeMessage.toLowerCase());
-    }
-  }
-
-  const asString = readUnknownString(typeof error === "string" ? error : "");
-  if (asString) {
-    signals.add(asString.toLowerCase());
-  }
-
-  return Array.from(signals);
-}
-
-function resolveNativeErrorCode(error: unknown, fallbackCode: string) {
-  const errorRecord = readUnknownRecord(error);
-  const code = readUnknownString(errorRecord?.code);
-  if (code) {
-    return code;
-  }
-
-  if (error instanceof Error) {
-    const message = readUnknownString(error.message);
-    if (message) {
-      return message;
-    }
-  }
-
-  const message = readUnknownString(errorRecord?.message);
-  if (message) {
-    return message;
-  }
-
-  return fallbackCode;
-}
-
-function resolveWebUiStartupErrorCode(error: unknown) {
-  const code = resolveNativeErrorCode(error, "WEB_UI_STARTUP_FAILED");
-  return code.trim().toUpperCase();
-}
-
-function resolveWebUiStartupErrorMessage(error: unknown) {
-  const code = resolveWebUiStartupErrorCode(error);
-
-  if (code.startsWith("WEB_UI_MANIFEST_")) {
-    return "버전 정보를 가져오는데 실패했습니다. 다시 실행해주세요.";
-  }
-
-  if (code === "WEB_UI_BUNDLE_EXTRACT_FAILED" || code === "WEB_UI_INDEX_MISSING_IN_ZIP") {
-    return "R2 번들 압축 해제에 실패했습니다. 다시 실행해주세요.";
-  }
-
-  if (code.startsWith("WEB_UI_BUNDLE_")) {
-    return "웹 번들 다운로드에 실패했습니다. 다시 실행해주세요.";
-  }
-
-  return "앱 시작에 실패했습니다. 다시 실행해주세요.";
-}
-
-function resolveAndroidPackageName() {
-  const androidPackage = Constants.expoConfig?.android?.package;
-  if (typeof androidPackage === "string" && androidPackage.trim()) {
-    return androidPackage.trim();
-  }
-
-  return "com.myeongwu.focushybrid";
-}
-
-function normalizeNativeAppScheme(rawScheme: unknown) {
-  if (typeof rawScheme !== "string") {
-    return "";
-  }
-
-  const scheme = rawScheme
-    .trim()
-    .replace(/:\/\/.*$/, "")
-    .replace(/:$/, "")
-    .toLowerCase();
-  return /^[a-z][a-z0-9+.-]*$/.test(scheme) ? scheme : "";
-}
-
-function resolveNativeAppScheme() {
-  const expoScheme = Constants.expoConfig?.scheme;
-  if (Array.isArray(expoScheme)) {
-    const firstScheme = expoScheme.map(normalizeNativeAppScheme).find(Boolean);
-    if (firstScheme) {
-      return firstScheme;
-    }
-  }
-
-  const normalizedExpoScheme = normalizeNativeAppScheme(expoScheme);
-  if (normalizedExpoScheme) {
-    return normalizedExpoScheme;
-  }
-
-  return normalizeNativeAppScheme(process.env.EXPO_PUBLIC_APP_SCHEME) || DEFAULT_NATIVE_APP_SCHEME;
-}
-
-function resolveNativePlatform() {
-  return Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown";
-}
-
-function getFocusLiveActivityNativeModule(): FocusLiveActivityNativeModule | null {
-  const nativeModulesRecord = readUnknownRecord(NativeModules);
-  const nativeModule = readUnknownRecord(nativeModulesRecord?.FocusLiveActivityModule);
-  if (!nativeModule) {
-    return null;
-  }
-
-  return nativeModule as FocusLiveActivityNativeModule;
-}
-
-async function callFocusLiveActivityModule(
-  method: "configure" | "start" | "update" | "end",
-  payload: FocusLiveActivityPayload | AuthStateSyncPayload
-) {
-  if (Platform.OS !== "ios") {
-    return { supported: false, reason: "UNSUPPORTED_PLATFORM" };
-  }
-
-  const nativeModule = getFocusLiveActivityNativeModule();
-  const nativeMethod = nativeModule?.[method];
-  if (typeof nativeMethod !== "function") {
-    return { supported: false, reason: "NATIVE_MODULE_UNAVAILABLE" };
-  }
-
-  return await nativeMethod(payload);
-}
-
-async function consumePendingFocusLiveActivityControlEvent() {
-  if (Platform.OS !== "ios") {
-    return null;
-  }
-
-  const nativeModule = getFocusLiveActivityNativeModule();
-  const nativeMethod = nativeModule?.consumePendingControlEvent;
-  if (typeof nativeMethod !== "function") {
-    return null;
-  }
-
-  return await nativeMethod();
-}
-
-async function getCurrentFocusLiveActivitySnapshot() {
-  if (Platform.OS !== "ios") {
-    return null;
-  }
-
-  const nativeModule = getFocusLiveActivityNativeModule();
-  const nativeMethod = nativeModule?.currentActivitySnapshot;
-  if (typeof nativeMethod !== "function") {
-    return null;
-  }
-
-  return await nativeMethod();
-}
-
-function hasNativeAppProtocol(rawUrl: string, nativeAppScheme: string) {
-  try {
-    const parsed = new URL(rawUrl);
-    return normalizeNativeAppScheme(parsed.protocol) === nativeAppScheme;
-  } catch {
-    return false;
-  }
-}
-
-function isMainFrameWebViewRequest(request: {
-  url: string;
-  isTopFrame?: boolean;
-  mainDocumentURL?: string | null;
-}) {
-  if (typeof request.isTopFrame === "boolean") {
-    return request.isTopFrame;
-  }
-
-  if (request.mainDocumentURL) {
-    return request.mainDocumentURL === request.url;
-  }
-
-  return true;
-}
-
-function shouldKeepUrlInWebView(rawUrl: string, knownEntryUris: (string | null | undefined)[]) {
-  try {
-    const parsed = new URL(rawUrl);
-    if (
-      parsed.protocol === "file:" ||
-      parsed.protocol === "about:" ||
-      parsed.protocol === "data:" ||
-      parsed.protocol === "blob:"
-    ) {
-      return true;
-    }
-
-    return knownEntryUris.some((entryUri) => {
-      if (!entryUri) {
-        return false;
-      }
-
-      try {
-        const entryUrl = new URL(entryUri);
-        return parsed.origin === entryUrl.origin && parsed.pathname === entryUrl.pathname;
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return true;
-  }
-}
-
-function shouldOpenUrlOutsideWebView(
-  rawUrl: string,
-  knownEntryUris: (string | null | undefined)[]
-) {
-  if (shouldKeepUrlInWebView(rawUrl, knownEntryUris)) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(rawUrl);
-    return Boolean(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
-
-async function openUrlOutsideWebView(rawUrl: string) {
-  try {
-    await Linking.openURL(rawUrl);
-  } catch (error) {
-    console.log("Failed to open external WebView navigation:", rawUrl, error);
-  }
-}
-
-async function openNativeAppMarket(remoteStoreUrl?: string | null) {
-  const configuredStoreUrl = remoteStoreUrl?.trim();
-
-  if (Platform.OS === "android") {
-    const packageName = resolveAndroidPackageName();
-    const primaryUrl =
-      configuredStoreUrl || ANDROID_PLAY_STORE_URL || `market://details?id=${packageName}`;
-    const fallbackUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
-
-    try {
-      await Linking.openURL(primaryUrl);
-      return;
-    } catch {
-      await Linking.openURL(fallbackUrl);
-      return;
-    }
-  }
-
-  if (Platform.OS === "ios") {
-    const storeUrl = configuredStoreUrl || IOS_APP_STORE_URL || "itms-apps://itunes.apple.com";
-    await Linking.openURL(storeUrl);
-  }
-}
-
-function closeAppFromFatalStartupError() {
-  const exitAndroidApp = () => {
-    if (Platform.OS !== "android") {
-      return;
-    }
-
-    setTimeout(() => {
-      BackHandler.exitApp();
-    }, 0);
-    setTimeout(() => {
-      BackHandler.exitApp();
-    }, 250);
-  };
-
-  const nativeModulesRecord = readUnknownRecord(NativeModules);
-  const nativeAppControl = readUnknownRecord(nativeModulesRecord?.NativeAppControl);
-  const rnExitApp = readUnknownRecord(nativeModulesRecord?.RNExitApp);
-  const exitAppFn = nativeAppControl?.exitApp ?? rnExitApp?.exitApp;
-  if (typeof exitAppFn === "function") {
-    try {
-      exitAppFn();
-    } finally {
-      exitAndroidApp();
-    }
-    return;
-  }
-
-  exitAndroidApp();
-}
-
-function showWebUiStartupErrorAlert(error: unknown) {
-  Alert.alert(
-    "앱 시작 오류",
-    resolveWebUiStartupErrorMessage(error),
-    [
-      {
-        text: "확인",
-        onPress: closeAppFromFatalStartupError,
-      },
-    ],
-    { cancelable: false }
-  );
-}
-
-function isNativeLoginCancelledError(error: unknown) {
-  const signals = resolveNativeErrorSignals(error);
-  return signals.some(
-    (signal) =>
-      signal.includes("cancel") ||
-      signal.includes("canceled") ||
-      signal.includes("cancelled") ||
-      signal.includes("usercancel")
-  );
-}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function formatLocalDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function isLoopbackHost(host: string) {
-  const normalized = host.trim().toLowerCase();
-  return (
-    normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]"
-  );
-}
-
-function resolveHybridApiOrigin() {
-  const envOrigin = process.env.EXPO_PUBLIC_API_ORIGIN ?? process.env.EXPO_PUBLIC_API_BASE_URL;
-  if (envOrigin?.trim()) {
-    const cleaned = envOrigin
-      .trim()
-      .replace(/\/graphql\/?$/i, "")
-      .replace(/\/+$/, "");
-    return cleaned;
-  }
-
-  const scriptUrl = NativeModules.SourceCode?.scriptURL as string | undefined;
-  if (scriptUrl) {
-    const hostMatch = scriptUrl.match(/^[a-z]+:\/\/([^/:?#]+)/i);
-    const host = hostMatch?.[1];
-    if (host && !isLoopbackHost(host)) {
-      return `http://${host}:4000`;
-    }
-  }
-
-  const expoHostUri =
-    (Constants.expoConfig as { hostUri?: string } | null)?.hostUri ??
-    (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost ??
-    null;
-  const expoHost = expoHostUri?.split(":")[0];
-  if (expoHost && !isLoopbackHost(expoHost)) {
-    return `http://${expoHost}:4000`;
-  }
-
-  return "http://localhost:4000";
-}
-
-function buildWebUiUriWithHash(baseUri: string, callbackHash: string) {
-  if (!callbackHash) {
-    return baseUri;
-  }
-  const normalizedHash = callbackHash.startsWith("#") ? callbackHash : `#${callbackHash}`;
-  const sanitizedBase = baseUri.split("#")[0];
-  return `${sanitizedBase}${normalizedHash}`;
-}
-
-function parseTodoViewSnapshotFromWebViewUrl(rawUrl: string): NativeTodoViewSnapshot {
-  try {
-    const parsed = new URL(rawUrl);
-    const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
-    const normalizedHash = hash.startsWith("/") ? hash : `/${hash}`;
-    const [pathname, rawSearch = ""] = normalizedHash.split("?", 2);
-    const searchParams = new URLSearchParams(rawSearch);
-    const todayKey = formatLocalDateKey(new Date());
-
-    if (pathname === "/date-tasks") {
-      const dateKey = searchParams.get("date") ?? todayKey;
-      return {
-        isViewingTodayTodoSurface: dateKey === todayKey,
-        source: "date-tasks",
-        dateKey,
-        routePath: normalizedHash,
-      };
-    }
-
-    if (pathname === "/calendar" && searchParams.get("sheet") === "1") {
-      const dateKey = searchParams.get("date") ?? todayKey;
-      return {
-        isViewingTodayTodoSurface: dateKey === todayKey,
-        source: "calendar-sheet",
-        dateKey,
-        routePath: normalizedHash,
-      };
-    }
-  } catch {
-    // ignore invalid URL
-  }
-
-  return {
-    isViewingTodayTodoSurface: false,
-    source: "none",
-    dateKey: null,
-    routePath: null,
-  };
-}
-
-function convertCalendarSheetPathToDateTasksPath(targetPath: string) {
-  if (!targetPath.startsWith("/calendar")) {
-    return targetPath;
-  }
-
-  const [pathname, rawSearch = ""] = targetPath.split("?", 2);
-  if (pathname !== "/calendar") {
-    return targetPath;
-  }
-
-  const params = new URLSearchParams(rawSearch);
-  if (params.get("sheet") !== "1") {
-    return targetPath;
-  }
-
-  const dateKey = params.get("date");
-  if (!dateKey) {
-    return targetPath;
-  }
-
-  const next = new URLSearchParams();
-  next.set("date", dateKey);
-  if (params.get("restFinished") === "1") {
-    next.set("restFinished", "1");
-  }
-  if (params.get("focusTargetElapsed") === "1") {
-    next.set("focusTargetElapsed", "1");
-  }
-  if (params.get("startTodoPrompt") === "1") {
-    next.set("startTodoPrompt", "1");
-  }
-  const startTodoPromptSource = params.get("startTodoPromptSource");
-  if (startTodoPromptSource) {
-    next.set("startTodoPromptSource", startTodoPromptSource);
-  }
-  const promptAt = params.get("promptAt");
-  if (promptAt) {
-    next.set("promptAt", promptAt);
-  }
-  const todoId = params.get("todoId");
-  if (todoId) {
-    next.set("todoId", todoId);
-  }
-  return `/date-tasks?${next.toString()}`;
-}
-
-function resolveLaunchProgressPercent(statusMessage: WebUiVersionProgress) {
-  switch (statusMessage) {
-    case "초기 번들 준비중...":
-      return 22;
-    case "버전 체크중...":
-      return 46;
-    case "앱 번들 설치중...":
-      return 78;
-    case "앱 시작중...":
-      return 100;
-    default:
-      return 0;
-  }
-}
-
-function resolveNativeAppVersion() {
-  const expoVersion = Constants.expoConfig?.version;
-  if (typeof expoVersion === "string" && expoVersion.trim()) {
-    return expoVersion.trim();
-  }
-
-  const expoClientVersion = (Constants.manifest2?.extra as { expoClient?: { version?: string } } | undefined)
-    ?.expoClient?.version;
-  if (typeof expoClientVersion === "string" && expoClientVersion.trim()) {
-    return expoClientVersion.trim();
-  }
-
-  return null;
-}
-
-function formatAppleFullName(fullName: unknown) {
-  const fullNameRecord = readUnknownRecord(fullName);
-  if (!fullNameRecord) {
-    return null;
-  }
-
-  const nickname = readUnknownString(fullNameRecord.nickname);
-  if (nickname) {
-    return nickname;
-  }
-
-  const parts = [
-    readUnknownString(fullNameRecord.givenName),
-    readUnknownString(fullNameRecord.middleName),
-    readUnknownString(fullNameRecord.familyName),
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : null;
-}
-
-async function requestNativeAppleCredential(): Promise<NativeAppleCredential> {
-  if (Platform.OS !== "ios") {
-    throw new Error("APPLE_NATIVE_UNSUPPORTED_PLATFORM");
-  }
-
-  const isAvailable = await AppleAuthentication.isAvailableAsync();
-  if (!isAvailable) {
-    throw new Error("APPLE_NATIVE_UNAVAILABLE");
-  }
-
-  try {
-    const credential = await withTimeout(
-      AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      }),
-      NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
-      "APPLE_NATIVE_LOGIN_TIMEOUT"
-    );
-    const identityToken = credential.identityToken?.trim();
-    if (!identityToken) {
-      throw new Error("APPLE_NATIVE_IDENTITY_TOKEN_MISSING");
-    }
-
-    return {
-      identityToken,
-      fullName: formatAppleFullName(credential.fullName),
-    };
-  } catch (error) {
-    if (isNativeLoginCancelledError(error)) {
-      throw new Error("APPLE_NATIVE_LOGIN_CANCELLED");
-    }
-    throw error;
-  }
-}
-
-async function requestNativeKakaoOAuthToken(): Promise<KakaoOAuthToken> {
-  try {
-    return await withTimeout(
-      withForegroundResumeCancel(loginWithKakaoTalk(), "KAKAO_NATIVE_LOGIN_CANCELLED"),
-      NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
-      "KAKAO_NATIVE_TALK_LOGIN_TIMEOUT"
-    );
-  } catch (talkError) {
-    if (isNativeLoginCancelledError(talkError)) {
-      throw new Error("KAKAO_NATIVE_LOGIN_CANCELLED");
-    }
-    throw talkError;
-  }
-}
-
-function initializeNaverLoginSdk() {
-  if (isNaverLoginInitialized) {
-    return;
-  }
-
-  if (!NAVER_NATIVE_CONSUMER_KEY || !NAVER_NATIVE_CONSUMER_SECRET || !NAVER_NATIVE_URL_SCHEME) {
-    throw new Error("NAVER_NATIVE_CONFIG_MISSING");
-  }
-
-  NaverLogin.initialize({
-    appName: NAVER_NATIVE_APP_NAME,
-    consumerKey: NAVER_NATIVE_CONSUMER_KEY,
-    consumerSecret: NAVER_NATIVE_CONSUMER_SECRET,
-    serviceUrlSchemeIOS: NAVER_NATIVE_URL_SCHEME,
-    disableNaverAppAuthIOS: NAVER_DISABLE_APP_AUTH_IOS,
-  });
-  isNaverLoginInitialized = true;
-}
-
-async function requestNativeNaverAccessToken(): Promise<string> {
-  initializeNaverLoginSdk();
-  const loginResult = await withTimeout(
-    withForegroundResumeCancel(NaverLogin.login(), "NAVER_NATIVE_LOGIN_CANCELLED"),
-    NATIVE_PROVIDER_LOGIN_TIMEOUT_MS,
-    "NAVER_NATIVE_LOGIN_TIMEOUT"
-  );
-  if (loginResult.isSuccess) {
-    const accessToken = loginResult.successResponse?.accessToken?.trim();
-    if (accessToken) {
-      return accessToken;
-    }
-    throw new Error("NAVER_NATIVE_ACCESS_TOKEN_MISSING");
-  }
-
-  const failureMessage = loginResult.failureResponse?.message?.trim();
-  if (loginResult.failureResponse?.isCancel) {
-    throw new Error("NAVER_NATIVE_LOGIN_CANCELLED");
-  }
-  throw new Error(failureMessage || "NAVER_NATIVE_LOGIN_FAILED");
-}
-
-async function exchangeAppleIdentityTokenForSession(input: {
-  apiOrigin: string;
-  identityToken: string;
-  fullName?: string | null;
-}): Promise<NativeAppleAuthResult> {
-  const response = await withTimeout(
-    fetch(`${input.apiOrigin}/auth/apple/native`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        identityToken: input.identityToken,
-        fullName: input.fullName,
-      }),
-    }),
-    NATIVE_SESSION_EXCHANGE_TIMEOUT_MS,
-    "APPLE_NATIVE_EXCHANGE_TIMEOUT"
-  );
-
-  if (!response.ok) {
-    throw new Error(`APPLE_NATIVE_AUTH_HTTP_${response.status}`);
-  }
-
-  const parsed = (await response.json()) as {
-    token?: unknown;
-    userId?: unknown;
-  };
-  if (typeof parsed.token !== "string" || typeof parsed.userId !== "string") {
-    throw new Error("APPLE_NATIVE_AUTH_INVALID_RESPONSE");
-  }
-
-  return {
-    token: parsed.token,
-    userId: parsed.userId,
-  };
-}
-
-async function exchangeKakaoAccessTokenForSession(input: {
-  apiOrigin: string;
-  accessToken: string;
-}): Promise<NativeKakaoAuthResult> {
-  const response = await withTimeout(
-    fetch(`${input.apiOrigin}/auth/kakao/native`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        accessToken: input.accessToken,
-      }),
-    }),
-    NATIVE_SESSION_EXCHANGE_TIMEOUT_MS,
-    "KAKAO_NATIVE_EXCHANGE_TIMEOUT"
-  );
-
-  if (!response.ok) {
-    throw new Error(`KAKAO_NATIVE_AUTH_HTTP_${response.status}`);
-  }
-
-  const parsed = (await response.json()) as {
-    token?: unknown;
-    userId?: unknown;
-  };
-  if (typeof parsed.token !== "string" || typeof parsed.userId !== "string") {
-    throw new Error("KAKAO_NATIVE_AUTH_INVALID_RESPONSE");
-  }
-
-  return {
-    token: parsed.token,
-    userId: parsed.userId,
-  };
-}
-
-async function exchangeNaverAccessTokenForSession(input: {
-  apiOrigin: string;
-  accessToken: string;
-}): Promise<NativeNaverAuthResult> {
-  const response = await withTimeout(
-    fetch(`${input.apiOrigin}/auth/naver/native`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        accessToken: input.accessToken,
-      }),
-    }),
-    NATIVE_SESSION_EXCHANGE_TIMEOUT_MS,
-    "NAVER_NATIVE_EXCHANGE_TIMEOUT"
-  );
-
-  if (!response.ok) {
-    throw new Error(`NAVER_NATIVE_AUTH_HTTP_${response.status}`);
-  }
-
-  const parsed = (await response.json()) as {
-    token?: unknown;
-    userId?: unknown;
-  };
-  if (typeof parsed.token !== "string" || typeof parsed.userId !== "string") {
-    throw new Error("NAVER_NATIVE_AUTH_INVALID_RESPONSE");
-  }
-
-  return {
-    token: parsed.token,
-    userId: parsed.userId,
-  };
-}
-
-async function unlinkKakaoAccountWithTimeout() {
-  return await withTimeout(unlinkKakao(), 10000, "KAKAO_NATIVE_UNLINK_TIMEOUT");
-}
-
-async function unlinkNaverAccountWithTimeout() {
-  initializeNaverLoginSdk();
-  return await withTimeout(NaverLogin.deleteToken(), 10000, "NAVER_NATIVE_UNLINK_TIMEOUT");
-}
-function readCallbackValue(url: URL, key: string) {
-  const fromSearch = url.searchParams.get(key);
-  if (fromSearch) {
-    return fromSearch;
-  }
-
-  const hash = url.hash ?? "";
-  const hashQueryIndex = hash.indexOf("?");
-  if (hashQueryIndex >= 0) {
-    const hashQuery = hash.slice(hashQueryIndex + 1);
-    return new URLSearchParams(hashQuery).get(key);
-  }
-
-  return null;
-}
-
-function buildAuthCallbackHash(input: {
-  token: string;
-  userId?: string | null;
-  provider?: AuthProvider | null;
-  error?: string | null;
-}) {
-  const params = new URLSearchParams();
-  params.set("token", input.token);
-  if (input.userId) {
-    params.set("userId", input.userId);
-  }
-  if (input.provider) {
-    params.set("provider", input.provider);
-  }
-  if (input.error) {
-    params.set("error", input.error);
-  }
-
-  return `#/auth/callback?${params.toString()}`;
-}
-
-function resolveAuthCallbackHashFromUrl(rawUrl: string, nativeAppScheme: string): string | null {
-  try {
-    const parsed = new URL(rawUrl);
-    const looksLikeAuthCallback =
-      normalizeNativeAppScheme(parsed.protocol) === nativeAppScheme ||
-      rawUrl.includes("/auth/callback") ||
-      parsed.hash.includes("/auth/callback") ||
-      (parsed.protocol === "file:" && parsed.pathname.endsWith("/index.html"));
-    if (!looksLikeAuthCallback) {
-      return null;
-    }
-
-    const token = readCallbackValue(parsed, "token");
-    if (!token) {
-      return null;
-    }
-
-    const userId = readCallbackValue(parsed, "userId");
-    const rawProvider = readCallbackValue(parsed, "provider");
-    const provider =
-      rawProvider === "apple" || rawProvider === "kakao" || rawProvider === "naver"
-        ? rawProvider
-        : null;
-    const error = readCallbackValue(parsed, "error");
-
-    return buildAuthCallbackHash({
-      token,
-      userId,
-      provider,
-      error,
-    });
-  } catch {
-    return null;
-  }
-}
-
-function resolveNativeRoutePathFromUrl(rawUrl: string, nativeAppScheme: string): string | null {
-  try {
-    const parsed = new URL(rawUrl);
-    if (normalizeNativeAppScheme(parsed.protocol) !== nativeAppScheme) {
-      return null;
-    }
-
-    const focusPath = parsed.searchParams.get("focusPath");
-    if (focusPath?.startsWith("/")) {
-      return focusPath;
-    }
-
-    const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
-    if (hash.startsWith("/")) {
-      return hash;
-    }
-
-    const hostPath = parsed.hostname ? `/${parsed.hostname}${parsed.pathname}` : parsed.pathname;
-    const normalizedPath = hostPath.startsWith("/") ? hostPath : `/${hostPath}`;
-    if (normalizedPath === "/" || normalizedPath === "/auth/callback") {
-      return null;
-    }
-
-    return `${normalizedPath}${parsed.search}`;
-  } catch {
-    return null;
-  }
-}
-
-function resolveProviderFromBridgeLoginResultType(type: string): AuthProvider | null {
-  if (type === "REST_AUTH_APPLE_LOGIN_RESULT") {
-    return "apple";
-  }
-  if (type === "REST_AUTH_KAKAO_LOGIN_RESULT") {
-    return "kakao";
-  }
-  if (type === "REST_AUTH_NAVER_LOGIN_RESULT") {
-    return "naver";
-  }
-  return null;
-}
-
-async function hasSeenNativePermissionIntro(fileUri: string) {
-  try {
-    const info = await FileSystem.getInfoAsync(fileUri);
-    return info.exists;
-  } catch {
-    return false;
-  }
-}
-
-async function markNativePermissionIntroAsSeen(fileUri: string) {
-  try {
-    await FileSystem.writeAsStringAsync(
-      fileUri,
-      JSON.stringify({ seenAt: new Date().toISOString() }),
-      { encoding: FileSystem.EncodingType.UTF8 }
-    );
-  } catch (error) {
-    console.log("Failed to store native permission intro state:", error);
-  }
-}
-
-function loadExpoLocationModule() {
-  return ExpoLocation;
-}
-
-async function getLocationPermissionState(): Promise<NativePermissionState> {
-  const expoLocation = loadExpoLocationModule();
-  if (expoLocation?.getForegroundPermissionsAsync) {
-    try {
-      const result = await expoLocation.getForegroundPermissionsAsync();
-      if (result.granted || result.status === "granted") {
-        return "granted";
-      }
-      if (result.status === "denied") {
-        return "denied";
-      }
-      return "undetermined";
-    } catch (error) {
-      console.log("Failed to check location permission via expo-location:", error);
-      return "undetermined";
-    }
-  }
-
-  if (Platform.OS === "android") {
-    try {
-      const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-      return granted ? "granted" : "undetermined";
-    } catch (error) {
-      console.log("Failed to check Android location permission:", error);
-      return "undetermined";
-    }
-  }
-
-  return "undetermined";
-}
-
-async function requestLocationPermission(): Promise<boolean> {
-  const expoLocation = loadExpoLocationModule();
-  if (expoLocation?.requestForegroundPermissionsAsync) {
-    try {
-      const result = await expoLocation.requestForegroundPermissionsAsync();
-      return result.granted || result.status === "granted";
-    } catch (error) {
-      console.log("Failed to request location permission via expo-location:", error);
-      return false;
-    }
-  }
-
-  if (Platform.OS === "android") {
-    try {
-      const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-      return result === PermissionsAndroid.RESULTS.GRANTED;
-    } catch (error) {
-      console.log("Failed to request Android location permission:", error);
-      return false;
-    }
-  }
-
-  const geolocation = (globalThis.navigator as { geolocation?: GeolocationLike } | undefined)?.geolocation;
-  if (geolocation?.getCurrentPosition) {
-    return await new Promise<boolean>((resolve) => {
-      geolocation.getCurrentPosition(
-        () => resolve(true),
-        () => resolve(false),
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }
-      );
-    });
-  }
-
-  return false;
-}
-
-async function getLocationPermissionSnapshot(): Promise<LocationPermissionSnapshot> {
-  const expoLocation = loadExpoLocationModule();
-  if (expoLocation?.getForegroundPermissionsAsync) {
-    try {
-      const result = await expoLocation.getForegroundPermissionsAsync();
-      const granted = Boolean(result.granted || result.status === "granted");
-      const status: NativePermissionState =
-        result.status === "granted" ? "granted" : result.status === "denied" ? "denied" : "undetermined";
-      const canAskAgainFromResult = (result as { canAskAgain?: boolean }).canAskAgain;
-      return {
-        granted,
-        canAskAgain:
-          typeof canAskAgainFromResult === "boolean" ? canAskAgainFromResult : status !== "denied",
-        status,
-      };
-    } catch (error) {
-      console.log("Failed to read location permission snapshot via expo-location:", error);
-    }
-  }
-
-  const status = await getLocationPermissionState();
-  return {
-    granted: status === "granted",
-    canAskAgain: status !== "denied",
-    status,
-  };
-}
-
-async function getCurrentLocationCoordinates(): Promise<NativeCoordinates | null> {
-  const expoLocation = loadExpoLocationModule() as {
-    getCurrentPositionAsync?: (options?: {
-      accuracy?: number;
-      timeout?: number;
-      maximumAge?: number;
-    }) => Promise<{ coords?: { latitude?: number; longitude?: number } }>;
-  } | null;
-
-  if (expoLocation?.getCurrentPositionAsync) {
-    try {
-      const result = await expoLocation.getCurrentPositionAsync({
-        timeout: 8000,
-      });
-      const latitude = result?.coords?.latitude;
-      const longitude = result?.coords?.longitude;
-      if (typeof latitude === "number" && typeof longitude === "number") {
-        return { latitude, longitude };
-      }
-    } catch (error) {
-      console.log("Failed to read current position via expo-location:", error);
-    }
-  }
-
-  const geolocation = (globalThis.navigator as { geolocation?: GeolocationLike } | undefined)?.geolocation;
-  if (!geolocation?.getCurrentPosition) {
-    return null;
-  }
-
-  return await new Promise<NativeCoordinates | null>((resolve) => {
-    geolocation.getCurrentPosition(
-      (position) => {
-        const latitude = position?.coords?.latitude;
-        const longitude = position?.coords?.longitude;
-        if (typeof latitude === "number" && typeof longitude === "number") {
-          resolve({ latitude, longitude });
-          return;
-        }
-        resolve(null);
-      },
-      () => resolve(null),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
-    );
-  });
-}
-
-async function getLocationCoordinatesSnapshot(): Promise<LocationCoordinatesSnapshot> {
-  const permission = await getLocationPermissionSnapshot();
-  if (!permission.granted) {
-    return {
-      ...permission,
-      coordinates: null,
-    };
-  }
-
-  const coordinates = await getCurrentLocationCoordinates();
-  return {
-    ...permission,
-    coordinates,
-  };
-}
-
-async function fetchNativeWeatherSnapshot(): Promise<NativeWeatherSnapshot | null> {
-  const locationSnapshot = await getLocationCoordinatesSnapshot();
-  if (!locationSnapshot.granted || !locationSnapshot.coordinates) {
-    return null;
-  }
-  const coordinates = locationSnapshot.coordinates;
-
-  const url = new URL("https://api.open-meteo.com/v1/forecast");
-  url.searchParams.set("latitude", String(coordinates.latitude));
-  url.searchParams.set("longitude", String(coordinates.longitude));
-  url.searchParams.set("current", "temperature_2m,weather_code,is_day");
-  url.searchParams.set("forecast_days", "1");
-  url.searchParams.set("timezone", "auto");
-
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error(`Open-Meteo weather API error: ${response.status}`);
-  }
-
-  const data = (await response.json()) as {
-    current?: { temperature_2m?: number; weather_code?: number; is_day?: number };
-  };
-  const current = data.current;
-  if (
-    !current ||
-    typeof current.temperature_2m !== "number" ||
-    typeof current.weather_code !== "number" ||
-    typeof current.is_day !== "number"
-  ) {
-    throw new Error("Invalid Open-Meteo weather payload");
-  }
-
-  return {
-    temperature: current.temperature_2m,
-    weatherCode: current.weather_code,
-    isDay: current.is_day,
-    coordinates,
-    source: "device",
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function FocusLaunchOverlay({
-  statusMessage,
-  progressPercent,
-  showProgress = true,
-}: {
-  statusMessage: string;
-  progressPercent: number;
-  showProgress?: boolean;
-}) {
-  const progressWidth =
-    (LAUNCH_PROGRESS_BAR_WIDTH * Math.max(0, Math.min(progressPercent, 100))) / 100;
-
-  return (
-    <View style={styles.launchOverlay}>
-      <View style={styles.launchLogoFrame}>
-        <Image
-          source={require("../assets/images/splash-icon.png")}
-          style={styles.launchLogo}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-      </View>
-      {showProgress ? (
-        <View
-          style={styles.launchProgressGroup}
-          accessible
-          accessibilityRole="progressbar"
-          accessibilityLabel={statusMessage}
-          accessibilityValue={{ min: 0, max: 100, now: progressPercent }}>
-          <View style={styles.launchProgressTrack}>
-            <View style={[styles.launchProgressFill, { width: progressWidth }]} />
-          </View>
-          <Text style={styles.launchStatusText}>{statusMessage}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
 }
 
 export default function WebViewScreen() {
@@ -1885,7 +614,7 @@ export default function WebViewScreen() {
     let cancelled = false;
     const showPermissionIntroIfNeeded = async () => {
       try {
-        const hasSeenIntro = await hasSeenNativePermissionIntro(NOTIFICATION_PERMISSION_INTRO_FILE_URI);
+        const hasSeenIntro = await hasSeenNativePermissionIntro();
         if (cancelled) {
           return;
         }
@@ -1911,7 +640,7 @@ export default function WebViewScreen() {
   }, []);
 
   const completePermissionIntro = async () => {
-    await markNativePermissionIntroAsSeen(NOTIFICATION_PERMISSION_INTRO_FILE_URI);
+    await markNativePermissionIntroAsSeen();
     setIsPermissionIntroVisible(false);
   };
 
@@ -2152,6 +881,54 @@ export default function WebViewScreen() {
     []
   );
 
+  const bridgeDeps = useMemo<RouteWebViewBridgeDeps>(
+    () => ({
+      sync: {
+        handleTodoViewSync,
+        applyWeatherSettingsSync,
+        refreshNativeWeatherSnapshot,
+        syncFocusLiveActivityAuth: (payload) =>
+          callFocusLiveActivityModule("configure", payload),
+      },
+      notification: {
+        sendBridgeResult,
+        requestRestNotificationPermission: async () => {
+          await requestRestNotificationPermission();
+        },
+        getRestNotificationPermissionSnapshot,
+        getRestExpoPushTokenSnapshot,
+        openAppSettings: async () => {
+          await Linking.openSettings().catch((error) => {
+            console.log("Failed to open settings from web bridge:", error);
+          });
+        },
+      },
+      location: createNativeLocationBridgeDeps(sendBridgeResult),
+      version: createNativeVersionBridgeDeps({
+        sendBridgeResult,
+        webUiReleaseChannel,
+        platform: nativePlatform,
+      }),
+      auth: createNativeAuthBridgeDeps({ sendBridgeResult, hybridApiOrigin }),
+      focusLiveActivity: createNativeFocusLiveActivityBridgeDeps(
+        ackPendingFocusLiveActivityControlEvent
+      ),
+    }),
+    [
+      ackPendingFocusLiveActivityControlEvent,
+      applyWeatherSettingsSync,
+      getRestExpoPushTokenSnapshot,
+      getRestNotificationPermissionSnapshot,
+      handleTodoViewSync,
+      hybridApiOrigin,
+      nativePlatform,
+      refreshNativeWeatherSnapshot,
+      requestRestNotificationPermission,
+      sendBridgeResult,
+      webUiReleaseChannel,
+    ]
+  );
+
   const handleMessage = async (event: WebViewMessageEvent) => {
     const { data } = event.nativeEvent;
 
@@ -2161,67 +938,7 @@ export default function WebViewScreen() {
         console.log("[WebView debug]", parsedData.type, parsedData.payload);
         return;
       }
-      const isHandledBridgeMessage = await routeWebViewBridgeMessage(parsedData, {
-        sync: {
-          handleTodoViewSync,
-          applyWeatherSettingsSync,
-          refreshNativeWeatherSnapshot,
-          syncFocusLiveActivityAuth: async (payload) => {
-            return await callFocusLiveActivityModule("configure", payload);
-          },
-        },
-        notification: {
-          sendBridgeResult,
-          requestRestNotificationPermission: async () => {
-            await requestRestNotificationPermission();
-          },
-          getRestNotificationPermissionSnapshot,
-          getRestExpoPushTokenSnapshot,
-          openAppSettings: async () => {
-            await Linking.openSettings().catch((error) => {
-              console.log("Failed to open settings from web bridge:", error);
-            });
-          },
-        },
-        location: {
-          sendBridgeResult,
-          getLocationPermissionSnapshot,
-          requestLocationPermission,
-          getLocationCoordinatesSnapshot,
-        },
-        version: {
-          sendBridgeResult,
-          getNativeAppVersion: resolveNativeAppVersion,
-          getStoredWebUiReleaseSnapshot: readStoredWebUiReleaseSnapshot,
-          webUiReleaseChannel,
-          platform: nativePlatform,
-        },
-        auth: {
-          sendBridgeResult,
-          hybridApiOrigin,
-          requestNativeAppleCredential,
-          requestNativeNaverAccessToken,
-          requestNativeKakaoOAuthToken,
-          exchangeAppleIdentityTokenForSession,
-          exchangeNaverAccessTokenForSession,
-          exchangeKakaoAccessTokenForSession,
-          unlinkNaverAccountWithTimeout,
-          unlinkKakaoAccountWithTimeout,
-          resolveNativeErrorCode,
-        },
-        focusLiveActivity: {
-          startFocusLiveActivity: async (payload) => {
-            return await callFocusLiveActivityModule("start", payload);
-          },
-          updateFocusLiveActivity: async (payload) => {
-            return await callFocusLiveActivityModule("update", payload);
-          },
-          endFocusLiveActivity: async (payload) => {
-            return await callFocusLiveActivityModule("end", payload);
-          },
-          ackFocusLiveActivityControlEvent: ackPendingFocusLiveActivityControlEvent,
-        },
-      });
+      const isHandledBridgeMessage = await routeWebViewBridgeMessage(parsedData, bridgeDeps);
       if (isHandledBridgeMessage) {
         return;
       }
@@ -2414,49 +1131,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0B1220",
-  },
-  launchOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 30,
-    backgroundColor: "#0B1220",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchLogoFrame: {
-    width: 200,
-    height: 200,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchLogo: {
-    width: 200,
-    height: 200,
-  },
-  launchStatusText: {
-    marginTop: 10,
-    color: "rgba(226, 232, 240, 0.86)",
-    fontSize: 13,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
-  launchProgressGroup: {
-    position: "absolute",
-    top: "50%",
-    marginTop: 108,
-    width: LAUNCH_PROGRESS_BAR_WIDTH,
-    alignItems: "center",
-  },
-  launchProgressTrack: {
-    width: LAUNCH_PROGRESS_BAR_WIDTH,
-    height: 4,
-    borderRadius: 99,
-    backgroundColor: "rgba(148, 163, 184, 0.24)",
-    overflow: "hidden",
-  },
-  launchProgressFill: {
-    height: "100%",
-    borderRadius: 99,
-    backgroundColor: "#2CE6A6",
   },
   webViewContainer: {
     flex: 1,
