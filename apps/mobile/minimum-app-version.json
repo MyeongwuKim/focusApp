@@ -2,7 +2,7 @@
   "dev": {
     "ios": {
       "enabled": true,
-      "minimumVersion": "1.0.0",
+      "minimumVersion": "1.0.1",
       "storeUrl": "https://testflight.apple.com/"
     },
     "android": {

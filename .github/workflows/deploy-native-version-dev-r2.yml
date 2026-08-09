@@ -58,7 +58,7 @@ jobs:
             }
           }
 
-          const outputPath = path.join(process.env.RUNNER_TEMP, "minimum-app-version.json");
+          const outputPath = path.join(process.env.RUNNER_TEMP, "latest.json");
           fs.writeFileSync(outputPath, JSON.stringify(config.dev, null, 2));
           NODE
 
@@ -67,7 +67,15 @@ jobs:
           ENDPOINT_URL="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           aws s3 cp \
-            "$RUNNER_TEMP/minimum-app-version.json" \
+            "$RUNNER_TEMP/latest.json" \
+            "s3://${R2_BUCKET_NAME}/native/latest.json" \
+            --endpoint-url "$ENDPOINT_URL" \
+            --checksum-algorithm CRC32 \
+            --content-type "application/json" \
+            --cache-control "no-cache"
+
+          aws s3 cp \
+            "$RUNNER_TEMP/latest.json" \
             "s3://${R2_BUCKET_NAME}/native/minimum-app-version.json" \
             --endpoint-url "$ENDPOINT_URL" \
             --checksum-algorithm CRC32 \
@@ -76,4 +84,4 @@ jobs:
 
       - name: Summary
         run: |
-          echo "Public policy: ${R2_PUBLIC_BASE_URL}/native/minimum-app-version.json"
+          echo "Public policy: ${R2_PUBLIC_BASE_URL}/native/latest.json"

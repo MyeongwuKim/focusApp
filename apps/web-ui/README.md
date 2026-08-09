@@ -230,7 +230,7 @@ Web UI 원격 번들은 GitHub Actions로 Cloudflare R2에 배포합니다.
 5. `releases/<version>/`과 `latest/manifest.json`을 R2에 업로드합니다.
 6. 이전 릴리즈를 정리하고 최근 5개만 남깁니다.
 
-단일 Native 최소 버전 정책 파일에서 현재 브랜치의 환경 항목만 추출해 각 환경 R2의 `native/minimum-app-version.json`에 업로드합니다.
+단일 Native 최소 버전 정책 파일에서 현재 브랜치의 환경 항목만 추출해 각 환경 R2의 `native/latest.json`에 업로드합니다. 기존 앱 호환을 위해 `native/minimum-app-version.json`에도 같은 정책을 유지합니다.
 
 R2 접근 정보와 dev/prod 버킷 주소는 GitHub Actions secrets로 관리합니다.
 

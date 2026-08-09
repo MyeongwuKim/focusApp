@@ -193,7 +193,7 @@ pnpm native:ios:prod
 | `EXPO_PUBLIC_NAVER_DISABLE_APP_AUTH_IOS` | iOS에서 네이버 앱 인증을 비활성화할지 결정합니다. |
 | `EXPO_PUBLIC_WEBUI_CHANNEL` | WebUI 업데이트 채널입니다. `dev`, `prod`, `none`을 사용할 수 있습니다. |
 | `EXPO_PUBLIC_WEBUI_MANIFEST_URL` | 원격 WebUI `latest/manifest.json` URL입니다. |
-| `EXPO_PUBLIC_MINIMUM_APP_VERSION_URL` | R2의 `native/minimum-app-version.json` URL입니다. 없으면 WebUI manifest URL에서 자동으로 계산합니다. |
+| `EXPO_PUBLIC_MINIMUM_APP_VERSION_URL` | R2의 `native/latest.json` URL입니다. 없으면 WebUI manifest URL에서 자동으로 계산합니다. |
 | `EXPO_PUBLIC_IOS_APP_STORE_URL` | 버전 정책에 `storeUrl`이 없을 때 사용할 iOS App Store URL입니다. |
 | `EXPO_PUBLIC_ANDROID_PLAY_STORE_URL` | 버전 정책에 `storeUrl`이 없을 때 사용할 Android Play Store URL입니다. |
 | `EXPO_PUBLIC_WEATHER_RENDERER` | 날씨 레이어 renderer를 `legacy` 또는 `skia`로 override합니다. |
@@ -215,7 +215,7 @@ pnpm native:ios:prod
 
 `app-version.json`은 dev/prod 앱 버전의 단일 기준입니다. `dev` 버전은 test 네이티브 variant에, `prod` 버전은 prod 네이티브 variant에 적용합니다. iOS와 Android 버전을 따로 지정할 수 있으며, 빌드 명령이 선택한 플랫폼 버전을 Expo 설정과 네이티브 프로젝트에 반영합니다.
 
-`minimum-app-version.json`은 dev/prod 환경별 iOS·Android 최소 앱 버전 정책을 한곳에서 관리합니다. 각 플랫폼은 `enabled`, `minimumVersion`, `storeUrl`을 가지며, `enabled`가 `true`일 때만 강제 업데이트를 적용합니다. `develop`에서는 `dev` 항목만 개발용 R2로, `master`에서는 `prod` 항목만 운영용 R2의 `native/minimum-app-version.json`으로 업로드됩니다. develop에서 prod 항목을 수정해도 운영용 R2에는 반영되지 않으며 해당 변경이 master에 병합된 뒤 배포됩니다.
+`minimum-app-version.json`은 dev/prod 환경별 iOS·Android 최소 앱 버전 정책을 한곳에서 관리합니다. 각 플랫폼은 `enabled`, `minimumVersion`, `storeUrl`을 가지며, `enabled`가 `true`일 때만 강제 업데이트를 적용합니다. `develop`에서는 `dev` 항목만 개발용 R2로, `master`에서는 `prod` 항목만 운영용 R2의 `native/latest.json`으로 업로드됩니다. 이전 앱이 기존 경로를 계속 조회하므로 동일한 정책을 `native/minimum-app-version.json`에도 함께 업로드합니다. develop에서 prod 항목을 수정해도 운영용 R2에는 반영되지 않으며 해당 변경이 master에 병합된 뒤 배포됩니다.
 
 `native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 빌드 번호 설정을 관리합니다. dev iOS 프로젝트는 Xcode에서 `timestackT`로 표시되지만 기기 홈 화면에서는 기존대로 `타임스택 (T)`를 사용합니다.
 
@@ -253,7 +253,7 @@ pnpm -C apps/mobile native:sync:prod
 
 ## WebUI 번들 업데이트
 
-앱은 진행 표시를 띄우기 전에 연결된 R2의 `native/minimum-app-version.json`을 조회합니다. 현재 플랫폼의 `enabled`가 `true`이고 설치된 앱 버전이 `minimumVersion`보다 낮으면 업데이트 안내를 표시하며, 버튼은 해당 정책의 `storeUrl`로 이동합니다. 정책 조회에 실패하거나 `enabled`가 `false`이면 WebUI 준비를 계속합니다.
+앱은 진행 표시를 띄우기 전에 연결된 R2의 `native/latest.json`을 조회합니다. 현재 플랫폼의 `enabled`가 `true`이고 설치된 앱 버전이 `minimumVersion`보다 낮으면 업데이트 안내를 표시하며, 버튼은 해당 정책의 `storeUrl`로 이동합니다. 정책 조회에 실패하거나 `enabled`가 `false`이면 WebUI 준비를 계속합니다.
 
 버전 확인을 통과하면 내장 WebUI 번들을 active 디렉터리에 준비합니다. `EXPO_PUBLIC_WEBUI_CHANNEL`이 `none`이 아니고 `EXPO_PUBLIC_WEBUI_MANIFEST_URL`이 있으면 원격 manifest를 조회합니다.
 
@@ -269,7 +269,7 @@ WebUI 버전과 앱 버전은 서로 다르게 관리합니다.
 | --- | --- |
 | 앱 버전 | `app-version.json`의 dev/prod 플랫폼별 버전입니다. |
 | WebUI 버전 | R2 `latest/manifest.json`의 `version`입니다. |
-| 최소 앱 버전 | 현재 환경 R2 `native/minimum-app-version.json`의 플랫폼별 `minimumVersion`입니다. |
+| 최소 앱 버전 | 현재 환경 R2 `native/latest.json`의 플랫폼별 `minimumVersion`입니다. |
 
 ## 브릿지 메시지
 
@@ -326,7 +326,7 @@ production 빌드가 prod R2 manifest를 읽으려면 EAS production env에 아�
 EXPO_PUBLIC_API_ORIGIN=https://<Cloud-Run-API-도메인>
 EXPO_PUBLIC_WEBUI_CHANNEL=prod
 EXPO_PUBLIC_WEBUI_MANIFEST_URL=https://<prod-r2-public-base-url>/latest/manifest.json
-EXPO_PUBLIC_MINIMUM_APP_VERSION_URL=https://<prod-r2-public-base-url>/native/minimum-app-version.json
+EXPO_PUBLIC_MINIMUM_APP_VERSION_URL=https://<prod-r2-public-base-url>/native/latest.json
 ```
 
 위 값은 Expo EAS의 `production` environment에서 관리합니다. `native:ios:prod` 실행 전 로컬 환경변수 파일을 수정할 필요는 없습니다.

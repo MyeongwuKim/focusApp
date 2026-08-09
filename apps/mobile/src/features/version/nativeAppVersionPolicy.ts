@@ -18,7 +18,7 @@ export type NativeUpdateRequirement = {
 };
 
 const NATIVE_VERSION_POLICY_FETCH_TIMEOUT_MS = 5000;
-const NATIVE_VERSION_POLICY_PATH = "native/minimum-app-version.json";
+const NATIVE_VERSION_POLICY_PATH = "native/latest.json";
 
 export function resolveNativeAppVersionPolicyUrl(input: {
   explicitUrl?: string;
