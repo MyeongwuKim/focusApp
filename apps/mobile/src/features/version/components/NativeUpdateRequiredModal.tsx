@@ -13,7 +13,7 @@ export function NativeUpdateRequiredModal({
         <View style={styles.textWrap}>
           <Text style={styles.title}>업데이트가 필요해요</Text>
           <Text style={styles.description}>
-            최신 앱 버전에서 사용할 수 있는 기능이 포함되어 있어요.{"\n"}
+            최신 버전에 새로운 기능이 포함되어 있어요.{"\n"}
             업데이트 후 다시 실행해주세요.
           </Text>
         </View>

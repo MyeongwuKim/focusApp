@@ -195,6 +195,82 @@ function replaceIosBundleIdentifiers(projectContent, bundleIdentifier) {
   );
 }
 
+function findSynchronizedRootGroup(group, SynchronizedRootGroup, groupPath) {
+  if (SynchronizedRootGroup.is(group) && group.props.path === groupPath) {
+    return group;
+  }
+
+  for (const child of group.props.children ?? []) {
+    const matched = findSynchronizedRootGroup(child, SynchronizedRootGroup, groupPath);
+    if (matched) {
+      return matched;
+    }
+  }
+
+  return null;
+}
+
+function syncFocusLiveActivityTargetMembership(projectPath) {
+  const appleTargetsRoot = path.dirname(
+    require.resolve("@bacons/apple-targets/package.json", { paths: [appRoot] })
+  );
+  const xcode = require(require.resolve("@bacons/xcode", { paths: [appleTargetsRoot] }));
+  const xcodeJson = require(
+    require.resolve("@bacons/xcode/json", { paths: [appleTargetsRoot] })
+  );
+  const project = xcode.XcodeProject.open(projectPath);
+  const widgetTarget = project.rootObject.props.targets.find(
+    (target) =>
+      xcode.PBXNativeTarget.is(target) && target.props.name === "FocusLiveActivityWidget"
+  );
+  const synchronizedGroup = findSynchronizedRootGroup(
+    project.rootObject.props.mainGroup,
+    xcode.PBXFileSystemSynchronizedRootGroup,
+    "focus-live-activity"
+  );
+
+  if (!widgetTarget || !synchronizedGroup) {
+    throw new Error(
+      "FocusLiveActivityWidget target or synchronized source group is missing. Run Expo prebuild first."
+    );
+  }
+
+  synchronizedGroup.props.exceptions ??= [];
+  let exceptionSet = synchronizedGroup.props.exceptions.find(
+    (exception) =>
+      xcode.PBXFileSystemSynchronizedBuildFileExceptionSet.is(exception) &&
+      exception.props.target === widgetTarget
+  );
+  const requiredExceptions = ["Info.plist", "expo-target.config.js"];
+  let didChange = false;
+
+  if (!exceptionSet) {
+    exceptionSet = xcode.PBXFileSystemSynchronizedBuildFileExceptionSet.create(project, {
+      target: widgetTarget,
+      membershipExceptions: requiredExceptions,
+    });
+    synchronizedGroup.props.exceptions.push(exceptionSet);
+    didChange = true;
+  } else {
+    const nextExceptions = Array.from(
+      new Set([...(exceptionSet.props.membershipExceptions ?? []), ...requiredExceptions])
+    ).sort();
+    if (
+      JSON.stringify(nextExceptions) !==
+      JSON.stringify(exceptionSet.props.membershipExceptions ?? [])
+    ) {
+      exceptionSet.props.membershipExceptions = nextExceptions;
+      didChange = true;
+    }
+  }
+
+  if (!didChange) {
+    return false;
+  }
+
+  return writeIfChanged(projectPath, xcodeJson.build(project.toJSON()));
+}
+
 function syncAppGroupEntitlements(filePath, appGroup) {
   if (!filePath || !fs.existsSync(filePath)) {
     return false;
@@ -389,6 +465,9 @@ function syncIos(input) {
     );
   }
   const didUpdateProject = writeIfChanged(iosProjectFiles.projectPath, projectContent);
+  const didUpdateWidgetTargetMembership = syncFocusLiveActivityTargetMembership(
+    iosProjectFiles.projectPath
+  );
 
   const escapedAppName = escapeXml(input.appName);
   const escapedAppScheme = escapeXml(input.appScheme);
@@ -471,6 +550,7 @@ function syncIos(input) {
   console.log(
     `[native-sync] iOS ${
       didUpdateProject ||
+      didUpdateWidgetTargetMembership ||
       didUpdatePlist ||
       didUpdateAppDelegate ||
       didUpdateAppEntitlements ||
