@@ -4,12 +4,12 @@ import { captureServerError, resolveErrorCode } from "../../common/observability
 import { prisma } from "../../common/prisma.js";
 import { env } from "../../config/env.js";
 import {
-  hasEmptyPlanRestSuggestion,
+  hasConsistentHaeyoSpeechLevel,
+  hasRestSuggestion,
   pickEmptyPlanFallback,
 } from "./motivation-message.utils.js";
 
 type ServiceErrorCode = "OPENAI_KEY_MISSING" | "OPENAI_REQUEST_FAILED" | "OPENAI_EMPTY_RESPONSE";
-type MotivationStyle = "plan-aware" | "gentle" | "direct";
 
 type MotivationTodo = {
   content?: string | null;
@@ -57,8 +57,6 @@ type MotivationContext = {
   };
 };
 
-let recentStyles: MotivationStyle[] = [];
-
 const DEFAULT_TIMEZONE = env.NOTIFICATION_BATCH_TIMEZONE;
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TODO_LABEL_LENGTH = 14;
@@ -80,35 +78,9 @@ const UNNATURAL_MOTIVATION_PATTERNS = [
   /(?:해보세요|해봅시다|하십시오|하세요|시작하세요|진행하세요)/,
   /작게라도/,
   /멋진\s*하루/,
+  /(?:무거|흐름|첫\s*단추)/,
+  /\d+\s*분(?:만|이면|부터)/,
 ];
-
-function pickMotivationStyle() {
-  const candidates: MotivationStyle[] = ["plan-aware", "gentle", "direct"];
-  const available = candidates.filter((style) => !recentStyles.includes(style));
-  const pool = available.length > 0 ? available : candidates;
-  const picked = pool[Math.floor(Math.random() * pool.length)] ?? "plan-aware";
-  recentStyles = [...recentStyles, picked].slice(-2);
-  return picked;
-}
-
-function styleInstruction(style: MotivationStyle) {
-  if (style === "plan-aware") {
-    return [
-      "이번 문장은 오늘 할 일 상태를 보고 건네는 말처럼 쓴다.",
-      "숫자는 꼭 자연스러울 때만 최대 1개 사용한다.",
-    ];
-  }
-  if (style === "gentle") {
-    return [
-      "이번 문장은 부담을 낮추는 말투로 쓴다.",
-      "성과를 과하게 칭찬하지 말고, 다음 행동을 편하게 열어준다.",
-    ];
-  }
-  return [
-    "이번 문장은 바로 할 수 있는 작은 행동을 자연스럽게 제안한다.",
-    "명령형 대신 같이 정리해주는 말투로 쓴다.",
-  ];
-}
 
 function getZonedNow(now: Date, timezone: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -306,34 +278,39 @@ function buildContextLines(context: MotivationContext) {
   return lines;
 }
 
-function buildPrompt(input: { context: MotivationContext; style: MotivationStyle }) {
-  const styleGuide = styleInstruction(input.style);
+function buildPrompt(context: MotivationContext) {
   const emptyPlanGuide =
-    input.context.today.todoCount === 0
+    context.today.todoCount === 0
       ? [
           "오늘 할 일이 0개여도 쉬는 날이나 휴식이 필요하다고 추측하지 않는다.",
-          "쉬다, 쉬어도 된다, 휴식, 아무것도 하지 않아도 된다는 표현을 사용하지 않는다.",
           "일정을 가볍게 확인하거나 필요한 할 일 하나를 고르는 방향으로 말한다.",
         ]
       : [];
   return [
-    "너는 할 일 앱을 켠 사용자에게 짧게 말을 건네는 AI 코치다.",
+    "너는 할 일 앱에서 사용자의 다음 한 걸음을 돕는 따뜻한 페이스메이커다.",
     "반드시 한국어 한 문장만 출력한다.",
     "길이는 22~55자 사이로 유지한다.",
-    "말투는 친한 선배가 가볍게 챙겨주는 느낌으로 쓴다.",
+    "캐릭터는 매번 동일하다: 다정하지만 늘어지지 않고, 부담을 키우지 않으면서 행동을 당긴다.",
+    "반드시 부드러운 해요체 존댓말만 쓰고, 반말과 합니다체는 쓰지 않는다.",
+    "상태를 짧게 짚은 뒤 오늘 할 일에 바로 손댈 수 있는 말을 건넨다.",
+    "과거의 미완료를 지적하거나 사용자가 죄책감을 느낄 표현은 쓰지 않는다.",
+    "할 일이 모두 끝난 경우에도 휴식을 권하지 말고, 완료한 일을 짧게 인정하며 마무리한다.",
+    "쉬다, 쉬어도 된다, 휴식, 아무것도 하지 않아도 된다는 표현은 어떤 경우에도 사용하지 않는다.",
     "사용자 기록을 보고 말하되, 분석 리포트처럼 보이지 않게 쓴다.",
+    "숫자는 문장에 꼭 자연스러울 때만 최대 1개 사용한다.",
+    "참고 상태에 없는 시간이나 분량을 임의로 정해서 제안하지 않는다.",
     "할 일 제목은 필요할 때만 자연스럽게 1개까지 언급한다.",
     "명언, 유명인, 과장된 응원, 뻔한 자기계발 문구 금지.",
     "따옴표, 번호, 줄바꿈, 이모지, 느낌표 사용 금지.",
     "허위 출처나 사실 주장 금지.",
-    "금지 표현: 동기부여, 생산성, 데이터, 분석, 확인했어요, 패턴, 목표를 향해, 성공, 파이팅, 화이팅, 할 수 있어요, 오늘도, 해보세요, 하세요.",
-    "좋은 예시 톤: 가장 짧은 것부터 열어두면 오늘이 덜 무거워져요.",
-    "좋은 예시 톤: 이미 하나 끝냈으니 다음은 가볍게 이어가도 돼요.",
+    "금지 표현: 동기부여, 생산성, 데이터, 분석, 확인했어요, 패턴, 목표를 향해, 성공, 파이팅, 화이팅, 할 수 있어요, 오늘도, 해보세요, 하세요, 괜찮아, 힘내, 하자, 시작이 무겁다, 흐름, 첫 단추.",
+    "좋은 예시 톤: 가장 가까운 일부터 시작해봐요, 하나 끝내고 다음을 보면 돼요.",
+    "좋은 예시 톤: 벌써 하나 끝냈네요, 다음은 가장 가까운 일부터 이어가봐요.",
+    "좋은 예시 톤: 오늘 할 일은 다 끝냈네요, 계획한 만큼 제대로 해냈어요.",
     ...emptyPlanGuide,
-    ...styleGuide,
     "",
     "참고 상태:",
-    ...buildContextLines(input.context),
+    ...buildContextLines(context),
   ].join("\n");
 }
 
@@ -349,7 +326,7 @@ function isNaturalMotivationMessage(text: string, context: MotivationContext) {
   if (text.length < 10 || text.length > 80) {
     return false;
   }
-  if (context.today.todoCount === 0 && hasEmptyPlanRestSuggestion(text)) {
+  if (hasRestSuggestion(text) || !hasConsistentHaeyoSpeechLevel(text)) {
     return false;
   }
   return !UNNATURAL_MOTIVATION_PATTERNS.some((pattern) => pattern.test(text));
@@ -363,26 +340,20 @@ function buildFallbackMotivationMessage(context: MotivationContext) {
   }
 
   if (context.today.openCount === 0) {
-    return "오늘 할 일은 잘 닫혔으니 남은 시간은 편하게 정리해요.";
+    return "오늘 할 일은 다 끝냈네요, 계획한 만큼 제대로 해냈어요.";
   }
 
   if (context.today.doneCount > 0) {
     return firstOpenTodo
-      ? `이미 ${context.today.doneCount}개 끝냈어요. 다음은 ${firstOpenTodo}만 가볍게 이어가요.`
-      : `이미 ${context.today.doneCount}개 끝냈어요. 다음 하나만 가볍게 이어가요.`;
-  }
-
-  if (context.yesterday && context.yesterday.openCount > 0) {
-    return firstOpenTodo
-      ? `어제 남은 무게는 내려두고 ${firstOpenTodo}부터 열어봐요.`
-      : "어제 남은 무게는 내려두고 오늘 첫 할 일부터 열어봐요.";
+      ? `벌써 ${context.today.doneCount}개 끝냈네요, 다음은 ${firstOpenTodo}부터 이어가봐요.`
+      : `벌써 ${context.today.doneCount}개 끝냈네요, 다음은 가장 가까운 일부터 이어가봐요.`;
   }
 
   if (firstOpenTodo) {
-    return `${firstOpenTodo}부터 10분만 열어두면 오늘이 덜 무거워져요.`;
+    return `${firstOpenTodo}부터 시작해봐요, 하나 끝내고 다음을 보면 돼요.`;
   }
 
-  return "가장 짧은 것부터 열어두면 오늘이 덜 무거워져요.";
+  return "가장 가까운 일부터 시작해봐요, 하나 끝내고 다음을 보면 돼요.";
 }
 
 async function requestMotivationMessage(context: MotivationContext) {
@@ -392,7 +363,6 @@ async function requestMotivationMessage(context: MotivationContext) {
     throw error;
   }
 
-  const style = pickMotivationStyle();
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -401,8 +371,8 @@ async function requestMotivationMessage(context: MotivationContext) {
     },
     body: JSON.stringify({
       model: env.OPENAI_MODEL,
-      input: buildPrompt({ context, style }),
-      temperature: 0.65,
+      input: buildPrompt(context),
+      temperature: 0.4,
       max_output_tokens: 120,
     }),
   });

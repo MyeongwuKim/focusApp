@@ -289,7 +289,7 @@ function App() {
 
         toast.show({
           type: "positive",
-          title: "오늘 계획을 보고 한마디",
+          title: "지금 필요한 한마디",
           message: result.message,
           duration: 4200,
         });

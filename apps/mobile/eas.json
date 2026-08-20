@@ -9,11 +9,16 @@
       "environment": "production",
       "env": {
         "APP_VARIANT": "prod",
+        "APP_PLATFORM": "ios",
         "EAS_NO_FROZEN_LOCKFILE": "1"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6767450370"
+      }
+    }
   }
 }

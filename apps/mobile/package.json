@@ -11,7 +11,7 @@
     "ios:device": "expo run:ios --device",
     "ios:local": "expo run:ios",
     "ios:dev": "bash ./scripts/build-ios-dev.sh",
-    "ios:prod": "APP_VARIANT=prod APP_PLATFORM=ios eas build --platform ios --profile production",
+    "ios:prod": "APP_VARIANT=prod APP_PLATFORM=ios eas build --platform ios --profile production --auto-submit-with-profile production",
     "web": "expo start --web",
     "lint": "expo lint"
   },

@@ -12,9 +12,15 @@
       "requireFullScreen": true,
       "bundleIdentifier": "com.myeongwu.focushybrid",
       "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true,
+        "CFBundleDevelopmentRegion": "ko",
+        "CFBundleLocalizations": ["ko"],
         "NSLocationWhenInUseUsageDescription": "집중 기록 화면에서 위치 기반 기능(예: 날씨)을 제공하기 위해 위치 권한이 필요합니다.",
         "ITSAppUsesNonExemptEncryption": false
       }
+    },
+    "locales": {
+      "ko": "./locales/ko.json"
     },
     "android": {
       "permissions": ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION"],

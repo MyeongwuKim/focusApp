@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "NSLocationWhenInUseUsageDescription": "집중 기록 화면에서 위치 기반 기능(예: 날씨)을 제공하기 위해 위치 권한이 필요합니다.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "집중 기록 화면에서 위치 기반 기능(예: 날씨)을 제공하기 위해 위치 권한이 필요합니다.",
+    "NSLocationAlwaysUsageDescription": "집중 기록 화면에서 위치 기반 기능(예: 날씨)을 제공하기 위해 위치 권한이 필요합니다."
+  }
+}

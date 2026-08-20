@@ -134,7 +134,7 @@ Web UI에서는 날짜별 기록을 기준으로 완료·미완료 수, 집중·
 | Native prod 최소 버전 정책 | `master` 브랜치의 정책 파일 변경 | GitHub Actions가 `prod` 항목을 운영용 R2 버킷의 `native/latest.json`으로 갱신합니다. |
 | API | Google Cloud의 Cloud Build 트리거 | `apps/api/Dockerfile`로 이미지를 만들어 Cloud Run에서 실행합니다. 트리거의 브랜치와 배포 조건은 저장소가 아닌 Google Cloud에서 관리합니다. |
 | 서버 푸시 배치 | Cloud Scheduler 5분 주기 | 배치 엔드포인트를 호출해 오늘 할 일 등록과 미완료 할 일 리마인드 대상을 확인합니다. |
-| Native | `pnpm native:ios:prod` 수동 실행 | EAS production 환경변수와 프로필을 사용해 iOS 원격 빌드를 시작합니다. |
+| Native | `pnpm native:prod` 수동 실행 | EAS production 환경변수와 프로필을 사용해 iOS 원격 빌드 후 App Store Connect에 자동 제출합니다. |
 
 Web UI R2 배포 워크플로는 현재 manifest의 patch 버전을 올리고, 빌드 결과를 `web-ui.zip`으로 묶어 SHA-256이 포함된 새 manifest를 만듭니다. 버전별 경로와 `latest/manifest.json`을 함께 갱신한 뒤 최근 5개 릴리즈만 남깁니다. Native 최소 버전 정책은 별도 워크플로가 `native/latest.json`으로 배포합니다.
 
@@ -187,9 +187,9 @@ pnpm install
 | iOS 시뮬레이터 테스트 | `pnpm native:ios:local` |
 | 연결된 iPhone과 Metro 테스트 | `pnpm native:ios:device` |
 | Xcode archive 및 수동 TestFlight 테스트 준비 | `pnpm native:ios:dev` |
-| Expo EAS production 빌드 | `pnpm native:ios:prod` |
+| Expo EAS production 빌드 및 제출 | `pnpm native:prod` |
 
-iOS 검증은 `native:ios:local → native:ios:device → native:ios:dev → native:ios:prod` 순서로 진행합니다. 단계별 `EXPO_PUBLIC_API_ORIGIN` 설정과 실행 조건은 [Native README](./apps/mobile/README.md)에 정리되어 있습니다.
+iOS 검증은 `native:ios:local → native:ios:device → native:ios:dev → native:prod` 순서로 진행합니다. 단계별 `EXPO_PUBLIC_API_ORIGIN` 설정과 실행 조건은 [Native README](./apps/mobile/README.md)에 정리되어 있습니다.
 
 ## 환경변수
 
