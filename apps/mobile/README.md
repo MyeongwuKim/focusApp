@@ -2,7 +2,7 @@
 
 `apps/mobile`은 Expo, React Native 기반 모바일 앱입니다. Web UI를 WebView로 실행하고, 네이티브 로그인, 알림, 위치, 날씨, iOS Live Activity, WebUI 버전 업데이트를 담당합니다.
 
-[루트 README](../../README.md)에는 전체 앱 구성과 공통 실행 흐름을 정리해 두었습니다.
+[루트 README](../../README.md)에는 프로젝트 배경과 전체 서비스 구성을 정리해 두었습니다.
 
 ## 역할
 
