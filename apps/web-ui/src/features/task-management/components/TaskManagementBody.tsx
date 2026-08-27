@@ -570,8 +570,8 @@ export function TaskManagementBody() {
             </div>
           </div>
 
-          <aside ref={collectionPaneRef} className="min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
-            <div className="space-y-1.5">
+          <aside ref={collectionPaneRef} className="min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+            <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto">
               <TaskManagementCollectionItem
                 name="전체"
                 count={tasks.length}

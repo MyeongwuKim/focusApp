@@ -19,17 +19,22 @@ function formatRecentDate(value: string | null) {
   return `${year}.${String(month).padStart(2, "0")}.${String(day).padStart(2, "0")} 최근 사용`;
 }
 
-export function TaskManagementFooter() {
+export function TaskManagementFooter({ className }: { className?: string }) {
   const { selectedTaskId } = useTaskManagementData();
   const { selectedTaskLastUsedAt } = useTaskManagementMeta();
   const isTaskSelected = Boolean(selectedTaskId);
 
   return (
-    <footer className="rounded-xl border border-base-300/80 bg-base-100/85 px-3 py-2.5 select-none">
+    <footer
+      className={[
+        "flex rounded-xl border border-base-300/80 bg-base-100/85 px-4 py-3.5 select-none",
+        className ?? "",
+      ].join(" ")}
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="m-0 text-[11px] font-semibold tracking-wide text-base-content/50">오늘할일 사용 현황</p>
-          <p className="m-0 mt-0.5 min-h-[1.25rem] text-sm text-base-content/85">
+          <p className="m-0 text-xs font-semibold tracking-wide text-base-content/50">오늘할일 사용 현황</p>
+          <p className="m-0 mt-1 min-h-[1.35rem] text-sm text-base-content/85">
             {isTaskSelected ? formatRecentDate(selectedTaskLastUsedAt) : "할일을 선택하면 사용 현황이 표시돼요."}
           </p>
         </div>

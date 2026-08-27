@@ -483,11 +483,16 @@ function TaskManagementRouteContent({
                 onCreateTask: handleCreateTask,
               }}
             >
-              <TaskManagementBody />
+              <div
+                className="grid h-full min-h-0 gap-3"
+                style={{ gridTemplateRows: "minmax(0, 1fr) clamp(12rem, 25%, 15rem)" }}
+              >
+                <TaskManagementBody />
 
-              <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/65 pt-2.5">
-                <TaskManagementActions />
-                <TaskManagementFooter />
+                <div className="flex min-h-0 flex-col gap-3 border-t border-base-300/65 pb-[calc(0.75rem+var(--app-safe-area-bottom))] pt-3">
+                  <TaskManagementActions />
+                  <TaskManagementFooter className="min-h-0 flex-1" />
+                </div>
               </div>
             </TaskManagementContextProvider>
           )}

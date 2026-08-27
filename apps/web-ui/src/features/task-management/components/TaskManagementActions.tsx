@@ -53,14 +53,27 @@ export function TaskManagementActions() {
   };
 
   return (
-    <div className="flex w-full items-center justify-end gap-2 select-none">
-      <PillActionButton icon={<FiBarChart2 size={14} />} onClick={handleOpenTaskStats} disabled={!selectedTask}>
+    <div className="flex w-full shrink-0 items-center justify-end gap-2.5 select-none">
+      <PillActionButton
+        className="h-12 min-h-12 px-3.5 text-sm"
+        icon={<FiBarChart2 size={16} />}
+        onClick={handleOpenTaskStats}
+        disabled={!selectedTask}
+      >
         통계
       </PillActionButton>
-      <PillActionButton icon={<FiPlus size={14} />} onClick={handleOpenCollection}>
+      <PillActionButton
+        className="h-12 min-h-12 px-3.5 text-sm"
+        icon={<FiPlus size={16} />}
+        onClick={handleOpenCollection}
+      >
         컬렉션
       </PillActionButton>
-      <PillActionButton icon={<FiPlus size={14} />} onClick={handleOpenTaskPicker}>
+      <PillActionButton
+        className="h-12 min-h-12 px-3.5 text-sm"
+        icon={<FiPlus size={16} />}
+        onClick={handleOpenTaskPicker}
+      >
         할일
       </PillActionButton>
     </div>
