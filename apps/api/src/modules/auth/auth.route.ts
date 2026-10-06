@@ -995,6 +995,7 @@ export async function registerAuthRoute(app: FastifyInstance) {
       await tx.notificationSettings.deleteMany({ where: { userId } });
       await tx.routineTemplate.deleteMany({ where: { userId } });
       await tx.dailyLog.deleteMany({ where: { userId } });
+      await tx.taskSuggestionCandidate.deleteMany({ where: { userId } });
       await tx.task.deleteMany({ where: { userId } });
       await tx.taskCollection.deleteMany({ where: { userId } });
       await tx.session.deleteMany({ where: { userId } });

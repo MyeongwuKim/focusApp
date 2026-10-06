@@ -100,7 +100,7 @@ function SortableRoutineItemRow({
       style={style}
       {...(editable ? dragHandleProps : {})}
       className={[
-        "rounded-lg border border-base-300/70 bg-base-100 px-2 py-1.5 text-sm text-base-content/80 transition-[border-color,background-color,box-shadow]",
+        "routine-bundle-task-row rounded-lg border border-base-300/70 bg-base-100 px-2 py-1.5 text-sm text-base-content/80 transition-[border-color,background-color,box-shadow]",
         isDragging
           ? "border-primary/65 bg-base-100 shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_24px_rgba(0,0,0,0.22)]"
           : "",
@@ -124,7 +124,7 @@ function SortableRoutineItemRow({
             variant="ghost"
             size="xs"
             circle
-            aria-label="루틴 항목 삭제"
+            aria-label="묶음 항목 삭제"
             className="text-error"
             onClick={() => onDelete(item.id)}
           >
@@ -271,8 +271,8 @@ export function TodoRoutineImportModal({
     }
 
     const accepted = await confirm({
-      title: "루틴을 삭제할까요?",
-      message: "삭제하면 루틴에 담긴 항목도 함께 사라져요.",
+      title: "할 일 묶음을 삭제할까요?",
+      message: "삭제하면 묶음에 담긴 항목도 함께 사라져요.",
       buttons: [
         { label: "취소", value: "cancel", tone: "neutral" },
         { label: "삭제", value: "delete", tone: "danger" },
@@ -293,15 +293,23 @@ export function TodoRoutineImportModal({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-base-100">
-      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-2 p-2 md:grid-cols-[12rem_minmax(0,1fr)] md:grid-rows-1">
-        <div className="min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
+    <div className="routine-bundle-import flex min-h-0 flex-1 flex-col bg-transparent">
+      <div className="routine-bundle-intro flex shrink-0 items-end justify-between gap-3 px-3 pb-2 pt-1">
+        <div>
+          <p className="m-0 text-sm font-semibold text-base-content/85">오늘에 가져올 묶음을 골라보세요</p>
+          <p className="m-0 mt-0.5 text-xs text-base-content/55">고른 항목은 현재 날짜의 할 일에 이어서 적혀요.</p>
+        </div>
+        <span className="shrink-0 text-[11px] text-base-content/55">{routines.length}개 저장</span>
+      </div>
+
+      <div className="routine-bundle-layout grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-2 px-2 pb-2 md:grid-cols-[12rem_minmax(0,1fr)] md:grid-rows-1">
+        <div className="routine-bundle-list min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
           <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
             {isLoading ? (
-              <p className="m-0 px-1 py-2 text-sm text-base-content/60">루틴 불러오는 중...</p>
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">묶음 불러오는 중...</p>
             ) : null}
             {!isLoading && routines.length === 0 ? (
-              <p className="m-0 px-1 py-2 text-sm text-base-content/60">저장된 루틴이 없어요.</p>
+              <p className="m-0 px-1 py-2 text-sm text-base-content/60">저장된 할 일 묶음이 없어요.</p>
             ) : null}
             {routines.map((routine) => {
               const active = routine.id === selectedId;
@@ -310,11 +318,12 @@ export function TodoRoutineImportModal({
                   key={routine.id}
                   block
                   className={[
-                    "max-w-full overflow-hidden rounded-lg border px-2.5 py-2 text-left transition-colors",
+                    "routine-bundle-choice max-w-full overflow-hidden rounded-lg border px-2.5 py-2 text-left transition-colors",
                     active
                       ? "border-primary/60 bg-primary/12 text-primary"
                       : "border-base-300/70 bg-base-100 text-base-content/80",
                   ].join(" ")}
+                  data-active={active ? "true" : "false"}
                   onClick={() => setSelectedId(routine.id)}
                 >
                   <p className="m-0 truncate text-sm font-semibold">{routine.name}</p>
@@ -325,13 +334,19 @@ export function TodoRoutineImportModal({
           </div>
         </div>
 
-        <div className="min-h-0 min-w-0 rounded-xl border border-base-300/80 bg-base-200/35 p-2">
+        <div className="routine-bundle-detail flex min-h-0 min-w-0 flex-col rounded-xl border border-base-300/80 bg-base-200/35 p-2">
           {isEditMode ? (
             <div className="mb-1 rounded-md border border-info/30 bg-info/10 px-2 py-1 text-[11px] text-info">
               편집 모드: 드래그로 순서 변경, 휴지통으로 항목 삭제
             </div>
           ) : null}
-          <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5">
+          {selectedRoutine ? (
+            <div className="routine-bundle-detail__heading mb-1.5 flex shrink-0 items-center justify-between gap-2 px-1">
+              <p className="m-0 truncate text-sm font-semibold text-base-content/85">{selectedRoutine.name}</p>
+              <span className="shrink-0 text-[11px] text-base-content/55">{editableItems.length}개 할 일</span>
+            </div>
+          ) : null}
+          <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
             {selectedRoutine ? (
               <DndContext
                 sensors={sensors}
@@ -357,14 +372,14 @@ export function TodoRoutineImportModal({
               </DndContext>
             ) : (
               <p className="m-0 px-1 py-2 text-sm text-base-content/60">
-                루틴을 선택하면 항목이 보입니다.
+                할 일 묶음을 선택하면 내용이 보여요.
               </p>
             )}
           </div>
         </div>
       </div>
 
-      <div className="shrink-0 space-y-1.5 border-t border-base-300/80 bg-base-100 p-2">
+      <div className="routine-bundle-actions shrink-0 space-y-1.5 border-t border-base-300/80 bg-transparent p-2">
         {isEditMode ? (
           <div className="flex items-center gap-1.5">
             <Button
@@ -374,7 +389,7 @@ export function TodoRoutineImportModal({
               onClick={handleSaveRoutineChanges}
             >
               <FiSave size={14} />
-              {isSavingRoutine ? "저장 중..." : "루틴 변경 저장"}
+              {isSavingRoutine ? "저장 중..." : "묶음 변경 저장"}
             </Button>
             <Button
               variant="outline"
@@ -383,7 +398,7 @@ export function TodoRoutineImportModal({
               onClick={handleDeleteRoutine}
             >
               <FiTrash2 size={14} />
-              {isDeletingRoutine ? "삭제 중..." : "루틴 삭제"}
+              {isDeletingRoutine ? "삭제 중..." : "묶음 삭제"}
             </Button>
             <Button
               variant="ghost"
@@ -402,7 +417,7 @@ export function TodoRoutineImportModal({
               disabled={!selectedRoutine}
               onClick={() => setIsEditMode(true)}
             >
-              편집
+              묶음 편집
             </Button>
             <Button
               variant="primary"
@@ -412,7 +427,7 @@ export function TodoRoutineImportModal({
               onClick={handleApply}
             >
               <FiDownload size={14} />
-              {isApplying ? "불러오는 중..." : "선택한 루틴 추가"}
+              {isApplying ? "불러오는 중..." : "오늘에 추가"}
             </Button>
           </div>
         ) : null}

@@ -27,6 +27,13 @@ export const taskCollectionTypeDefs = gql`
     tasks: [Task!]!
   }
 
+  type TaskSuggestionResult {
+    suggestionId: ID
+    displayText: String!
+    count: Int!
+    shouldSuggest: Boolean!
+  }
+
   input CreateTaskCollectionInput {
     name: String!
     order: Int
@@ -74,6 +81,15 @@ export const taskCollectionTypeDefs = gql`
     isFavorite: Boolean!
   }
 
+  input RecordTaskSuggestionUsageInput {
+    content: String!
+    usageDateKey: String!
+  }
+
+  input TaskSuggestionInput {
+    suggestionId: ID!
+  }
+
   extend type Query {
     taskCollections: [TaskCollection!]!
   }
@@ -89,6 +105,9 @@ export const taskCollectionTypeDefs = gql`
     setTaskFavorite(input: SetTaskFavoriteInput!): Task!
     deleteTask(input: DeleteTaskInput!): Boolean!
     deleteTaskCollection(input: DeleteTaskCollectionInput!): Boolean!
+    recordTaskSuggestionUsage(input: RecordTaskSuggestionUsageInput!): TaskSuggestionResult!
+    dismissTaskSuggestion(input: TaskSuggestionInput!): TaskSuggestionResult!
+    acceptTaskSuggestion(input: TaskSuggestionInput!): Task!
   }
 `;
 
@@ -100,6 +119,9 @@ const taskCollectionErrorMapping = {
   TASK_TITLE_DUPLICATED: { message: "같은 컬렉션에 동일한 제목의 태스크가 이미 있어요." },
   TASK_COLLECTION_NAME_REQUIRED: { message: "컬렉션 이름을 입력해 주세요." },
   TASK_COLLECTION_NAME_DUPLICATED: { message: "같은 이름의 컬렉션이 이미 있어요." },
+  TASK_SUGGESTION_CONTENT_REQUIRED: { message: "저장 제안 문구를 입력해 주세요." },
+  TASK_SUGGESTION_DATE_INVALID: { message: "저장 제안 집계 날짜가 올바르지 않아요." },
+  TASK_SUGGESTION_NOT_FOUND: { message: "저장 제안 항목을 찾을 수 없어요." },
 };
 
 export const taskCollectionResolvers = {
@@ -250,6 +272,52 @@ export const taskCollectionResolvers = {
         return await service.deleteTaskCollection({
           userId: getUserId(context),
           collectionId: args.input.collectionId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
+    },
+    recordTaskSuggestionUsage: async (
+      _parent: unknown,
+      args: { input: { content: string; usageDateKey: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.recordTaskSuggestionUsage({
+          userId: getUserId(context),
+          content: args.input.content,
+          usageDateKey: args.input.usageDateKey,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
+    },
+    dismissTaskSuggestion: async (
+      _parent: unknown,
+      args: { input: { suggestionId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.dismissTaskSuggestion({
+          userId: getUserId(context),
+          suggestionId: args.input.suggestionId,
+        });
+      } catch (error) {
+        rethrowMappedGraphQLError(error, taskCollectionErrorMapping);
+      }
+    },
+    acceptTaskSuggestion: async (
+      _parent: unknown,
+      args: { input: { suggestionId: string } },
+      context: GraphQLContext
+    ) => {
+      try {
+        const service = createTaskCollectionService(context);
+        return await service.acceptTaskSuggestion({
+          userId: getUserId(context),
+          suggestionId: args.input.suggestionId,
         });
       } catch (error) {
         rethrowMappedGraphQLError(error, taskCollectionErrorMapping);

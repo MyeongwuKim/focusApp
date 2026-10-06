@@ -62,7 +62,8 @@ export function ConfirmModal() {
             <Button
               key={`${button.label}-${index}`}
               variant={toneVariant(button.tone)}
-              className="h-10 min-h-10 rounded-xl px-4"
+              data-tone={button.tone ?? "neutral"}
+              className="confirm-modal__button h-10 min-h-10 rounded-xl px-4"
               onClick={() => closeWithResult(button.value ?? button.label)}
             >
               {button.label}

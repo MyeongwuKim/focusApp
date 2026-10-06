@@ -3,7 +3,6 @@ export type CountBarDatum = {
   tooltipLabel: string;
   done: number;
   incomplete: number;
-  resumeCount: number;
   doneLabels: string[];
   incompleteLabels: string[];
 };
@@ -28,7 +27,6 @@ export type StatsDailyActivityDatum = {
   key: string;
   done: number;
   incomplete: number;
-  resumeCount: number;
   focusMin: number;
   restMin: number;
 };

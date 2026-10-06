@@ -17,10 +17,10 @@ export function RoutineTemplateListPanel({
   onOpenTemplateMenu,
 }: RoutineTemplateListPanelProps) {
   return (
-    <section className="flex min-h-0 flex-[0.95] flex-col rounded-xl border border-base-300/80 bg-base-100/75 p-3">
+    <section className="bundle-manage-list flex min-h-0 flex-[0.95] flex-col rounded-xl border border-base-300/80 bg-base-100/75 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="m-0 text-sm font-semibold text-base-content">루틴</p>
-        <span className="rounded-md border border-base-300/80 bg-base-200/45 px-2 py-0.5 text-[11px] text-base-content/70">
+        <p className="m-0 text-sm font-semibold text-base-content">저장한 묶음</p>
+        <span className="bundle-manage-count rounded-md border border-base-300/80 bg-base-200/45 px-2 py-0.5 text-[11px] text-base-content/70">
           {routineTemplates.length}개
         </span>
       </div>
@@ -39,7 +39,7 @@ export function RoutineTemplateListPanel({
           );
         })}
         {routineTemplates.length === 0 ? (
-          <p className="m-0 rounded-lg border border-base-300/60 bg-base-200/45 px-2.5 py-2 text-xs text-base-content/60">
+          <p className="bundle-manage-empty m-0 rounded-lg border border-base-300/60 bg-base-200/45 px-2.5 py-2 text-xs text-base-content/60">
             저장된 템플릿이 없어요.
           </p>
         ) : null}

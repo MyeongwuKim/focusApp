@@ -31,13 +31,10 @@ import {
 import { getUserFacingErrorMessage } from "../../../utils/errorMessage";
 import { useDateTodosTaskActions } from "./hooks/useDateTodosTaskActions";
 import { useDateTodosRoutineActions } from "./hooks/useDateTodosRoutineActions";
-
-type DateTodosSummary = {
-  completedCount: number;
-  totalCount: number;
-  totalMinutes: number;
-  progressPercent: number;
-};
+import {
+  summarizeDateTodoItems,
+  type DateTodosSummary,
+} from "./utils/dateTodosSummary";
 
 type DateTodosSession = {
   focusMinutes: number;
@@ -81,8 +78,8 @@ type DateTodosRouteContextValue = {
   isItemsHydrating: boolean;
   reorderTasksByIds: (orderedIdsValue: string[]) => void;
   handleDateTaskAction: (taskId: string, action: "start" | "pause" | "resume" | "complete") => void;
-  handleEditActualFocus: (taskId: string) => void;
   handleDateTaskMenuAction: (taskId: string) => void;
+  handleDateTaskGestureDelete: (taskId: string) => Promise<boolean>;
 
   summary: DateTodosSummary;
   session: DateTodosSession;
@@ -93,7 +90,7 @@ type DateTodosRouteContextValue = {
 
   handleDateAddTasks: (
     items: Array<{ label: string; taskId?: string | null; scheduledStartAt?: string | null }>
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   openRoutineImport: () => void;
   openRoutineCreate: () => void;
   routineTemplates: RoutineTemplate[];
@@ -125,6 +122,7 @@ type DateTodosRouteContextValue = {
   editingActualFocus: {
     taskId: string;
     initialMinutes: number;
+    source: "completion" | "edit";
   } | null;
   closeEditingActualFocus: () => void;
   handleSaveActualFocus: (minutes: number) => Promise<void>;
@@ -326,9 +324,11 @@ export function DateTodosRouteProvider({
   const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
 
   const [dateTasksRouteItems, setDateTasksRouteItems] = useState<TaskItem[]>([]);
+  /** 완료 직후 0분 기록 입력 또는 완료 항목의 기록 수정을 위해 바텀시트에 전달할 항목과 진입 경로를 보관한다. */
   const [editingActualFocus, setEditingActualFocus] = useState<{
     taskId: string;
     initialMinutes: number;
+    source: "completion" | "edit";
   } | null>(null);
   const [editingScheduledStart, setEditingScheduledStart] = useState<{
     taskId: string;
@@ -1264,12 +1264,12 @@ export function DateTodosRouteProvider({
 
   const {
     handleDateTaskAction,
-    handleEditActualFocus,
     handleSaveActualFocus,
     handleSaveTargetFocus,
     handleSaveScheduledStart,
     handleDateAddTasks,
     handleDateTaskMenuAction,
+    handleDateTaskGestureDelete,
   } = useDateTodosTaskActions({
     dateKey,
     items: dateTasksRouteItems,
@@ -1312,19 +1312,10 @@ export function DateTodosRouteProvider({
     deleteRoutineTemplate: deleteRoutineTemplateMutation.mutateAsync,
   });
 
-  const summary = useMemo(() => {
-    const totalCount = dateTasksRouteItems.length;
-    const completedItems = dateTasksRouteItems.filter((item) => item.status === "done");
-    const completedCount = completedItems.length;
-    const completedMs = completedItems.reduce(
-      (acc, item) => acc + (item.completedDurationMs ?? item.accumulatedMs),
-      0
-    );
-    const totalMinutes = Math.round(completedMs / 60000);
-    const progressPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
-
-    return { totalCount, completedCount, totalMinutes, progressPercent };
-  }, [dateTasksRouteItems]);
+  const summary = useMemo(
+    () => summarizeDateTodoItems(dateTasksRouteItems),
+    [dateTasksRouteItems]
+  );
 
   const isItemsHydrating = useMemo(() => {
     if (!dateKey) {
@@ -1388,8 +1379,8 @@ export function DateTodosRouteProvider({
     isItemsHydrating,
     reorderTasksByIds,
     handleDateTaskAction,
-    handleEditActualFocus,
     handleDateTaskMenuAction,
+    handleDateTaskGestureDelete,
 
     summary,
     session,

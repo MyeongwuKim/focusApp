@@ -4,7 +4,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
 import App from "./App.tsx";
 import { AppErrorFallback } from "./components/AppErrorFallback";
-import { ThemeController } from "./components/ThemeController";
 import { queryClient } from "./queryClient";
 import { initWebSentry, Sentry } from "./sentry";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -24,7 +23,6 @@ const root = createRoot(
 
 root.render(
   <QueryClientProvider client={queryClient}>
-    <ThemeController />
     <Sentry.ErrorBoundary fallback={<AppErrorFallback />}>
       <HashRouter>
         <App />

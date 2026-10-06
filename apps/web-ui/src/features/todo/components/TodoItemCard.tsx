@@ -1,29 +1,28 @@
 import {
   FiAlertCircle,
   FiBellOff,
-  FiCheck,
   FiCheckCircle,
-  FiCircle,
   FiClock,
-  FiMoreVertical,
+  FiEdit2,
   FiPause,
-  FiPauseCircle,
   FiPlay,
-  FiPlayCircle,
   FiTarget,
 } from "react-icons/fi";
-import { Button } from "../../../components/ui/Button";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useTodoItemPenGesture } from "../hooks/useTodoItemPenGesture";
 import type { TaskItem } from "../types";
 
 type TodoItemCardProps = {
   item: TaskItem;
   onTaskAction: (taskId: string, action: "start" | "pause" | "resume" | "complete") => void;
-  onEditActualFocus?: (taskId: string) => void;
   onOpenMenu: (taskId: string) => void;
+  onDeleteGesture?: (taskId: string) => void;
   disableActions?: boolean;
   canRunFocus?: boolean;
   isDragging?: boolean;
   isLongPressActive?: boolean;
+  isWriteAnimating?: boolean;
+  onWriteAnimationStarted?: (taskId: string) => void;
 };
 
 function renderStatusIcon(status: TaskItem["status"]) {
@@ -34,12 +33,12 @@ function renderStatusIcon(status: TaskItem["status"]) {
     return <FiAlertCircle size={18} className="text-error" />;
   }
   if (status === "in_progress") {
-    return <FiPlayCircle size={18} className="text-info" />;
+    return <FiPause size={13} className="text-warning" />;
   }
   if (status === "paused") {
-    return <FiPauseCircle size={18} className="text-warning" />;
+    return <FiPlay size={14} className="text-info" />;
   }
-  return <FiCircle size={18} className="text-base-content/50" />;
+  return <FiPlay size={14} className="text-warning" />;
 }
 
 function formatScheduledTime(epochMs: number) {
@@ -86,138 +85,141 @@ function buildTargetFocusBadgeText(item: TaskItem) {
   return `초과 +${overflowMinutes}분`;
 }
 
-function renderTaskActions(
-  item: TaskItem,
-  onTaskAction: TodoItemCardProps["onTaskAction"],
-  onEditActualFocus?: TodoItemCardProps["onEditActualFocus"],
-  disableActions = false,
-  canRunFocus = true
-) {
+function renderTaskActions(item: TaskItem, canRunFocus = true) {
   if (item.status === "overdue") {
-    return (
-      <div className="flex flex-wrap items-center gap-1.5">
-        <div className="inline-flex items-center gap-1 rounded-full border border-error/35 bg-error/12 px-2.5 py-1 text-xs font-semibold text-error">
-          <FiAlertCircle size={12} />
-          미완료
-        </div>
-      </div>
-    );
+    return null;
   }
 
   if (item.status === "todo") {
     if (!canRunFocus) {
       return (
-        <div className="inline-flex items-center gap-1 rounded-full border border-base-300/80 bg-base-200/65 px-2.5 py-1 text-xs font-semibold text-base-content/65">
+        <div className="todo-item-card__state inline-flex items-center gap-1 rounded-full border border-base-300/80 bg-base-200/65 px-2.5 py-1 text-xs font-semibold text-base-content/65">
           <FiClock size={12} />
           예정
         </div>
       );
     }
 
-    return (
-      <Button
-        size="sm"
-        className="h-8 min-h-8 rounded-full border-info/35 bg-info/15 px-3 text-info"
-        disabled={disableActions}
-        onClick={() => onTaskAction(item.id, "start")}
-      >
-        <FiPlay size={13} />
-        할일 시작
-      </Button>
-    );
+    return null;
   }
 
   if (item.status === "in_progress") {
-    return (
-      <div className="flex flex-wrap gap-1.5">
-        <Button
-          size="sm"
-          className="h-8 min-h-8 rounded-full border-warning/35 bg-warning/15 px-3 text-warning"
-          disabled={disableActions}
-          onClick={() => onTaskAction(item.id, "pause")}
-        >
-          <FiPause size={13} />
-          일시정지
-        </Button>
-        <Button
-          size="sm"
-          className="h-8 min-h-8 rounded-full border-success/35 bg-success/15 px-3 text-success"
-          disabled={disableActions}
-          onClick={() => onTaskAction(item.id, "complete")}
-        >
-          <FiCheck size={13} />
-          완료
-        </Button>
-      </div>
-    );
+    return null;
   }
 
   if (item.status === "paused") {
-    return (
-      <div className="flex flex-wrap gap-1.5">
-        <Button
-          size="sm"
-          className="h-8 min-h-8 rounded-full border-info/35 bg-info/15 px-3 text-info"
-          disabled={disableActions || !canRunFocus}
-          onClick={() => onTaskAction(item.id, "resume")}
-        >
-          <FiPlay size={13} />
-          재개
-        </Button>
-        <Button
-          size="sm"
-          className="h-8 min-h-8 rounded-full border-success/35 bg-success/15 px-3 text-success"
-          disabled={disableActions}
-          onClick={() => onTaskAction(item.id, "complete")}
-        >
-          <FiCheck size={13} />
-          완료
-        </Button>
-      </div>
-    );
+    return null;
   }
 
-  const actualFocusMinutes = Math.max(Math.round((item.completedDurationMs ?? item.accumulatedMs) / 60000), 0);
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <div className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-        <FiCheckCircle size={12} />
-        완료됨
-      </div>
-      <Button
-        size="xs"
-        className="h-7 min-h-7 rounded-full border-success/30 bg-base-100 px-2.5 text-success"
-        disabled={disableActions}
-        onClick={() => onEditActualFocus?.(item.id)}
-      >
-        집중 {actualFocusMinutes}분
-      </Button>
-    </div>
-  );
+  return null;
 }
 
 export function TodoItemCard({
   item,
   onTaskAction,
-  onEditActualFocus,
   onOpenMenu,
+  onDeleteGesture,
   disableActions = false,
   canRunFocus = true,
   isDragging = false,
   isLongPressActive = false,
+  isWriteAnimating = false,
+  onWriteAnimationStarted,
 }: TodoItemCardProps) {
   const targetFocusBadgeText = buildTargetFocusBadgeText(item);
+  const actualFocusMinutes = Math.max(Math.round((item.completedDurationMs ?? item.accumulatedMs) / 60000), 0);
   const isMutedToday =
     typeof item.muteReminderDateKey === "string" &&
     item.muteReminderDateKey.length > 0 &&
     item.muteReminderDateKey === formatTodayDateKey() &&
     item.status !== "done";
+  const canCompleteWithGesture =
+    item.status !== "done" && (canRunFocus || item.status === "overdue") && !disableActions;
+  const {
+    gestureProps,
+    gestureZoneProps,
+    strokePath,
+    strokeTone,
+    isDeleteGuideVisible,
+    isGestureHelpVisible,
+  } = useTodoItemPenGesture({
+    disabled: disableActions || !onDeleteGesture,
+    canComplete: canCompleteWithGesture,
+    onComplete: () => onTaskAction(item.id, "complete"),
+    onDelete: () => onDeleteGesture?.(item.id),
+  });
+  const writeDurationMs = Math.min(Math.max(560 + Array.from(item.label).length * 38, 760), 1250);
+  const writeAnimationStyle = {
+    "--todo-write-duration": `${writeDurationMs}ms`,
+    "--todo-write-delay": "140ms",
+    "--todo-meta-delay": `${Math.min(320 + writeDurationMs * 0.72, 1050)}ms`,
+  } as CSSProperties;
+  const writeAnimationStartedRef = useRef(false);
+  const [isWriteAnimationPlaying, setIsWriteAnimationPlaying] = useState(isWriteAnimating);
+  const isWriteEffectActive = isWriteAnimating || isWriteAnimationPlaying;
+
+  /**
+   * 새 항목이 처음 화면에 나타난 순간 부모의 대기 상태를 소비하고, 카드 안에서는 효과가 끝날 때까지 재생 상태를 유지한다.
+   * 이후 목록 재조회로 카드가 다시 만들어져도 부모 상태가 이미 비어 있으므로 같은 글씨 쓰기 효과가 반복되지 않는다.
+   */
+  useEffect(() => {
+    if (!isWriteAnimating || writeAnimationStartedRef.current) {
+      return;
+    }
+
+    writeAnimationStartedRef.current = true;
+    onWriteAnimationStarted?.(item.id);
+  }, [isWriteAnimating, item.id, onWriteAnimationStarted]);
+
+  // 부모가 재생권을 소비해도 카드 안의 효과는 정해진 길이만큼 유지한 뒤 종료한다.
+  useEffect(() => {
+    if (!isWriteAnimationPlaying) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setIsWriteAnimationPlaying(false);
+    }, writeDurationMs + 320);
+    return () => window.clearTimeout(timer);
+  }, [isWriteAnimationPlaying, writeDurationMs]);
+  const focusAction = !canRunFocus || disableActions
+    ? null
+    : item.status === "todo"
+      ? "start"
+      : item.status === "in_progress"
+        ? "pause"
+        : item.status === "paused"
+          ? "resume"
+          : null;
+  const focusActionText = focusAction === "start"
+    ? "집중 시작"
+    : focusAction === "pause"
+      ? "집중 일시정지"
+      : focusAction === "resume"
+        ? "집중 재개"
+        : undefined;
+  const taskActions = renderTaskActions(item, canRunFocus);
+
+  const activateFocusAction = () => {
+    if (focusAction) {
+      onTaskAction(item.id, focusAction);
+    }
+  };
+
+  /** 할 일 글자 영역은 숨겨진 더보기 버튼을 대신해 해당 항목의 수정·시간·알림 옵션을 연다. */
+  const activateTaskOptions = () => {
+    if (!disableActions) {
+      onOpenMenu(item.id);
+    }
+  };
 
   return (
     <div
+      {...gestureProps}
+      data-task-status={item.status}
+      data-write-animating={isWriteEffectActive ? "true" : "false"}
+      style={writeAnimationStyle}
       className={[
-        "rounded-lg border border-base-300/80 bg-base-100/85 px-3 py-2.5 transition-[box-shadow,transform,border-color] duration-200",
+        "todo-item-card rounded-lg border border-base-300/80 bg-base-100/85 px-3 py-2.5 transition-[box-shadow,transform,border-color] duration-200",
         item.status === "done" ? "bg-success/8" : "",
         item.status === "overdue" ? "border-error/35 bg-error/6" : "",
         item.status === "in_progress" ? "border-info/45" : "",
@@ -227,53 +229,129 @@ export function TodoItemCard({
         isDragging ? "scale-[1.015] border-primary/65 shadow-[0_0_0_1px_rgba(99,102,241,0.35),0_12px_28px_rgba(99,102,241,0.28)]" : "",
       ].join(" ")}
     >
-      <div className="flex items-center gap-2">
-        {renderStatusIcon(item.status)}
-        <p
-          className={[
-            "m-0 min-w-0 flex-1 truncate text-sm text-base-content/90",
-            item.status === "done" ? "text-base-content/55 line-through" : "",
-            item.status === "overdue" ? "text-error/90" : "",
-          ].join(" ")}
+      <svg
+        className={`todo-item-card__gesture-stroke todo-item-card__gesture-stroke--${strokeTone}`}
+        aria-hidden="true"
+      >
+        <path d={strokePath} />
+      </svg>
+      <div
+        {...gestureZoneProps}
+        className="todo-item-card__gesture-zone"
+        data-delete-guide-visible={isDeleteGuideVisible ? "true" : "false"}
+        data-help-visible={isGestureHelpVisible ? "true" : "false"}
+        role={!disableActions && onDeleteGesture ? "button" : undefined}
+        tabIndex={!disableActions && onDeleteGesture ? 0 : -1}
+        aria-label={
+          !disableActions && onDeleteGesture
+            ? "그리기 제스처 안내: V를 그리면 완료, 가로선을 길게 그으면 삭제"
+            : undefined
+        }
+        aria-expanded={!disableActions && onDeleteGesture ? isGestureHelpVisible : undefined}
+      >
+        {!disableActions && onDeleteGesture ? (
+          <>
+            <span className="todo-item-card__gesture-affordance" aria-hidden="true">
+              <FiEdit2 size={11} />
+              <span>빠른 동작</span>
+            </span>
+            <span
+              className="todo-item-card__gesture-help"
+              aria-hidden={!isGestureHelpVisible}
+            >
+              <span>V 그리기 → 완료</span>
+              <span>가로선 → 삭제</span>
+            </span>
+          </>
+        ) : null}
+      </div>
+      <div className="todo-item-card__main-row relative z-[1] flex items-center gap-2">
+        <button
+          type="button"
+          className="todo-item-card__status"
+          aria-label={
+            focusActionText ??
+            (item.status === "done"
+              ? "완료된 할 일"
+              : item.status === "overdue"
+                ? "미완료된 할 일"
+                : "집중 동작을 사용할 수 없는 할 일")
+          }
+          disabled={!focusAction}
+          onClick={activateFocusAction}
         >
-          {item.label}
-        </p>
+          {isWriteEffectActive ? (
+            <svg className="todo-item-card__status-ring" viewBox="0 0 28 28" aria-hidden="true">
+              <circle cx="14" cy="14" r="10.5" pathLength="1" />
+            </svg>
+          ) : null}
+          {renderStatusIcon(item.status)}
+        </button>
+        <div
+          className="todo-item-card__label-slot min-w-0 flex-1"
+          data-actionable={!disableActions ? "true" : "false"}
+          role={!disableActions ? "button" : undefined}
+          tabIndex={!disableActions ? 0 : undefined}
+          aria-label={!disableActions ? `${item.label}, 할 일 옵션 열기` : undefined}
+          title={!disableActions ? "할 일 옵션" : undefined}
+          onClick={activateTaskOptions}
+          onKeyDown={(event) => {
+            if (disableActions || (event.key !== "Enter" && event.key !== " ")) {
+              return;
+            }
+            event.preventDefault();
+            activateTaskOptions();
+          }}
+        >
+          <span className="todo-item-card__label-ink">
+            <p
+              className={[
+                "m-0 block max-w-full whitespace-normal break-words text-sm text-base-content/90",
+                item.status === "done" ? "text-base-content/55 line-through" : "",
+                item.status === "overdue" ? "text-error/90" : "",
+              ].join(" ")}
+            >
+              {item.label}
+            </p>
+            {isWriteEffectActive ? (
+              <span className="todo-item-card__writing-pencil" aria-hidden="true">
+                <FiEdit2 />
+              </span>
+            ) : null}
+          </span>
+        </div>
         {item.scheduledStartAt ? (
-          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-info/85">
+          <span className="todo-item-card__scheduled-time todo-item-card__meta inline-flex shrink-0 items-center gap-1">
             <FiClock size={11} />
-            {formatScheduledTime(item.scheduledStartAt)}
+            <span>{formatScheduledTime(item.scheduledStartAt)}</span>
           </span>
         ) : null}
         {targetFocusBadgeText ? (
-          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-warning/85">
+          <span className="todo-item-card__meta inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-warning/85">
             <FiTarget size={11} />
             {targetFocusBadgeText}
           </span>
         ) : null}
         {isMutedToday ? (
           <span
-            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-base-300/80 bg-base-200/65 text-base-content/70"
-            aria-label="오늘은 그만"
-            title="오늘은 그만"
+            className="todo-item-card__muted-reminder todo-item-card__meta inline-flex shrink-0 items-center justify-center"
+            aria-label="오늘 알림 안 받기"
+            title="오늘 알림 안 받기"
           >
-            <FiBellOff size={10} />
+            <FiBellOff size={12} />
           </span>
         ) : null}
-        <Button
-          variant="ghost"
-          size="xs"
-          square
-          aria-label="할일 옵션"
-          className="h-7 min-h-7 rounded-full text-base-content/70"
-          onClick={() => onOpenMenu(item.id)}
-          disabled={disableActions}
-        >
-          <FiMoreVertical size={13} />
-        </Button>
+        {item.status === "done" ? (
+          <span className="todo-item-card__completed-focus shrink-0" aria-label={`실제 집중 시간 ${actualFocusMinutes}분`}>
+            집중 {actualFocusMinutes}분
+          </span>
+        ) : null}
       </div>
-      <div className="mt-2">
-        {renderTaskActions(item, onTaskAction, onEditActualFocus, disableActions, canRunFocus)}
-      </div>
+      {taskActions ? (
+        <div className="todo-item-card__actions relative z-[1] mt-2">
+          {taskActions}
+        </div>
+      ) : null}
     </div>
   );
 }

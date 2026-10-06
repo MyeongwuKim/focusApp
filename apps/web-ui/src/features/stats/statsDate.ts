@@ -30,7 +30,7 @@ export function getPresetRange(preset: Preset) {
   if (preset === "30d") {
     return { start: addDays(end, -29), end };
   }
-  return { start: addDays(end, -364), end };
+  return { start: new Date(end.getFullYear(), end.getMonth() - 11, 1), end };
 }
 
 function isPreset(value: string | null): value is Preset {

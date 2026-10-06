@@ -13,7 +13,6 @@ export type StatsCommentaryPayload = {
     doneCount: number;
     incompleteCount: number;
     focusMinutes: number;
-    resumeCount: number;
     restMinutes: number;
   };
   rates: {

@@ -24,10 +24,11 @@ function TaskManagementCollectionItemComponent({
   return (
     <div
       className={[
-        "flex items-center gap-1 rounded-lg border px-1 py-1 transition-[border-color,box-shadow,background-color]",
+        "task-management-collection-item flex items-center gap-1 rounded-lg border px-1 py-1 transition-[border-color,box-shadow,background-color]",
         active ? "border-primary/60 bg-primary/16" : "border-base-300/70 bg-base-100/75",
         dropActive ? "border-success/70 bg-success/12 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]" : "",
       ].join(" ")}
+      data-active={active ? "true" : "false"}
     >
       <Button
         size="sm"

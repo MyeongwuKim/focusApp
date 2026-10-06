@@ -389,6 +389,7 @@ export default function WebViewScreen() {
   );
   const [hasInitialWebViewLoaded, setHasInitialWebViewLoaded] = useState(false);
   const [hasLaunchOverlayMinElapsed, setHasLaunchOverlayMinElapsed] = useState(false);
+  const [hasLaunchOverlayExited, setHasLaunchOverlayExited] = useState(false);
   const { width, fontScale } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const hybridApiOrigin = useMemo(() => resolveHybridApiOrigin(), []);
@@ -981,14 +982,19 @@ export default function WebViewScreen() {
     isPreparingLocalFile ||
     !hasLaunchOverlayMinElapsed ||
     !isLaunchDestinationReady;
+  const handleLaunchOverlayExitComplete = useCallback(() => {
+    setHasLaunchOverlayExited(true);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {shouldShowLaunchOverlay ? (
+      {!hasLaunchOverlayExited ? (
         <FocusLaunchOverlay
           statusMessage={launchStatusMessage}
           progressPercent={launchProgressPercent}
           showProgress={!isCheckingNativeVersion}
+          isReady={!shouldShowLaunchOverlay}
+          onExitComplete={handleLaunchOverlayExitComplete}
         />
       ) : null}
       {source && !isCheckingNativeVersion && !showPermissionIntro && !isNativeUpdateRequired ? (
@@ -1005,6 +1011,7 @@ export default function WebViewScreen() {
             originWhitelist={["*"]}
             javaScriptEnabled
             domStorageEnabled
+            hideKeyboardAccessoryView
             allowsBackForwardNavigationGestures={isExternalNavigation}
             bounces={false}
             overScrollMode="never"
@@ -1130,7 +1137,7 @@ export default function WebViewScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B1220",
+    backgroundColor: "#F8EDCA",
   },
   webViewContainer: {
     flex: 1,

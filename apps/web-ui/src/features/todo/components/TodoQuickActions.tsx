@@ -1,26 +1,36 @@
-import { FiClock, FiFileText, FiPlus } from "react-icons/fi";
 import { PillActionButton } from "../../../components/ui/PillActionButton";
+import { AppFeatureIcon } from "../../../components/ui/AppFeatureIcon";
 
 type TodoQuickActionsProps = {
   onOpenMemo: () => void;
   onOpenTaskPicker: () => void;
-  onOpenRestSettings: () => void;
+  onOpenRoutineImport: () => void;
 };
 
 export function TodoQuickActions({
   onOpenMemo,
   onOpenTaskPicker,
-  onOpenRestSettings,
+  onOpenRoutineImport,
 }: TodoQuickActionsProps) {
   return (
-    <div className="grid grid-cols-3 gap-2">
-      <PillActionButton compact icon={<FiClock size={13} />} onClick={onOpenRestSettings}>
-        휴식
+    <div className="todo-quick-actions grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+      <PillActionButton
+        compact
+        icon={<AppFeatureIcon name="tasks" />}
+        className="todo-quick-actions__write justify-start px-4"
+        onClick={onOpenTaskPicker}
+      >
+        저장한 할 일
       </PillActionButton>
-      <PillActionButton compact icon={<FiPlus size={13} />} onClick={onOpenTaskPicker}>
-        할일+
+      <PillActionButton
+        compact
+        icon={<AppFeatureIcon name="routine" />}
+        className="todo-quick-actions__secondary"
+        onClick={onOpenRoutineImport}
+      >
+        묶음
       </PillActionButton>
-      <PillActionButton compact icon={<FiFileText size={13} />} onClick={onOpenMemo}>
+      <PillActionButton compact icon={<AppFeatureIcon name="memo" />} className="todo-quick-actions__secondary" onClick={onOpenMemo}>
         메모
       </PillActionButton>
     </div>

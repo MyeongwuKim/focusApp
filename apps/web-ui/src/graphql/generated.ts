@@ -147,6 +147,7 @@ export type MoveTaskToCollectionInput = {
 
 export type Mutation = {
   __typename?: 'Mutation';
+  acceptTaskSuggestion: Task;
   addTask: Task;
   addTodo: DailyLog;
   addTodos: DailyLog;
@@ -159,9 +160,11 @@ export type Mutation = {
   deleteTask: Scalars['Boolean']['output'];
   deleteTaskCollection: Scalars['Boolean']['output'];
   deleteTodo: DailyLog;
+  dismissTaskSuggestion: TaskSuggestionResult;
   moveTaskToCollection: Task;
   muteTodoReminderToday: DailyLog;
   pauseTodo: DailyLog;
+  recordTaskSuggestionUsage: TaskSuggestionResult;
   registerPushDeviceToken: PushDeviceToken;
   renameTask: Task;
   renameTaskCollection: TaskCollection;
@@ -183,6 +186,11 @@ export type Mutation = {
   updateTodoSchedule: DailyLog;
   updateTodoTargetFocus: DailyLog;
   upsertDailyLog: DailyLog;
+};
+
+
+export type MutationAcceptTaskSuggestionArgs = {
+  input: TaskSuggestionInput;
 };
 
 
@@ -246,6 +254,11 @@ export type MutationDeleteTodoArgs = {
 };
 
 
+export type MutationDismissTaskSuggestionArgs = {
+  input: TaskSuggestionInput;
+};
+
+
 export type MutationMoveTaskToCollectionArgs = {
   input: MoveTaskToCollectionInput;
 };
@@ -258,6 +271,11 @@ export type MutationMuteTodoReminderTodayArgs = {
 
 export type MutationPauseTodoArgs = {
   input: TodoActionInput;
+};
+
+
+export type MutationRecordTaskSuggestionUsageArgs = {
+  input: RecordTaskSuggestionUsageInput;
 };
 
 
@@ -433,6 +451,11 @@ export type QueryDailyLogsWithMemoArgs = {
   sortOrder?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type RecordTaskSuggestionUsageInput = {
+  content: Scalars['String']['input'];
+  usageDateKey: Scalars['String']['input'];
+};
+
 export type RegisterPushDeviceTokenInput = {
   platform: Scalars['String']['input'];
   pushToken: Scalars['String']['input'];
@@ -538,6 +561,18 @@ export type TaskCollection = {
   tasks: Array<Task>;
   updatedAt: Scalars['String']['output'];
   userId: Scalars['String']['output'];
+};
+
+export type TaskSuggestionInput = {
+  suggestionId: Scalars['ID']['input'];
+};
+
+export type TaskSuggestionResult = {
+  __typename?: 'TaskSuggestionResult';
+  count: Scalars['Int']['output'];
+  displayText: Scalars['String']['output'];
+  shouldSuggest: Scalars['Boolean']['output'];
+  suggestionId?: Maybe<Scalars['ID']['output']>;
 };
 
 export type TodoActionInput = {
@@ -924,6 +959,27 @@ export type SetTaskFavoriteMutationVariables = Exact<{
 
 
 export type SetTaskFavoriteMutation = { __typename?: 'Mutation', setTaskFavorite: { __typename?: 'Task', id: string, collectionId: string, title: string, isFavorite: boolean, order: number, lastUsedAt?: string | null } };
+
+export type RecordTaskSuggestionUsageMutationVariables = Exact<{
+  input: RecordTaskSuggestionUsageInput;
+}>;
+
+
+export type RecordTaskSuggestionUsageMutation = { __typename?: 'Mutation', recordTaskSuggestionUsage: { __typename?: 'TaskSuggestionResult', suggestionId?: string | null, displayText: string, count: number, shouldSuggest: boolean } };
+
+export type DismissTaskSuggestionMutationVariables = Exact<{
+  input: TaskSuggestionInput;
+}>;
+
+
+export type DismissTaskSuggestionMutation = { __typename?: 'Mutation', dismissTaskSuggestion: { __typename?: 'TaskSuggestionResult', suggestionId?: string | null, displayText: string, count: number, shouldSuggest: boolean } };
+
+export type AcceptTaskSuggestionMutationVariables = Exact<{
+  input: TaskSuggestionInput;
+}>;
+
+
+export type AcceptTaskSuggestionMutation = { __typename?: 'Mutation', acceptTaskSuggestion: { __typename?: 'Task', id: string, collectionId: string, title: string, order: number, lastUsedAt?: string | null } };
 
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -1977,6 +2033,37 @@ export const SetTaskFavoriteDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetTaskFavoriteMutation, SetTaskFavoriteMutationVariables>;
+export const RecordTaskSuggestionUsageDocument = new TypedDocumentString(`
+    mutation RecordTaskSuggestionUsage($input: RecordTaskSuggestionUsageInput!) {
+  recordTaskSuggestionUsage(input: $input) {
+    suggestionId
+    displayText
+    count
+    shouldSuggest
+  }
+}
+    `) as unknown as TypedDocumentString<RecordTaskSuggestionUsageMutation, RecordTaskSuggestionUsageMutationVariables>;
+export const DismissTaskSuggestionDocument = new TypedDocumentString(`
+    mutation DismissTaskSuggestion($input: TaskSuggestionInput!) {
+  dismissTaskSuggestion(input: $input) {
+    suggestionId
+    displayText
+    count
+    shouldSuggest
+  }
+}
+    `) as unknown as TypedDocumentString<DismissTaskSuggestionMutation, DismissTaskSuggestionMutationVariables>;
+export const AcceptTaskSuggestionDocument = new TypedDocumentString(`
+    mutation AcceptTaskSuggestion($input: TaskSuggestionInput!) {
+  acceptTaskSuggestion(input: $input) {
+    id
+    collectionId
+    title
+    order
+    lastUsedAt
+  }
+}
+    `) as unknown as TypedDocumentString<AcceptTaskSuggestionMutation, AcceptTaskSuggestionMutationVariables>;
 export const MeDocument = new TypedDocumentString(`
     query Me {
   me {

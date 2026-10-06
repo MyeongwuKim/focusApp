@@ -4,10 +4,10 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const KAKAO_MAVEN_REPO = "https://devrepo.kakao.com/nexus/content/groups/public/";
 const APP_ROOT = process.cwd();
-const PROD_APP_NAME = "타임스택";
-const TEST_APP_NAME = "타임스택 (T)";
-const PROD_PROJECT_NAME = "timestack";
-const TEST_PROJECT_NAME = "timestackT";
+const PROD_APP_NAME = "데일로";
+const TEST_APP_NAME = "데일로(T)";
+const PROD_PROJECT_NAME = "dailo";
+const TEST_PROJECT_NAME = "dailoT";
 const PROD_BUNDLE_ID = "com.myeongwu.focushybrid";
 const TEST_BUNDLE_ID = "com.myeongwu.focushybrid.t";
 const PROD_ANDROID_PACKAGE = "com.myeongwu.focushybrid";

@@ -223,6 +223,10 @@ function isNativeLoginCancelledError(provider: AuthProvider, error: unknown) {
   return false;
 }
 
+/**
+ * 로그아웃 상태에서 소셜 로그인을 시작하는 화면이다.
+ * iOS 네이티브 WebView에서는 Apple 로그인을 함께 표시하고, 카카오·네이버는 실행 환경에 맞는 인증 흐름으로 연결한다.
+ */
 export function LoginPage() {
   const [nativeLoadingProvider, setNativeLoadingProvider] = useState<AuthProvider | null>(null);
   const isAppleNativeLoginAvailable = isNativeWebViewRuntime() && getNativePlatform() === "ios";
@@ -287,53 +291,64 @@ export function LoginPage() {
   };
 
   return (
-    <main className="app-root bg-gradient-to-b from-base-200 via-base-100 to-base-200">
-      <section className="app-shell mx-auto flex h-full w-full items-center justify-center overflow-hidden border border-base-300 bg-base-100/95 px-5 shadow-xl backdrop-blur">
-        <div className="w-full max-w-sm rounded-2xl border border-base-300 bg-base-100 p-6 shadow-lg">
-          <h1 className="text-center text-2xl font-semibold">로그인</h1>
-          <p className="mt-2 text-center text-sm text-base-content/70">
-            {isAppleNativeLoginAvailable
-              ? "Apple, 카카오 또는 네이버 계정으로 시작할 수 있어요."
-              : "카카오 또는 네이버 계정으로 시작할 수 있어요."}
-          </p>
+    <main className="app-root">
+      <section className="app-shell mx-auto flex h-full w-full overflow-hidden">
+        <div className="sketchbook-page sketchbook-login-page relative flex h-full min-h-0 w-full flex-col">
+          <header className="sketchbook-page-header sketchbook-header relative flex h-12 shrink-0 items-center justify-center px-2">
+            <h1 className="sketchbook-page-header__title m-0">로그인</h1>
+          </header>
 
-          <div className="mt-6 flex flex-col gap-3">
-            {isAppleNativeLoginAvailable ? (
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-black bg-black px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                onClick={(event) => {
-                  void handleNativeProviderLoginClick("apple", event);
-                }}
-                disabled={Boolean(nativeLoadingProvider)}
-              >
-                <FaApple size={18} />
-                {isNativeAppleLoading ? "Apple 로그인 중..." : "Apple로 로그인"}
-              </button>
-            ) : null}
-            <a
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#E6C200] bg-[#FEE500] px-4 py-3 text-sm font-semibold text-[#1A1A1A] transition hover:brightness-95"
-              href={buildOAuthStartUrl("kakao")}
-              onClick={(event) => {
-                void handleNativeProviderLoginClick("kakao", event);
-              }}
-              aria-disabled={Boolean(nativeLoadingProvider)}
-            >
-              <SiKakaotalk size={18} />
-              {isNativeKakaoLoading ? "카카오 로그인 중..." : "카카오로 로그인"}
-            </a>
-            <a
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#029C38] bg-[#03C75A] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-95"
-              href={buildOAuthStartUrl("naver")}
-              onClick={(event) => {
-                void handleNativeProviderLoginClick("naver", event);
-              }}
-              aria-disabled={Boolean(nativeLoadingProvider)}
-            >
-              <SiNaver size={16} />
-              {isNativeNaverLoading ? "네이버 로그인 중..." : "네이버로 로그인"}
-            </a>
-          </div>
+          <section className="sketchbook-login-page__body flex min-h-0 flex-1 items-center justify-center">
+            <div className="sketchbook-login-page__content w-full max-w-sm">
+              <p className="sketchbook-login-page__eyebrow m-0 text-center">오늘의 페이지를 이어가요</p>
+              <p className="sketchbook-login-page__description mt-2 text-center text-sm">
+                {isAppleNativeLoginAvailable
+                  ? "Apple, 카카오 또는 네이버 계정으로 시작할 수 있어요."
+                  : "카카오 또는 네이버 계정으로 시작할 수 있어요."}
+              </p>
+
+              <div className="sketchbook-login-page__actions mt-7 flex flex-col gap-3">
+                {isAppleNativeLoginAvailable ? (
+                  <button
+                    type="button"
+                    className="sketchbook-login-button sketchbook-login-button--apple inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={(event) => {
+                      void handleNativeProviderLoginClick("apple", event);
+                    }}
+                    disabled={Boolean(nativeLoadingProvider)}
+                  >
+                    <FaApple size={18} />
+                    {isNativeAppleLoading ? "Apple 로그인 중..." : "Apple로 로그인"}
+                  </button>
+                ) : null}
+                <a
+                  className="sketchbook-login-button sketchbook-login-button--kakao inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition"
+                  href={buildOAuthStartUrl("kakao")}
+                  onClick={(event) => {
+                    void handleNativeProviderLoginClick("kakao", event);
+                  }}
+                  aria-disabled={Boolean(nativeLoadingProvider)}
+                >
+                  <SiKakaotalk size={18} />
+                  {isNativeKakaoLoading ? "카카오 로그인 중..." : "카카오로 로그인"}
+                </a>
+                <a
+                  className="sketchbook-login-button sketchbook-login-button--naver inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition"
+                  href={buildOAuthStartUrl("naver")}
+                  onClick={(event) => {
+                    void handleNativeProviderLoginClick("naver", event);
+                  }}
+                  aria-disabled={Boolean(nativeLoadingProvider)}
+                >
+                  <SiNaver size={16} />
+                  {isNativeNaverLoading ? "네이버 로그인 중..." : "네이버로 로그인"}
+                </a>
+              </div>
+              <p className="sketchbook-login-page__note mt-6 text-center text-xs">
+                로그인하면 작성한 할 일과 기록을 이어서 볼 수 있어요.
+              </p>
+            </div>
+          </section>
         </div>
       </section>
     </main>

@@ -10,12 +10,15 @@ const SWIPE_CLOSE_ANIMATION_MS = 280;
 type DateTodosSwipeCloseLayerProps = {
   onClose: () => void;
   swipeCloseEnabled?: boolean;
+  /** 하위 화면의 바탕 표시 방식. transparent는 상위 노트 배경을 그대로 드러낸다. */
+  background?: "surface" | "transparent";
   children: ReactNode;
 };
 
 export function DateTodosSwipeCloseLayer({
   onClose,
   swipeCloseEnabled = false,
+  background = "surface",
   children,
 }: DateTodosSwipeCloseLayerProps) {
   const {
@@ -38,7 +41,10 @@ export function DateTodosSwipeCloseLayer({
 
   return (
     <div
-      className="relative flex min-h-0 flex-1 flex-col bg-base-100"
+      className={[
+        "relative flex min-h-0 flex-1 flex-col",
+        background === "transparent" ? "bg-transparent" : "bg-base-100",
+      ].join(" ")}
       style={
         swipeState === "idle"
           ? undefined

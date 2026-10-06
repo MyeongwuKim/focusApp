@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FiCpu } from "react-icons/fi";
+import { FiChevronDown, FiCpu } from "react-icons/fi";
 import type { StatsCommentaryPayload } from "../../../api/statsCommentaryApi";
 import { fetchStatsCommentary } from "../../../api/statsCommentaryApi";
 
@@ -67,33 +67,12 @@ export function StatsAiCommentaryCard({
   isDataFetching,
   canUseCommentary,
 }: StatsAiCommentaryCardProps) {
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const target = sectionRef.current;
-    if (!target || isVisible) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.some((entry) => entry.isIntersecting);
-        if (visible) {
-          setIsVisible(true);
-        }
-      },
-      { root: null, threshold: 0.15 }
-    );
-
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [isVisible]);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const commentaryQuery = useQuery({
-    queryKey: ["stats-commentary-v12", payload],
+    queryKey: ["stats-commentary-v13", payload],
     queryFn: () => fetchStatsCommentary(payload),
-    enabled: canUseCommentary && !isDataFetching && isVisible,
+    enabled: canUseCommentary && !isDataFetching && isExpanded,
     meta: { skipGlobalErrorToast: true },
     staleTime: 60 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
@@ -102,27 +81,37 @@ export function StatsAiCommentaryCard({
   });
 
   return (
-    <article ref={sectionRef} className="rounded-xl border border-base-300/80 bg-base-200/40 p-3">
-      <h3 className="text-sm font-semibold text-base-content/85">AI 한마디</h3>
-      {!canUseCommentary ? (
-        <div className="mt-2 flex items-center gap-2 rounded-lg border border-base-300/70 bg-base-100/60 px-3 py-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-info/15 text-info">
-            <FiCpu size={16} />
-          </span>
-          <p className="m-0 text-sm text-base-content/75">하루 이상 기록해야 AI 한마디를 볼 수 있어요.</p>
+    <article className="stats-ai-note" data-expanded={isExpanded || undefined}>
+      <button
+        type="button"
+        className="stats-ai-note__toggle"
+        onClick={() => setIsExpanded((current) => !current)}
+        aria-expanded={isExpanded}
+      >
+        <span className="stats-ai-note__icon"><FiCpu size={16} /></span>
+        <span>
+          <strong>이번 기록에서 발견한 점</strong>
+          <small>{canUseCommentary ? "AI 한마디 펼쳐보기" : "하루 이상 기록하면 볼 수 있어요"}</small>
+        </span>
+        <FiChevronDown className="stats-ai-note__chevron" size={17} aria-hidden="true" />
+      </button>
+
+      {isExpanded ? (
+        <div className="stats-ai-note__body">
+          {!canUseCommentary ? (
+            <p className="m-0 text-sm text-base-content/70">기록이 쌓이면 이곳에서 짧게 정리해드려요.</p>
+          ) : isDataFetching || commentaryQuery.isLoading ? (
+            <AiCommentaryLoading />
+          ) : commentaryQuery.isError ? (
+            <div className="space-y-1">
+              <p className="m-0 text-sm text-base-content/70">AI 메시지를 가져오지 못했어요.</p>
+              <p className="m-0 text-xs text-base-content/55">잠시 후 다시 펼쳐 확인해 주세요.</p>
+            </div>
+          ) : (
+            <AiCommentaryResult text={commentaryQuery.data ?? ""} />
+          )}
         </div>
-      ) : !isVisible ? (
-        <p className="mt-2 text-sm text-base-content/60">이 영역에 오면 코멘트를 불러와요.</p>
-      ) : commentaryQuery.isLoading ? (
-        <AiCommentaryLoading />
-      ) : commentaryQuery.isError ? (
-        <div className="mt-2 space-y-1">
-          <p className="text-sm text-base-content/70">AI 메시지를 가져오는데 실패했습니다.</p>
-          <p className="text-xs text-base-content/55">잠시 후 다시 시도해 주세요.</p>
-        </div>
-      ) : (
-        <AiCommentaryResult text={commentaryQuery.data ?? ""} />
-      )}
+      ) : null}
     </article>
   );
 }

@@ -252,7 +252,8 @@ export function useAuthSessionGuard({ activeRoute, mainRoutePath }: UseAuthSessi
       !isLoginRoute &&
       !isAuthCallbackRoute &&
       activeRoute === MAIN_ROUTE &&
-      location.pathname !== mainRoutePath
+      location.pathname !== mainRoutePath &&
+      !location.pathname.startsWith(`${mainRoutePath}/`)
     ) {
       navigate(mainRoutePath, { replace: true });
     }

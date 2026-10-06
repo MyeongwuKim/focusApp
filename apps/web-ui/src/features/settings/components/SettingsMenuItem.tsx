@@ -12,10 +12,10 @@ export function SettingsMenuItem({ icon: Icon, title, description, onClick }: Se
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-3 rounded-xl border border-base-300/80 bg-base-100/75 px-3 py-3.5 text-left"
+      className="settings-sketch-menu-item flex w-full items-center gap-3 rounded-xl border border-base-300/80 bg-base-100/75 px-3 py-3.5 text-left"
       onClick={onClick}
     >
-      <span className="grid h-8 w-8 place-items-center rounded-lg bg-base-200 text-base-content/80">
+      <span className="settings-sketch-menu-item__icon grid h-8 w-8 place-items-center rounded-lg bg-base-200 text-base-content/80">
         <Icon size={16} />
       </span>
       <span className="min-w-0 flex-1 space-y-0.5">

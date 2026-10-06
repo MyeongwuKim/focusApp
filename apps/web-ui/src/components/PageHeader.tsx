@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  CALENDAR_DATE_TASKS_PATH,
   MAIN_ROUTE,
   ROUTE_LABEL,
   ROUTINE_CREATE_PATH,
@@ -17,9 +18,7 @@ import {
   FiCloudSnow,
   FiChevronLeft,
   FiMoon,
-  FiSettings,
   FiSun,
-  FiMenu,
   FiHelpCircle,
 } from "react-icons/fi";
 import { useAppStore, useWeatherStore } from "../stores";
@@ -64,14 +63,18 @@ function getTasksTitleFromDateKey(dateKey: string) {
     target.getDate() === today.getDate();
 
   if (isToday) {
-    return "오늘 할일";
+    return "오늘 할 일";
   }
-  return `${month}.${day} 할일`;
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(target);
 }
 
 export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: PageHeaderProps) {
   const location = useLocation();
-  const { openMenu, goBack, goPage } = useAppNavigation();
+  const { openMenu, goBack } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setViewMonth = useAppStore((state) => state.setViewMonth);
   const temperatureEnabled = useWeatherStore((state) => state.temperatureEnabled);
@@ -79,19 +82,31 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
   const weather = useWeatherStore((state) => state.weather);
   const pathname = forcedPathname ?? location.pathname;
   const search = forcedSearch ?? location.search;
+  const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
+  const isCalendarDateTasksPage =
+    route === MAIN_ROUTE && normalizedPathname === CALENDAR_DATE_TASKS_PATH;
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-  const helpGuide = useMemo(() => getPageHelpGuide(pathname), [pathname]);
+  const helpGuide = useMemo(
+    () => getPageHelpGuide(isCalendarDateTasksPage ? "/date-tasks" : pathname),
+    [isCalendarDateTasksPage, pathname]
+  );
   const routeTitle = useMemo(() => {
     if (route === "dateTasks") {
       const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+      const dateParam = new URLSearchParams(search).get("date");
       if (normalizedPath === "/date-tasks/routines/new") {
-        return "루틴 만들기";
+        return "묶음 만들기";
       }
       if (normalizedPath === "/date-tasks/routines") {
-        return "루틴 불러오기";
+        return "묶음 불러오기";
+      }
+      if (normalizedPath === "/date-tasks/add") {
+        return "저장한 할 일";
+      }
+      if (normalizedPath === "/date-tasks/memo") {
+        return dateParam ? `${dateParam} 메모` : "메모";
       }
 
-      const dateParam = new URLSearchParams(search).get("date");
       if (!dateParam) {
         return ROUTE_LABEL.dateTasks;
       }
@@ -112,29 +127,26 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
     if (route === "settings" || route === "routine") {
       const normalizedPath = pathname.replace(/\/+$/, "") || "/";
       if (normalizedPath === ROUTINE_CREATE_PATH) {
-        return "루틴 만들기";
+        return "묶음 만들기";
       }
       if (normalizedPath.startsWith(ROUTINE_EDIT_PATH_PREFIX)) {
-        return "루틴 수정";
+        return "묶음 수정";
       }
       if (normalizedPath === ROUTINE_MANAGE_PATH) {
-        return "루틴 관리";
+        return "할 일 묶음";
       }
       if (normalizedPath.startsWith(`${ROUTINE_MANAGE_PATH}/`)) {
-        return "루틴 관리";
+        return "할 일 묶음";
       }
       if (route === "routine") {
         return ROUTE_LABEL.routine;
       }
       const subPath = pathname.replace(/^\/settings\/?/, "").split("/")[0];
-      if (subPath === "theme") {
-        return "테마";
-      }
       if (subPath === "weather") {
         return "날씨";
       }
       if (subPath === "routine") {
-        return "루틴 관리";
+        return "할 일 묶음";
       }
       if (subPath === "notifications") {
         return "알림";
@@ -151,24 +163,55 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
     setIsHelpModalOpen(false);
   }, [pathname, search]);
 
-  if (route === MAIN_ROUTE) {
+  if (
+    route === MAIN_ROUTE &&
+    (
+      normalizedPathname === "/date-tasks" ||
+      normalizedPathname === "/date-tasks/add" ||
+      isCalendarDateTasksPage
+    )
+  ) {
+    const isMainTasksPage = normalizedPathname === "/date-tasks";
     return (
       <>
-        <header className="relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
+        <header className="sketchbook-page-header sketchbook-header relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
           <Button
             variant="ghost"
             size="sm"
             circle
-            className="absolute left-2 top-1/2 -translate-y-1/2"
-            onClick={openMenu}
-            aria-label="메뉴 열기"
+            className={[
+              "sketchbook-header__binding-action absolute top-1/2",
+              isMainTasksPage ? "sketchbook-header__menu-note" : "-translate-y-1/2",
+            ].join(" ")}
+            onClick={() => {
+              if (!isMainTasksPage) {
+                if (onBack) {
+                  onBack();
+                } else {
+                  goBack({ animated: true });
+                }
+                return;
+              }
+              openMenu();
+            }}
+            aria-label={
+              isMainTasksPage
+                ? "메뉴 열기"
+                : isCalendarDateTasksPage
+                  ? "캘린더로 돌아가기"
+                  : "오늘 할 일로 돌아가기"
+            }
           >
-            <FiMenu size={18} />
+            {isMainTasksPage ? (
+              <span className="sketchbook-header__menu-note-label" aria-hidden="true">
+                메뉴
+              </span>
+            ) : (
+              <FiChevronLeft size={18} />
+            )}
           </Button>
 
-          <div className="flex justify-center">
-            <MonthDropdown month={viewMonth} onChange={setViewMonth} />
-          </div>
+          <h1 className="sketchbook-page-header__title sketchbook-main-title m-0">{routeTitle}</h1>
           {temperatureEnabled && weather ? (
             <div className="pointer-events-none absolute top-1/2 right-[5.25rem] -translate-y-1/2">
               <div
@@ -189,23 +232,52 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
               variant="ghost"
               size="sm"
               circle
-              className="absolute right-12 top-1/2 -translate-y-1/2"
+              className="sketchbook-header__help-action absolute right-2 top-1/2"
               onClick={() => setIsHelpModalOpen(true)}
               aria-label="페이지 안내 보기"
             >
               <FiHelpCircle size={17} />
             </Button>
           ) : null}
+        </header>
+        <PageHelpModal
+          isOpen={isHelpModalOpen}
+          guide={helpGuide}
+          onClose={() => setIsHelpModalOpen(false)}
+        />
+      </>
+    );
+  }
+
+  if (route === "calendar") {
+    return (
+      <>
+        <header className="sketchbook-page-header sketchbook-header sketchbook-header--calendar relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
           <Button
             variant="ghost"
             size="sm"
             circle
-            className="absolute right-2 top-1/2 -translate-y-1/2"
-            onClick={() => goPage("/settings")}
-            aria-label="옵션으로 이동"
+            className="sketchbook-header__binding-action absolute top-1/2 -translate-y-1/2"
+            onClick={() => (onBack ? onBack() : goBack({ animated: false }))}
+            aria-label="뒤로가기"
           >
-            <FiSettings size={18} />
+            <FiChevronLeft size={18} />
           </Button>
+          <div className="flex justify-center">
+            <MonthDropdown month={viewMonth} onChange={setViewMonth} />
+          </div>
+          {helpGuide ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              circle
+              className="sketchbook-header__help-action absolute right-2 top-1/2"
+              onClick={() => setIsHelpModalOpen(true)}
+              aria-label="페이지 안내 보기"
+            >
+              <FiHelpCircle size={17} />
+            </Button>
+          ) : null}
         </header>
         <PageHelpModal
           isOpen={isHelpModalOpen}
@@ -218,7 +290,7 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
 
   return (
     <>
-      <header className="relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
+      <header className="sketchbook-page-header sketchbook-secondary-header relative mb-2 flex h-12 shrink-0 items-center justify-center rounded-2xl border border-base-300/80 bg-base-200/50 px-2">
         <Button
           variant="ghost"
           size="sm"
@@ -231,7 +303,7 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
         </Button>
         <h1
           className={[
-            "m-0 truncate px-2 text-center text-lg font-semibold text-base-content",
+            "sketchbook-page-header__title m-0 truncate px-2 text-center text-lg font-semibold text-base-content",
             helpGuide ? "max-w-[calc(100%-8rem)]" : "max-w-[calc(100%-4rem)]",
           ].join(" ")}
         >
@@ -242,7 +314,7 @@ export function PageHeader({ route, forcedPathname, forcedSearch, onBack }: Page
             variant="ghost"
             size="sm"
             circle
-            className="absolute right-2 top-1/2 -translate-y-1/2"
+            className="sketchbook-header__help-action absolute right-2 top-1/2"
             onClick={() => setIsHelpModalOpen(true)}
             aria-label="페이지 안내 보기"
           >

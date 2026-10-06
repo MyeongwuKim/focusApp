@@ -1,5 +1,4 @@
 import type { Preview } from "@storybook/react";
-import { INITIAL_VIEWPORTS } from "@storybook/addon-viewport";
 import "../src/index.css";
 
 const iphone13PlusViewport = {
@@ -22,7 +21,6 @@ const preview: Preview = {
     layout: "fullscreen",
     viewport: {
       viewports: {
-        ...INITIAL_VIEWPORTS,
         iphone13plus: iphone13PlusViewport,
       },
       defaultViewport: "iphone13plus",

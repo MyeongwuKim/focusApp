@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useMemo } from "react";
 import { CalendarPage } from "../features/calendar/components/CalendarPage";
-import { DateTasksBottomSheet } from "../features/calendar/components/DateTasksBottomSheet";
 import { PageHeader } from "../components/PageHeader";
-import { MAIN_ROUTE } from "../routes/route-config";
 import { shiftMonth } from "../utils/calendar";
-
 import { useAppStore } from "../stores";
 import { useDailyLogQuery } from "../queries";
-import { formatDateKey } from "../utils/holidays";
+import { useAppNavigation } from "../providers/AppNavigationProvider";
+import { CALENDAR_DATE_TASKS_PATH } from "../routes/route-config";
 
 type CalendarRootPageProps = {
-  isOverlayActive: boolean;
+  showHeader?: boolean;
 };
 
 function hasMeaningfulMemoContent(memo?: string | null) {
@@ -35,23 +32,14 @@ function getMemoPreviewText(memo?: string | null) {
     .trim();
 }
 
-export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
-  const location = useLocation();
+/**
+ * 월간 기록을 탐색하고 선택한 날짜의 일간 할 일 화면을 여는 캘린더 화면이다.
+ * 날짜를 누르면 캘린더 상태를 유지한 채 전체 화면 일간 페이지를 위에 쌓는다.
+ */
+export function CalendarRootPage({ showHeader = true }: CalendarRootPageProps) {
+  const { goPage } = useAppNavigation();
   const viewMonth = useAppStore((state) => state.viewMonth);
   const setSelectedDateKey = useAppStore((state) => state.setSelectedDateKey);
-  const setViewMonth = useAppStore((state) => state.setViewMonth);
-  const [isDateSheetExpanded, setIsDateSheetExpanded] = useState(false);
-  const selectedDateKey = useAppStore((state) => state.selectedDateKey);
-  const routeSearchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const isSheetRequestedFromUrl = routeSearchParams.get("sheet") === "1";
-  const requestedDateKeyFromUrl = routeSearchParams.get("date");
-  const restFinishedRequestedFromUrl = routeSearchParams.get("restFinished") === "1";
-  const focusTargetElapsedRequestedFromUrl = routeSearchParams.get("focusTargetElapsed") === "1";
-  const startTodoPromptRequestedFromUrl = routeSearchParams.get("startTodoPrompt") === "1";
-  const focusTargetTodoIdFromUrl = routeSearchParams.get("todoId");
-  const startTodoPromptAtFromUrl = routeSearchParams.get("promptAt");
-  const startTodoPromptSourceFromUrl = routeSearchParams.get("startTodoPromptSource");
-  const lastAppliedSearchRef = useRef<string | null>(null);
 
   const monthKeys = useMemo(
     () => {
@@ -78,11 +66,6 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         doneCount: log.doneCount,
         allDone: log.todoCount > 0 && log.doneCount === log.todoCount,
         hasMemo: hasMeaningfulMemoContent(log.memo),
-        memoPreview: getMemoPreviewText(log.memo),
-        selectedTasks: sortedTodos.map((todo) => ({
-          label: todo.content,
-          done: todo.done,
-        })),
         previewBars: sortedTodos.map((todo) => ({
           id: todo.id,
           label: todo.content,
@@ -96,131 +79,28 @@ export function CalendarRootPage({ isOverlayActive }: CalendarRootPageProps) {
         doneCount: number;
         allDone: boolean;
         hasMemo: boolean;
-        memoPreview: string;
-        selectedTasks: { label: string; done: boolean }[];
         previewBars: { id: string; label: string }[];
       }
     >);
   }, [monthlyLogs]);
 
-  const selectedLog = selectedDateKey ? logsByDate[selectedDateKey] : null;
-  const selectedTasks = selectedLog?.selectedTasks ?? [];
-  const selectedMemoPreview = selectedLog?.memoPreview ? selectedLog.memoPreview : null;
-
-  const openDateTasksSheet = () => {
-    setIsDateSheetExpanded(true);
+  /** 선택한 날짜를 저장하고 캘린더 위에 해당 날짜의 일간 할 일 페이지를 연다. */
+  const openDateTasksPage = (dateKey: string) => {
+    setSelectedDateKey(dateKey);
+    goPage(CALENDAR_DATE_TASKS_PATH, {
+      query: { date: dateKey },
+    });
   };
 
-  useEffect(() => {
-    if (isOverlayActive) {
-      return;
-    }
-
-    // URL이 실제로 변경된 경우에만 URL -> UI 상태 동기화
-    if (lastAppliedSearchRef.current === location.search) {
-      return;
-    }
-    lastAppliedSearchRef.current = location.search;
-
-    if (!isSheetRequestedFromUrl) {
-      setIsDateSheetExpanded(false);
-      return;
-    }
-    setIsDateSheetExpanded(true);
-
-    if (!requestedDateKeyFromUrl) {
-      return;
-    }
-
-    const matched = requestedDateKeyFromUrl.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!matched) {
-      return;
-    }
-
-    setSelectedDateKey(requestedDateKeyFromUrl);
-
-    const year = Number(matched[1]);
-    const month = Number(matched[2]);
-    if (!Number.isFinite(year) || !Number.isFinite(month)) {
-      return;
-    }
-    setViewMonth(new Date(year, month - 1, 1));
-  }, [
-    location.search,
-    isOverlayActive,
-    isSheetRequestedFromUrl,
-    requestedDateKeyFromUrl,
-    setSelectedDateKey,
-    setViewMonth,
-  ]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || isOverlayActive) {
-      return;
-    }
-
-    const resolvedDateKey = selectedDateKey ?? formatDateKey(new Date());
-    const nextHashPath = isDateSheetExpanded
-      ? `/calendar?sheet=1&date=${encodeURIComponent(resolvedDateKey)}${
-          restFinishedRequestedFromUrl ? "&restFinished=1" : ""
-        }${
-          focusTargetElapsedRequestedFromUrl ? "&focusTargetElapsed=1" : ""
-        }${
-          startTodoPromptRequestedFromUrl ? "&startTodoPrompt=1" : ""
-        }${
-          focusTargetTodoIdFromUrl ? `&todoId=${encodeURIComponent(focusTargetTodoIdFromUrl)}` : ""
-        }${
-          startTodoPromptAtFromUrl ? `&promptAt=${encodeURIComponent(startTodoPromptAtFromUrl)}` : ""
-        }${
-          startTodoPromptSourceFromUrl
-            ? `&startTodoPromptSource=${encodeURIComponent(startTodoPromptSourceFromUrl)}`
-            : ""
-        }`
-      : "/calendar";
-    const currentHashPath = window.location.hash.startsWith("#")
-      ? window.location.hash.slice(1)
-      : window.location.hash;
-
-    if (currentHashPath === nextHashPath) {
-      return;
-    }
-
-    const nextUrl = `${window.location.pathname}${window.location.search}#${nextHashPath}`;
-    window.history.replaceState(window.history.state, "", nextUrl);
-  }, [
-    isDateSheetExpanded,
-    isOverlayActive,
-    restFinishedRequestedFromUrl,
-    focusTargetElapsedRequestedFromUrl,
-    startTodoPromptRequestedFromUrl,
-    focusTargetTodoIdFromUrl,
-    startTodoPromptAtFromUrl,
-    startTodoPromptSourceFromUrl,
-    selectedDateKey,
-  ]);
-
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <PageHeader route={MAIN_ROUTE} />
-      <div className="flex min-h-0 flex-1 flex-col pb-[calc(12rem+var(--app-safe-area-bottom))]">
+    <div className="calendar-root-page relative flex min-h-0 flex-1 flex-col">
+      {showHeader ? <PageHeader route="calendar" /> : null}
+      <div className="flex min-h-0 flex-1 flex-col pb-[var(--app-safe-area-bottom)]">
         <CalendarPage
           logsByDate={logsByDate}
-          onRequestOpenDateTasksSheet={openDateTasksSheet}
+          onOpenDateTasks={openDateTasksPage}
         />
       </div>
-      <DateTasksBottomSheet
-        isVisible={!isOverlayActive}
-        isExpanded={isDateSheetExpanded}
-        selectedMemoPreview={selectedMemoPreview}
-        selectedTasks={selectedTasks}
-        restFinishedRequested={restFinishedRequestedFromUrl}
-        focusTargetElapsedRequested={focusTargetElapsedRequestedFromUrl}
-        startTodoPromptRequested={startTodoPromptRequestedFromUrl}
-        focusTargetTodoId={focusTargetTodoIdFromUrl}
-        startTodoPromptAt={startTodoPromptAtFromUrl}
-        startTodoPromptSource={startTodoPromptSourceFromUrl}
-        onExpandedChange={setIsDateSheetExpanded}
-      />
     </div>
   );
 }

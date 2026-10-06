@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
-import { CalendarRootPage } from "./pages/CalendarRootPage";
+import { TodayTasksRootPage } from "./pages/TodayTasksRootPage";
 import { LoginPage } from "./pages/LoginPage";
 import { DrawerMenu } from "./components/DrawerMenu";
 import { PageHeader } from "./components/PageHeader";
@@ -11,6 +11,7 @@ import { BackendConnectionBanner } from "./components/BackendConnectionBanner";
 import { AppNavigationProvider } from "./providers/AppNavigationProvider";
 import { confirm, toast, useAppStore, useWeatherStore } from "./stores";
 import type { RouteKey } from "./routes/types";
+import { CALENDAR_DATE_TASKS_PATH } from "./routes/route-config";
 import {
   getNotificationPermissionStatus,
 } from "./utils/notifications";
@@ -41,18 +42,17 @@ import { isNativeWebViewRuntime } from "./utils/runtimeEnvironment";
 import { formatDateKey } from "./utils/holidays";
 import { RoutePageFallback } from "./components/route-loading/RoutePageFallback";
 import {
-  LazyAchievementsRoutePage,
+  LazyCalendarRootPage,
   LazyMemoArchiveRoutePage,
   LazyRoutineRoutePage,
   LazySettingsPage,
   LazyStatsRoutePage,
   LazyTaskManagementRoutePage,
-  preloadSecondaryRoutePages,
 } from "./routes/lazy-route-pages";
 
 const SETTINGS_GUIDE_PROMPTED_KEY_PREFIX = "focus-settings-guide-prompted-v1";
-const LOGIN_MOTIVATION_STALE_TIME_MS = 1000 * 60 * 60 * 3;
-const LOGIN_MOTIVATION_QUERY_KEY = ["motivation-message-v2"] as const;
+const LOGIN_MOTIVATION_GC_TIME_MS = 1000 * 60 * 5;
+const LOGIN_MOTIVATION_QUERY_KEY = ["motivation-message-v3"] as const;
 
 function hasSeenSettingsGuidePrompt(userId: string) {
   if (typeof window === "undefined" || !userId) {
@@ -106,53 +106,6 @@ function isNativeDailyLogPayload(value: unknown): value is DailyLogDetailPayload
   return Boolean(record && readUnknownString(record.dateKey) && Array.isArray(record.todos));
 }
 
-function patchDailyLogByLiveActivitySnapshot(
-  dailyLog: DailyLogDetailPayload | null | undefined,
-  snapshot: { dateKey: string; todoId: string; isPaused: boolean }
-) {
-  if (!dailyLog || dailyLog.dateKey !== snapshot.dateKey) {
-    return dailyLog;
-  }
-
-  let didChange = false;
-  const nowIso = new Date().toISOString();
-  const nextTodos = dailyLog.todos.map((todo) => {
-    if (todo.id !== snapshot.todoId || todo.done || !todo.startedAt) {
-      return todo;
-    }
-
-    if (snapshot.isPaused) {
-      if (todo.pausedAt) {
-        return todo;
-      }
-      didChange = true;
-      return {
-        ...todo,
-        pausedAt: nowIso,
-      };
-    }
-
-    if (!todo.pausedAt) {
-      return todo;
-    }
-
-    const pausedAtMs = new Date(todo.pausedAt).getTime();
-    const pausedSeconds = Number.isFinite(pausedAtMs)
-      ? Math.max(Math.floor((Date.now() - pausedAtMs) / 1000), 0)
-      : 0;
-    didChange = true;
-    return {
-      ...todo,
-      pausedAt: null,
-      scheduledStartAt: null,
-      deviationSeconds: Math.max(todo.deviationSeconds + pausedSeconds, 0),
-      resumeCount: Math.max(todo.resumeCount ?? 0, 0) + 1,
-    };
-  });
-
-  return didChange ? { ...dailyLog, todos: nextTodos } : dailyLog;
-}
-
 function resolveTodayTodoViewContext(input: {
   pathname: string;
   search: string;
@@ -194,7 +147,6 @@ function resolveTodayTodoViewContext(input: {
 function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const openMenu = useCallback(() => {
-    void preloadSecondaryRoutePages();
     setIsDrawerOpen(true);
   }, []);
   const closeMenu = useCallback(() => {
@@ -211,7 +163,7 @@ function App() {
     overlayRenderEntries,
     overlaySwipeState,
     isOverlayEntering,
-    shouldRevealCalendarDateSheetBackdrop,
+    shouldRevealMainRouteBackdrop,
     getOverlayEntryStyle,
     getOverlayTouchHandlers,
   } = useOverlayRouteNavigation({ openMenu, closeMenu });
@@ -236,27 +188,6 @@ function App() {
   const selectedDateKey = useAppStore((state) => state.selectedDateKey);
 
   useEffect(() => {
-    if (!isLoggedIn || isAuthCallbackRoute || hasAuthSessionScopeMismatch) {
-      return;
-    }
-
-    const preload = () => {
-      void preloadSecondaryRoutePages();
-    };
-    if (window.requestIdleCallback) {
-      const idleCallbackId = window.requestIdleCallback(preload, { timeout: 1500 });
-      return () => {
-        window.cancelIdleCallback(idleCallbackId);
-      };
-    }
-
-    const timeoutId = window.setTimeout(preload, 600);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [hasAuthSessionScopeMismatch, isAuthCallbackRoute, isLoggedIn]);
-
-  useEffect(() => {
     if (!authToken) {
       hasShownLoginMotivationThisLaunchRef.current = false;
       return;
@@ -278,8 +209,8 @@ function App() {
     void queryClient
       .fetchQuery({
         queryKey: [...LOGIN_MOTIVATION_QUERY_KEY, getAuthCacheKey(authToken), todayDateKey],
-        staleTime: LOGIN_MOTIVATION_STALE_TIME_MS,
-        gcTime: LOGIN_MOTIVATION_STALE_TIME_MS,
+        staleTime: 0,
+        gcTime: LOGIN_MOTIVATION_GC_TIME_MS,
         queryFn: () => fetchMotivationMessage({ dateKey: todayDateKey }),
       })
       .then((result) => {
@@ -522,62 +453,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleNativeFocusLiveActivitySnapshot = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        type?: string;
-        payload?: unknown;
-      }>;
-      const detail = customEvent.detail;
-      if (detail?.type !== "RN_FOCUS_LIVE_ACTIVITY_SNAPSHOT") {
-        return;
-      }
-
-      const payload = readUnknownRecord(detail.payload);
-      const dateKey = readUnknownString(payload?.dateKey);
-      const todoId = readUnknownString(payload?.todoId);
-      if (!dateKey || !todoId) {
-        return;
-      }
-      const snapshot = {
-        dateKey,
-        todoId,
-        isPaused: payload?.isPaused === true,
-      };
-
-      queryClient.setQueryData<DailyLogDetailPayload | null | undefined>(
-        dailyLogByDateQueryKey(dateKey),
-        (previous) => patchDailyLogByLiveActivitySnapshot(previous, snapshot)
-      );
-      queryClient.setQueryData<DailyLogDetailPayload | null | undefined>(
-        statsDailyDetailQueryKey(dateKey),
-        (previous) => patchDailyLogByLiveActivitySnapshot(previous, snapshot)
-      );
-
-      void queryClient.invalidateQueries({
-        queryKey: dailyLogByDateQueryKey(dateKey),
-        exact: true,
-        refetchType: "active",
-      });
-      void queryClient.invalidateQueries({
-        queryKey: statsDailyDetailQueryKey(dateKey),
-        exact: true,
-        refetchType: "active",
-      });
-      void queryClient.invalidateQueries({
-        queryKey: dailyLogsByMonthQueryKey(dateKey.slice(0, 7)),
-        exact: false,
-        refetchType: "active",
-      });
-    };
-
-    window.addEventListener("focus-hybrid-native-bridge", handleNativeFocusLiveActivitySnapshot as EventListener);
-
-    return () => {
-      window.removeEventListener("focus-hybrid-native-bridge", handleNativeFocusLiveActivitySnapshot as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!isLoggedIn || !authToken) {
       syncedNotificationAuthTokenRef.current = null;
       return;
@@ -684,6 +559,9 @@ function App() {
             forcedPathname={options?.forcedPathname}
             forcedSearch={options?.forcedSearch}
             isActive={options?.isActive ?? true}
+            appearance={
+              options?.forcedPathname === CALENDAR_DATE_TASKS_PATH ? "sketchbook" : "default"
+            }
           />
         );
       case "tasks":
@@ -696,12 +574,14 @@ function App() {
         );
       case "stats":
         return <LazyStatsRoutePage forcedSearch={options?.forcedSearch} />;
-      case "achievements":
-        return <LazyAchievementsRoutePage forcedSearch={options?.forcedSearch} />;
       case "memo":
         return <LazyMemoArchiveRoutePage />;
       case "calendar":
-        return null;
+        return (
+          <LazyCalendarRootPage
+            showHeader={false}
+          />
+        );
       default: {
         const _exhaustive: never = route;
         return _exhaustive;
@@ -741,21 +621,31 @@ function App() {
         />
 
         <section className="app-shell mx-auto relative flex h-full w-full flex-col overflow-hidden border border-base-300 bg-base-100/95 shadow-xl backdrop-blur">
-          <CalendarRootPage
-            isOverlayActive={Boolean(overlayRoute) && !shouldRevealCalendarDateSheetBackdrop}
+          <TodayTasksRootPage
+            isActive={!overlayRoute || shouldRevealMainRouteBackdrop}
+            search={locationSearch}
           />
 
           {overlayCurrentEntry ? (
             <>
               {overlayRenderEntries.map((entry) => {
                 const isActiveEntry = entry.stackIndex === overlayCurrentEntry.stackIndex;
+                const isCalendarDateTasksEntry =
+                  entry.route === "dateTasks" && entry.pathname === CALENDAR_DATE_TASKS_PATH;
+                const isSavedTasksEntry =
+                  entry.route === "dateTasks" && entry.pathname === "/date-tasks/add";
 
                 return (
 	                  <div
 	                    key={entry.stackIndex}
 	                    aria-hidden={!isActiveEntry}
 	                    className={[
-	                      "absolute inset-0 flex flex-col bg-base-100/98 px-1.5 py-1.5",
+	                      "absolute inset-0 flex flex-col px-1.5 py-1.5",
+	                      entry.route === "calendar"
+	                        ? "sketchbook-page sketchbook-page--calendar"
+	                        : isCalendarDateTasksEntry || isSavedTasksEntry
+	                          ? "sketchbook-page sketchbook-page--tasks"
+	                          : "sketchbook-secondary-overlay",
 	                      isActiveEntry ? "z-20 backdrop-blur-sm" : "z-10 pointer-events-none",
 	                      isActiveEntry && isOverlayEntering && overlaySwipeState === "idle" ? "overlay-enter" : "",
 	                    ]
@@ -764,8 +654,17 @@ function App() {
 	                    style={getOverlayEntryStyle(isActiveEntry)}
 	                    {...getOverlayTouchHandlers(entry, isActiveEntry)}
 	                  >
-                    <PageHeader route={entry.route} forcedPathname={entry.pathname} forcedSearch={entry.search} />
-                    <div className="relative min-h-0 flex flex-1 flex-col overflow-hidden">
+                    <PageHeader
+                      route={entry.route}
+                      forcedPathname={entry.pathname}
+                      forcedSearch={entry.search}
+                      onBack={
+                        isCalendarDateTasksEntry
+                          ? () => navigationActions.goBack({ animated: true })
+                          : undefined
+                      }
+                    />
+                    <div className="sketchbook-secondary-content relative min-h-0 flex flex-1 flex-col overflow-hidden">
                       <Suspense
                         fallback={
                           <RoutePageFallback

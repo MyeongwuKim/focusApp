@@ -80,7 +80,7 @@ export function MemoToolbar({ editor }: MemoToolbarProps) {
   })();
 
   return (
-    <div className="mb-2 grid shrink-0 grid-cols-6 gap-1.5 rounded-xl border border-base-300/80 bg-base-100/85 p-1.5">
+    <div className="memo-editor-toolbar mb-2 grid shrink-0 grid-cols-6 gap-1.5 px-1 py-1.5">
       <Button
         size="xs"
         variant={editor?.isActive("heading") || isHeadingMenuOpen ? "primary" : "ghost"}

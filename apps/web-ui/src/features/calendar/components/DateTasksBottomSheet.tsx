@@ -424,7 +424,7 @@ export function DateTasksBottomSheet({
 
       <section
         className={[
-          "absolute inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden border border-base-300 bg-base-100/98 shadow-[0_-14px_40px_rgba(15,23,42,0.24)]",
+          "date-tasks-sheet absolute inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden border border-base-300 bg-base-100/98 shadow-[0_-14px_40px_rgba(15,23,42,0.24)]",
           isHelpModalOpen ? "pointer-events-none" : "pointer-events-auto",
           isExpanded && !isHeaderDragging ? "rounded-none" : "rounded-t-2xl",
         ].join(" ")}

@@ -67,31 +67,32 @@ export function ActionSheet() {
           }
         }}
       >
-        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-base-300/80" />
+        <div className="action-sheet-panel__handle mx-auto mb-3 h-1.5 w-10 rounded-full bg-base-300/80" />
         {active.title ? (
-          <h2 className="m-0 text-center text-sm font-semibold text-base-content">{active.title}</h2>
+          <h2 className="action-sheet-panel__title m-0 text-center text-sm font-semibold text-base-content">{active.title}</h2>
         ) : null}
         {active.message ? (
-          <p className="mt-1 mb-3 text-center text-xs text-base-content/65">{active.message}</p>
+          <p className="action-sheet-panel__message mt-1 mb-3 text-center text-xs text-base-content/65">{active.message}</p>
         ) : null}
-        <div className="space-y-1.5">
+        <div className="action-sheet-panel__items space-y-1.5">
           {active.items.map((item, index) => (
             <button
               key={`${item.label}-${index}`}
               type="button"
               disabled={item.disabled}
+              data-tone={item.tone ?? "default"}
               className={[
-                "w-full rounded-xl border border-base-300/70 bg-base-100/70 px-3 py-2 text-left transition",
+                "action-sheet-panel__item w-full rounded-xl border border-base-300/70 bg-base-100/70 px-3 py-2 text-left transition",
                 item.disabled ? "cursor-not-allowed opacity-45" : "hover:bg-base-200/70",
               ].join(" ")}
               onClick={() => closeWithResult(item.value ?? item.label)}
             >
-              <div className={["flex items-center gap-2 text-sm font-medium", toneClassName(item.tone)].join(" ")}>
-                {item.icon ? <span className="inline-flex items-center">{item.icon}</span> : null}
+              <div className={["action-sheet-panel__item-label flex items-center gap-2 text-sm font-medium", toneClassName(item.tone)].join(" ")}>
+                {item.icon ? <span className="action-sheet-panel__item-icon inline-flex items-center">{item.icon}</span> : null}
                 <span>{item.label}</span>
               </div>
               {item.description ? (
-                <p className="mt-0.5 mb-0 text-xs text-base-content/55">{item.description}</p>
+                <p className="action-sheet-panel__item-description mt-0.5 mb-0 text-xs text-base-content/55">{item.description}</p>
               ) : null}
             </button>
           ))}

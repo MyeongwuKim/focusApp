@@ -14,7 +14,6 @@ const requestSchema = z.object({
     doneCount: z.number().nonnegative(),
     incompleteCount: z.number().nonnegative(),
     focusMinutes: z.number().nonnegative(),
-    resumeCount: z.number().nonnegative(),
     restMinutes: z.number().nonnegative(),
   }),
   rates: z.object({
@@ -124,9 +123,7 @@ function hasMeaningfulGoodPoint(payload: StatsCommentaryRequest) {
 }
 
 function hasMeaningfulWeakPoint(payload: StatsCommentaryRequest) {
-  const totalTodos = payload.totals.doneCount + payload.totals.incompleteCount;
-  const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
-  return payload.totals.incompleteCount > 0 || (totalTodos > 0 && resumePerTodo >= 1);
+  return payload.totals.incompleteCount > 0;
 }
 
 function getEnabledCommentaryLabels(payload: StatsCommentaryRequest): CommentaryLabel[] {
@@ -160,7 +157,6 @@ function buildDeterministicCommentary(payload: StatsCommentaryRequest): Record<C
   const activeDays = payload.meta.activeDays;
   const completionRate = payload.rates.completionRate.toFixed(1);
   const totalTodos = doneCount + incompleteCount;
-  const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
   const activePhrase = activeDays === 1 ? `${periodLabel} 중 하루만 진행했고` : `${periodLabel} 동안 ${activeDays}일 진행했고`;
   const topIncompleteTask = payload.frequentIncompleteTasks[0];
 
@@ -187,8 +183,6 @@ function buildDeterministicCommentary(payload: StatsCommentaryRequest): Record<C
   const weakPoint =
     incompleteCount > 0
       ? `끝내지 못한 일이 ${incompleteCount}개 남았어요.`
-      : resumePerTodo >= 1
-      ? `할 일당 재개가 ${resumePerTodo.toFixed(2)}회라 한 번에 끝내기 어려운 구간이 있었어요.`
       : `기록일 대비 완료량 편차가 있어 일정한 마무리 흐름은 조금 아쉬웠어요.`;
 
   const advice =
@@ -328,8 +322,6 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     payload.frequentIncompleteTasks.length > 0
       ? payload.frequentIncompleteTasks.map((item) => `${item.label}(${item.count}회)`).join(", ")
       : "없음";
-  const totalTodos = payload.totals.doneCount + payload.totals.incompleteCount;
-  const resumePerTodo = totalTodos > 0 ? payload.totals.resumeCount / totalTodos : 0;
   const coachVoice = pickCoachVoice(payload);
   const enabledLabels = getEnabledCommentaryLabels(payload);
   const draft = buildDeterministicCommentary(payload);
@@ -388,7 +380,7 @@ function buildPrompt(payload: StatsCommentaryRequest) {
       ? "- goodPoint는 사용자가 한 행동이나 얻은 단서만 다룬다."
       : "- 완료와 집중이 모두 0이면 억지 칭찬을 만들지 않는다.",
     hasMeaningfulWeakPoint(payload)
-      ? "- weakPoint는 초안에 있는 미완료나 재개 마찰만 구체적으로 다룬다."
+      ? "- weakPoint는 초안에 있는 미완료만 구체적으로 다룬다."
       : "- weakPoint는 null로 둔다.",
     "- advice는 바로 적용 가능한 조정 하나만 말한다.",
     "",
@@ -426,8 +418,6 @@ function buildPrompt(payload: StatsCommentaryRequest) {
     `완료율: ${payload.rates.completionRate.toFixed(1)}%`,
     `미완료율: ${payload.rates.incompleteRate.toFixed(1)}%`,
     `집중: ${payload.totals.focusMinutes}분`,
-    `재개: ${payload.totals.resumeCount}회`,
-    `할 일당 재개: ${resumePerTodo.toFixed(2)}회`,
     `휴식: ${payload.totals.restMinutes}분`,
     `활동일 평균 완료: ${payload.meta.avgDonePerActiveDay.toFixed(2)}개`,
     `활동일 평균 미완료: ${payload.meta.avgIncompletePerActiveDay.toFixed(2)}개`,

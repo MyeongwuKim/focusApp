@@ -1,11 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { fetchDailyLogByDate } from "../../api/dailyLogApi";
 import { statsDailyDetailQueryKey, useDailyLogQuery } from "../../queries";
 import { addDays, formatDateInput, getMonthKeysBetween, getRangeDays, parseInputDate } from "./statsDate";
 import type {
   CountBarDatum,
-  FocusResumeDatum,
   StatsDailyActivityDatum,
   TimeBarDatum,
 } from "./components/types";
@@ -59,6 +58,8 @@ function matchesTask(
 }
 
 export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabled = true }: UseStatsMetricsInput) {
+  /** 이번 통계 계산에서 진행 중인 집중·휴식 시간을 환산할 기준 시각. 같은 렌더 흐름에서는 값이 바뀌지 않는다. */
+  const [calculationNowMs] = useState(() => Date.now());
   const rangeDays = getRangeDays(start, end);
   const monthKeys = useMemo(() => getMonthKeysBetween(start, end), [start, end]);
   const { monthlyLogsQuery } = useDailyLogQuery({
@@ -107,7 +108,6 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       key: string;
       done: number;
       incomplete: number;
-      resumeCount: number;
       doneLabels: string[];
       incompleteLabels: string[];
     }> = [];
@@ -121,14 +121,10 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         .sort((a, b) => a.order - b.order);
       const doneLabels = sortedTodos.filter((todo) => todo.done).map((todo) => todo.content);
       const incompleteLabels = sortedTodos.filter((todo) => !todo.done).map((todo) => todo.content);
-      const resumeCount = (detailMap.get(key)?.todos ?? [])
-        .filter((todo) => matchesTask(todo, taskId, taskLabel))
-        .reduce((acc, todo) => acc + Math.max(todo.resumeCount ?? 0, 0), 0);
       dailySeries.push({
         key,
         done: doneLabels.length,
         incomplete: incompleteLabels.length,
-        resumeCount,
         doneLabels,
         incompleteLabels,
       });
@@ -140,21 +136,19 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
 
     const monthlyMap = new Map<
       string,
-      { done: number; incomplete: number; resumeCount: number; doneLabels: string[]; incompleteLabels: string[] }
+      { done: number; incomplete: number; doneLabels: string[]; incompleteLabels: string[] }
     >();
     for (const item of dailySeries) {
       const monthKey = item.key.slice(0, 7);
       const prev = monthlyMap.get(monthKey) ?? {
         done: 0,
         incomplete: 0,
-        resumeCount: 0,
         doneLabels: [],
         incompleteLabels: [],
       };
       monthlyMap.set(monthKey, {
         done: prev.done + item.done,
         incomplete: prev.incomplete + item.incomplete,
-        resumeCount: prev.resumeCount + item.resumeCount,
         doneLabels: [...prev.doneLabels, ...item.doneLabels],
         incompleteLabels: [...prev.incompleteLabels, ...item.incompleteLabels],
       });
@@ -183,7 +177,6 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       incompleteRate: totalTodos > 0 ? (incompleteTodos / totalTodos) * 100 : 0,
       doneTodos,
       incompleteTodos,
-      resumeCount: dailySeries.reduce((acc, item) => acc + item.resumeCount, 0),
       frequentIncompleteTasks,
       donePercent,
       incompletePercent: clampPercent(100 - donePercent),
@@ -191,11 +184,10 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       monthlySeries,
       useMonthlyBar: rangeDays > 90,
     };
-  }, [detailMap, filteredLogs, rangeDays, start, taskId, taskLabel]);
+  }, [filteredLogs, rangeDays, start, taskId, taskLabel]);
 
   const timeStats = useMemo(() => {
-    const dailySeries: Array<{ key: string; focusMin: number; restMin: number; focusStartCount: number }> = [];
-    const focusResumePoints: FocusResumeDatum[] = [];
+    const dailySeries: Array<{ key: string; focusMin: number; restMin: number }> = [];
 
     for (let i = 0; i < rangeDays; i += 1) {
       const day = addDays(start, i);
@@ -204,16 +196,9 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
 
       let focusSeconds = 0;
       let restSeconds = taskId ? 0 : Math.max(detail?.restAccumulatedSeconds ?? 0, 0);
-      let focusStartCount = 0;
 
       const dayEndMs = parseInputDate(key).getTime() + 24 * 60 * 60 * 1000 - 1;
       for (const todo of detail?.todos?.filter((item) => matchesTask(item, taskId, taskLabel)) ?? []) {
-        const resumeCount = Math.max(todo.resumeCount ?? 0, 0);
-        const hasFocusActivity =
-          Boolean(todo.startedAt) || Math.max(todo.actualFocusSeconds ?? 0, 0) > 0 || resumeCount > 0;
-        if (hasFocusActivity) {
-          focusStartCount += 1;
-        }
         let todoFocusSeconds = 0;
         if (todo.done) {
           todoFocusSeconds = Math.max(todo.actualFocusSeconds ?? 0, 0);
@@ -222,8 +207,7 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
           if (startedAt) {
             const pausedAt = toEpochMillis(todo.pausedAt);
             const completedAt = toEpochMillis(todo.completedAt);
-            const nowMs = Date.now();
-            const tentativeEnd = pausedAt ?? completedAt ?? (key === todayKey ? nowMs : dayEndMs);
+            const tentativeEnd = pausedAt ?? completedAt ?? (key === todayKey ? calculationNowMs : dayEndMs);
             const endMs = Math.min(tentativeEnd, dayEndMs);
             const elapsedSeconds = Math.max(Math.floor((endMs - startedAt) / 1000), 0);
             todoFocusSeconds = Math.max(
@@ -234,22 +218,12 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         }
         focusSeconds += todoFocusSeconds;
 
-        if (hasFocusActivity) {
-          focusResumePoints.push({
-            id: `${key}-${todo.id}`,
-            dateKey: key,
-            taskLabel: todo.titleSnapshot?.trim() || todo.content.trim() || "이름 없는 할 일",
-            focusMin: Math.round((todoFocusSeconds / 60) * 10) / 10,
-            resumeCount,
-            done: todo.done,
-          });
-        }
       }
 
       if (!taskId && detail?.restStartedAt && key === todayKey) {
         const restStartedAtMs = toEpochMillis(detail.restStartedAt);
         if (restStartedAtMs) {
-          restSeconds += Math.max(Math.floor((Date.now() - restStartedAtMs) / 1000), 0);
+          restSeconds += Math.max(Math.floor((calculationNowMs - restStartedAtMs) / 1000), 0);
         }
       }
 
@@ -257,31 +231,27 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         key,
         focusMin: Math.floor((focusSeconds * 1000) / 60000),
         restMin: Math.floor((restSeconds * 1000) / 60000),
-        focusStartCount,
       });
     }
 
-    const monthlyMap = new Map<string, { focusMin: number; restMin: number; focusStartCount: number }>();
+    const monthlyMap = new Map<string, { focusMin: number; restMin: number }>();
     for (const item of dailySeries) {
       const monthKey = item.key.slice(0, 7);
-      const prev = monthlyMap.get(monthKey) ?? { focusMin: 0, restMin: 0, focusStartCount: 0 };
+      const prev = monthlyMap.get(monthKey) ?? { focusMin: 0, restMin: 0 };
       monthlyMap.set(monthKey, {
         focusMin: prev.focusMin + item.focusMin,
         restMin: prev.restMin + item.restMin,
-        focusStartCount: prev.focusStartCount + item.focusStartCount,
       });
     }
 
     return {
       totalFocus: dailySeries.reduce((acc, item) => acc + item.focusMin, 0),
       totalRest: dailySeries.reduce((acc, item) => acc + item.restMin, 0),
-      focusStartCount: dailySeries.reduce((acc, item) => acc + item.focusStartCount, 0),
-      focusResumePoints,
       dailySeries,
       monthlySeries: [...monthlyMap.entries()].map(([key, value]) => ({ key, ...value })),
       useMonthlyBar: rangeDays > 90,
     };
-  }, [detailMap, rangeDays, start, taskId, taskLabel, todayKey]);
+  }, [calculationNowMs, detailMap, rangeDays, start, taskId, taskLabel, todayKey]);
 
   const timeBars: TimeBarDatum[] = timeStats.useMonthlyBar
     ? timeStats.monthlySeries.map((item) => ({ label: item.key.slice(5), tooltipLabel: item.key, ...item }))
@@ -292,7 +262,6 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         tooltipLabel: item.key,
         done: item.done,
         incomplete: item.incomplete,
-        resumeCount: item.resumeCount,
         doneLabels: item.doneLabels,
         incompleteLabels: item.incompleteLabels,
       }))
@@ -301,24 +270,9 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         tooltipLabel: item.key,
         done: item.done,
         incomplete: item.incomplete,
-        resumeCount: item.resumeCount,
         doneLabels: item.doneLabels,
         incompleteLabels: item.incompleteLabels,
       }));
-
-  const focusResumeStats = useMemo(() => {
-    const focusSegmentCount = timeStats.focusStartCount + countStats.resumeCount;
-    return {
-      averageResumesPerTask:
-        timeStats.focusStartCount > 0
-          ? countStats.resumeCount / timeStats.focusStartCount
-          : null,
-      averageFocusSegmentMinutes:
-        timeStats.totalFocus > 0 && focusSegmentCount > 0
-          ? timeStats.totalFocus / focusSegmentCount
-          : null,
-    };
-  }, [countStats.resumeCount, timeStats]);
 
   const activitySignal = useMemo(() => {
     const series: StatsDailyActivityDatum[] = countStats.dailySeries.map((countItem, index) => {
@@ -327,7 +281,6 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
         key: countItem.key,
         done: countItem.done,
         incomplete: countItem.incomplete,
-        resumeCount: countItem.resumeCount,
         focusMin: timeItem?.focusMin ?? 0,
         restMin: timeItem?.restMin ?? 0,
       };
@@ -361,63 +314,12 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
     };
   }, [countStats.dailySeries, countStats.doneTodos, countStats.incompleteTodos, rangeDays, timeStats.dailySeries]);
 
-  const periodReview = useMemo(() => {
-    const combined = countStats.dailySeries.map((countItem, index) => {
-      const timeItem = timeStats.dailySeries[index];
-      const dayTodos = (detailMap.get(countItem.key)?.todos ?? []).filter((todo) =>
-        matchesTask(todo, taskId, taskLabel)
-      );
-      const startedIncomplete = dayTodos.filter((todo) => {
-        if (todo.done) {
-          return false;
-        }
-        const resumed = Math.max(todo.resumeCount ?? 0, 0) > 0;
-        const focused = Math.max(todo.actualFocusSeconds ?? 0, 0) > 0;
-        return Boolean(todo.startedAt) || resumed || focused;
-      }).length;
-
-      const focusMin = timeItem?.focusMin ?? 0;
-      const engaged =
-        countItem.done > 0 || startedIncomplete > 0 || focusMin > 0 || countItem.resumeCount > 0;
-
-      return {
-        key: countItem.key,
-        done: countItem.done,
-        startedIncomplete,
-        resumeCount: countItem.resumeCount,
-        focusMin,
-        engaged,
-      };
-    });
-
-    const evaluable = combined.filter((item) => item.engaged);
-    const goodDays = evaluable.filter(
-      (item) =>
-        item.done >= 1 &&
-        item.focusMin >= 25 &&
-        item.startedIncomplete <= item.done &&
-        item.resumeCount <= 2
-    ).length;
-    const roughDays = evaluable.filter(
-      (item) => item.startedIncomplete > item.done || item.resumeCount >= 4
-    ).length;
-
-    return {
-      startDate: combined[0]?.key ?? null,
-      endDate: combined[combined.length - 1]?.key ?? null,
-      goodDays,
-      roughDays,
-      evaluableDays: evaluable.length,
-    };
-  }, [countStats.dailySeries, detailMap, taskId, taskLabel, timeStats.dailySeries]);
-
   return {
     count: {
       completionRate: countStats.completionRate,
       incompleteRate: countStats.incompleteRate,
       doneTodos: countStats.doneTodos,
       incompleteTodos: countStats.incompleteTodos,
-      resumeCount: countStats.resumeCount,
       frequentIncompleteTasks: countStats.frequentIncompleteTasks,
       useMonthlyBar: countStats.useMonthlyBar,
       donePercent: countStats.donePercent,
@@ -430,14 +332,6 @@ export function useStatsMetrics({ start, end, todayKey, taskId, taskLabel, enabl
       useMonthlyBar: timeStats.useMonthlyBar,
       data: timeBars,
     },
-    focusResume: {
-      focusMinutes: timeStats.totalFocus,
-      resumeCount: countStats.resumeCount,
-      averageResumesPerTask: focusResumeStats.averageResumesPerTask,
-      averageFocusSegmentMinutes: focusResumeStats.averageFocusSegmentMinutes,
-      data: timeStats.focusResumePoints,
-    },
-    periodReview,
     signal: activitySignal,
     isFetching:
       monthlyLogsQuery.dailyLogQueries.some((query) => query.isFetching) ||

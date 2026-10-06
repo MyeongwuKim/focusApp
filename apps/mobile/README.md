@@ -110,7 +110,13 @@ pnpm api:dev
 pnpm native:ios:local
 ```
 
-`native:ios:local`은 Web UI를 빌드해 앱에 임베드하고, test 네이티브 설정을 동기화한 뒤 iOS 시뮬레이터와 Metro를 실행합니다.
+`native:ios:local`은 Metro를 시작하고 시뮬레이터에 이미 설치된 test 앱을 실행합니다. 네이티브 앱을 다시 빌드하거나 설치하지 않습니다.
+
+시뮬레이터에 test 앱이 아직 없거나 네이티브 설정·의존성이 바뀐 경우에만 다음 명령으로 앱을 빌드하고 설치합니다.
+
+```bash
+pnpm native:ios:install
+```
 
 ### 2. 연결된 iPhone 테스트: `native:ios:device`
 
@@ -128,7 +134,7 @@ pnpm native:ios:device
 
 명령을 실행하면 Expo 기기 선택 화면에서 연결된 iPhone을 고르고, test 앱을 빌드·설치한 뒤 Metro에 연결합니다. iPhone과 Mac은 같은 네트워크를 사용해야 하며, 로컬 API 포트에 접근할 수 있어야 합니다. 앱이 이미 설치되어 있다면 `pnpm native:start`로 Metro만 다시 실행할 수 있습니다.
 
-Web UI만 수정한 경우에는 Metro가 실행 중인 상태에서 `pnpm native:sync:web`을 실행하면 Web UI 재빌드 후 연결된 앱을 재시작합니다.
+Web UI만 수정한 경우에는 Metro가 실행 중인 상태에서 `pnpm native:sync:web`을 실행하면 Web UI 재빌드 후 부팅된 iOS 시뮬레이터 앱을 재시작합니다. 연결된 iPhone에는 적용하지 않습니다.
 
 ### 3. Xcode archive 및 수동 TestFlight 테스트: `native:ios:dev`
 
@@ -217,7 +223,7 @@ pnpm native:prod
 
 `minimum-app-version.json`은 dev/prod 환경별 iOS·Android 최소 앱 버전 정책을 한곳에서 관리합니다. 각 플랫폼은 `enabled`, `minimumVersion`, `storeUrl`을 가지며, `enabled`가 `true`일 때만 강제 업데이트를 적용합니다. `develop`에서는 `dev` 항목만 개발용 R2로, `master`에서는 `prod` 항목만 운영용 R2의 `native/latest.json`으로 업로드됩니다. 이전 앱이 기존 경로를 계속 조회하므로 동일한 정책을 `native/minimum-app-version.json`에도 함께 업로드합니다. develop에서 prod 항목을 수정해도 운영용 R2에는 반영되지 않으며 해당 변경이 master에 병합된 뒤 배포됩니다.
 
-`native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 빌드 번호 설정을 관리합니다. dev iOS 프로젝트는 Xcode에서 `timestackT`로 표시되지만 기기 홈 화면에서는 기존대로 `타임스택 (T)`를 사용합니다.
+`native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 빌드 번호 설정을 관리합니다. dev iOS 프로젝트는 Xcode에서 `dailoT`로 표시되고, 기기 홈 화면에서는 테스트 앱을 구분할 수 있도록 `데일로(T)`를 사용합니다.
 
 네이티브 빌드 명령을 실행하면 Web UI 빌드나 네이티브 설정 변경 전에 환경, 플랫폼, 앱 버전을 확인합니다. `y` 또는 `yes`를 입력해야 계속 진행하며, 그 외 입력은 전체 명령을 중단합니다.
 
@@ -261,7 +267,7 @@ pnpm -C apps/mobile native:sync:prod
 
 원격 manifest 조회나 bundle 설치에 실패하면 시작 오류 alert를 띄웁니다. 채널이 `none`이거나 manifest URL이 없으면 내장 번들을 기준으로 실행합니다.
 
-실행 중인 Metro 앱에 Web UI 변경사항을 반영할 때는 저장소 루트에서 `pnpm native:sync:web`을 실행합니다. 웹 빌드와 임베드 번들 생성이 끝나면 연결된 iOS·Android 앱 프로세스를 재시작해 최신 Metro 번들과 WebView 파일을 자동으로 적용합니다.
+실행 중인 Metro 앱에 Web UI 변경사항을 반영할 때는 저장소 루트에서 `pnpm native:sync:web`을 실행합니다. 웹 빌드와 임베드 번들 생성이 끝나면 부팅된 iOS 시뮬레이터의 앱 프로세스만 재시작해 최신 Metro 번들과 WebView 파일을 자동으로 적용합니다.
 
 WebUI 버전과 앱 버전은 서로 다르게 관리합니다.
 
@@ -338,8 +344,9 @@ EXPO_PUBLIC_MINIMUM_APP_VERSION_URL=https://<prod-r2-public-base-url>/native/lat
 | `pnpm -C apps/mobile start` | Expo 개발 서버를 실행합니다. |
 | `pnpm -C apps/mobile android` | Android 네이티브 앱을 실행합니다. |
 | `pnpm native:start` | 설치된 Dev Client가 연결할 Metro를 LAN 모드로 실행합니다. |
-| `pnpm native:sync:web` | Web UI를 다시 빌드하고 연결된 iOS·Android 앱을 재시작해 Metro 앱에 자동 반영합니다. |
-| `pnpm native:ios:local` | iOS 시뮬레이터에서 test 앱과 Metro를 실행합니다. |
+| `pnpm native:sync:web` | Web UI를 다시 빌드하고 부팅된 iOS 시뮬레이터 앱만 재시작해 자동 반영합니다. |
+| `pnpm native:ios:local` | 재설치 없이 iOS 시뮬레이터의 test 앱과 Metro를 실행합니다. |
+| `pnpm native:ios:install` | test 앱을 빌드해 iOS 시뮬레이터에 설치합니다. |
 | `pnpm native:ios:device` | 연결된 iPhone에 test 앱을 빌드·설치하고 Metro에 연결합니다. |
 | `pnpm native:ios:dev` | Xcode 프로젝트로 archive와 IPA를 생성해 수동 TestFlight 테스트를 준비합니다. |
 | `pnpm native:prod` | EAS production 환경변수로 원격 iOS 빌드 후 App Store Connect에 자동 제출합니다. |

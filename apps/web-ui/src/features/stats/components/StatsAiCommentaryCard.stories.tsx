@@ -15,7 +15,6 @@ const basePayload: StatsCommentaryPayload = {
     doneCount: 26,
     incompleteCount: 8,
     focusMinutes: 540,
-    resumeCount: 6,
     restMinutes: 188,
   },
   rates: {

@@ -92,3 +92,31 @@ mutation SetTaskFavorite($input: SetTaskFavoriteInput!) {
     lastUsedAt
   }
 }
+
+mutation RecordTaskSuggestionUsage($input: RecordTaskSuggestionUsageInput!) {
+  recordTaskSuggestionUsage(input: $input) {
+    suggestionId
+    displayText
+    count
+    shouldSuggest
+  }
+}
+
+mutation DismissTaskSuggestion($input: TaskSuggestionInput!) {
+  dismissTaskSuggestion(input: $input) {
+    suggestionId
+    displayText
+    count
+    shouldSuggest
+  }
+}
+
+mutation AcceptTaskSuggestion($input: TaskSuggestionInput!) {
+  acceptTaskSuggestion(input: $input) {
+    id
+    collectionId
+    title
+    order
+    lastUsedAt
+  }
+}

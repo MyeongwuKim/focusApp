@@ -12,7 +12,6 @@ describe("RoutePageFallback", () => {
     ["routine", "/routines", "routine"],
     ["tasks", "/tasks", "tasks"],
     ["stats", "/stats", "stats"],
-    ["achievements", "/achievements", "achievements"],
     ["memo", "/memo", "memo"],
   ] as const)("%s 화면의 고정 레이아웃 fallback을 렌더링한다", (route, pathname, fallbackName) => {
     const { container } = render(

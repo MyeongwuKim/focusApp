@@ -91,6 +91,21 @@ model Task {
   @@index([userId, isArchived, order])
 }
 
+model TaskSuggestionCandidate {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String
+  normalizedText  String
+  displayText     String
+  countedDateKeys String[]
+  countStartedAt  DateTime?
+  snoozedUntil    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, normalizedText])
+  @@index([userId, snoozedUntil])
+}
+
 model RoutineTemplate {
   id        String                @id @default(auto()) @map("_id") @db.ObjectId
   userId    String

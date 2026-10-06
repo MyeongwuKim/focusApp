@@ -31,10 +31,10 @@ type FocusRhythmTooltipProps = {
   payload?: Array<{ payload?: Partial<FocusRhythmTrendDatum> }>;
 };
 
-const CHART_LINE_COLOR = "var(--color-success, #10b981)";
-const CHART_GRID_COLOR =
-  "color-mix(in oklab, var(--color-base-content, #64748b) 20%, transparent)";
-const CHART_TICK_COLOR = "var(--color-base-content, #334155)";
+const CHART_LINE_COLOR = "#769d80";
+const CHART_RESUME_COLOR = "#c67e73";
+const CHART_GRID_COLOR = "rgba(82, 76, 64, 0.18)";
+const CHART_TICK_COLOR = "#575146";
 
 function formatMinutes(value: number) {
   return `${Math.round(value)}분`;
@@ -96,7 +96,7 @@ function FocusRhythmTooltip({ active, payload }: FocusRhythmTooltipProps) {
   const entry = payload[0]?.payload;
 
   return (
-    <div className="rounded-lg border border-base-300 bg-base-100 px-3 py-2 text-xs shadow-lg">
+    <div className="stats-chart-tooltip rounded-lg border border-base-300 bg-base-100 px-3 py-2 text-xs shadow-lg">
       <p className="m-0 font-semibold text-base-content">{entry?.tooltipLabel ?? "-"}</p>
       <p className="m-0 mt-1 text-success">
         평균 집중 구간 {formatMinutes(entry?.averageFocusSegmentMinutes ?? 0)}
@@ -154,6 +154,17 @@ export function FocusRhythmTrendChart({
                 data={trendData}
                 margin={{ top: 10, right: 2, left: 0, bottom: 0 }}
               >
+                <defs>
+                  <linearGradient id="stats-rhythm-crayon" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#b1cbad" />
+                    <stop offset="55%" stopColor="#789f82" />
+                    <stop offset="100%" stopColor="#9abb9e" />
+                  </linearGradient>
+                  <filter id="stats-crayon-rough" x="-4%" y="-4%" width="108%" height="108%">
+                    <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="8" result="crayonNoise" />
+                    <feDisplacementMap in="SourceGraphic" in2="crayonNoise" scale="1.35" />
+                  </filter>
+                </defs>
                 <CartesianGrid
                   vertical={false}
                   stroke={CHART_GRID_COLOR}
@@ -183,7 +194,7 @@ export function FocusRhythmTrendChart({
                   allowDecimals={false}
                   width={38}
                   domain={[0, "dataMax + 1"]}
-                  tick={{ fontSize: 10, fill: "var(--color-primary, #e11d48)" }}
+                  tick={{ fontSize: 10, fill: CHART_RESUME_COLOR }}
                   tickLine={false}
                   axisLine={false}
                 />
@@ -196,8 +207,8 @@ export function FocusRhythmTrendChart({
                   yAxisId="focus"
                   dataKey="averageFocusSegmentMinutes"
                   name="평균 집중 구간"
-                  fill={CHART_LINE_COLOR}
-                  fillOpacity={0.72}
+                  fill="url(#stats-rhythm-crayon)"
+                  fillOpacity={0.9}
                   radius={[4, 4, 0, 0]}
                   maxBarSize={28}
                 />
@@ -206,16 +217,16 @@ export function FocusRhythmTrendChart({
                   type="linear"
                   dataKey="resumeCount"
                   name="재개 횟수"
-                  stroke="var(--color-primary, #e11d48)"
+                  stroke={CHART_RESUME_COLOR}
                   strokeWidth={2.5}
                   dot={{
                     r: 3,
-                    fill: "var(--color-primary, #e11d48)",
+                    fill: CHART_RESUME_COLOR,
                     strokeWidth: 0,
                   }}
                   activeDot={{
                     r: 5,
-                    fill: "var(--color-primary, #e11d48)",
+                    fill: CHART_RESUME_COLOR,
                     strokeWidth: 2,
                   }}
                 />

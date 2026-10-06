@@ -35,7 +35,6 @@ const ROUTE_PATH: Record<RouteKey, string> = {
   tasks: "/tasks",
   dateTasks: "/date-tasks",
   stats: "/stats",
-  achievements: "/achievements",
   memo: "/memo",
   settings: "/settings",
   routine: ROUTINE_MANAGE_PATH,
@@ -138,7 +137,10 @@ export function useOverlayRouteNavigation({ openMenu, closeMenu }: UseOverlayRou
   const location = useLocation();
   const navigate = useNavigate();
   const activeRoute = getRouteFromPath(location.pathname);
-  const overlayRoute = activeRoute === MAIN_ROUTE ? null : activeRoute;
+  const normalizedPathname = location.pathname.replace(/\/+$/, "") || "/";
+  const isMainRouteRoot =
+    activeRoute === MAIN_ROUTE && normalizedPathname === ROUTE_PATH[MAIN_ROUTE];
+  const overlayRoute = isMainRouteRoot ? null : activeRoute;
   const [isOverlayEntering, setIsOverlayEntering] = useState(false);
   const onOverlaySwipeCloseRef = useRef<() => void>(() => {});
   const {
@@ -166,6 +168,14 @@ export function useOverlayRouteNavigation({ openMenu, closeMenu }: UseOverlayRou
   const overlayLastStackIndexRef = useRef<number | null>(null);
   const lastOverlayEnterRef = useRef<{ path: string; at: number } | null>(null);
   const lastOverlayNavigationRef = useRef<{ path: string; at: number } | null>(null);
+
+  /** 제거된 업적 주소로 접근하면 빈 오버레이를 남기지 않고 오늘 할 일 화면으로 교체한다. */
+  useEffect(() => {
+    const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+    if (normalizedPath === "/achievements" || normalizedPath.startsWith("/achievements/")) {
+      navigate(ROUTE_PATH[MAIN_ROUTE], { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   const goPage = useCallback(
     (path: string, options?: GoPageOptions) => {
@@ -331,7 +341,7 @@ export function useOverlayRouteNavigation({ openMenu, closeMenu }: UseOverlayRou
       goPage,
       goBack,
       navigateTo,
-      goMain: () => navigateTo(MAIN_ROUTE),
+      goMain: () => goPage(ROUTE_PATH[MAIN_ROUTE]),
       goSettings: () => navigateTo("settings"),
     }),
     [activeRoute, closeMenu, goBack, goPage, navigateTo, openMenu]
@@ -372,7 +382,7 @@ export function useOverlayRouteNavigation({ openMenu, closeMenu }: UseOverlayRou
     overlayCurrentStackIndex > 0
       ? overlayStackEntriesByIdx.get(overlayCurrentStackIndex - 1) ?? null
       : null;
-  const shouldRevealCalendarDateSheetBackdrop =
+  const shouldRevealMainRouteBackdrop =
     overlayRoute === "dateTasks" &&
     isDateTasksRoutinePath(location.pathname) &&
     previousStackEntryForBackdrop?.route === MAIN_ROUTE &&
@@ -475,7 +485,7 @@ export function useOverlayRouteNavigation({ openMenu, closeMenu }: UseOverlayRou
     overlayRenderEntries,
     overlaySwipeState,
     isOverlayEntering,
-    shouldRevealCalendarDateSheetBackdrop,
+    shouldRevealMainRouteBackdrop,
     getOverlayEntryStyle,
     getOverlayTouchHandlers,
   };

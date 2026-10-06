@@ -191,6 +191,3590 @@
     padding: calc(0.2rem * var(--ui-scale));
   }
 
+  .app-root:has(.sketchbook-page) {
+    --sketchbook-paper: #f8edca;
+    --sketchbook-paper-deep: #edd8a7;
+    --sketchbook-ink: #3f3b32;
+    --sketchbook-pencil: rgba(72, 69, 62, 0.28);
+    --sketchbook-rule: rgba(98, 132, 144, 0.2);
+    --sketchbook-red: #bd6556;
+    --sketchbook-orange: #dfa92d;
+    --sketchbook-green: #68836b;
+    --sketchbook-blue: #567ca7;
+    width: 100%;
+    min-height: 100%;
+    padding: 0;
+    background: var(--sketchbook-paper, #f8edca);
+  }
+
+  .app-root:has(.sketchbook-page) > .app-shell {
+    width: 100%;
+    max-width: none;
+    min-height: 100%;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .sketchbook-page {
+    --sketchbook-paper: #f8edca;
+    --sketchbook-paper-deep: #edd8a7;
+    --sketchbook-ink: #3f3b32;
+    --sketchbook-pencil: rgba(72, 69, 62, 0.28);
+    --sketchbook-rule: rgba(98, 132, 144, 0.2);
+    --sketchbook-red: #bd6556;
+    --sketchbook-orange: #dfa92d;
+    --sketchbook-green: #68836b;
+    --sketchbook-blue: #567ca7;
+    isolation: isolate;
+    width: 100%;
+    min-height: 100%;
+    color: var(--sketchbook-ink);
+    background-color: var(--sketchbook-paper);
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .08'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(to bottom, transparent 0 2.85rem, rgba(99, 132, 145, 0.16) 2.9rem 2.94rem);
+    border: 0;
+    border-radius: 0;
+    margin: 0;
+    box-shadow:
+      inset 0 0 30px rgba(123, 89, 34, 0.1),
+      inset 0 1px rgba(255, 255, 255, 0.48);
+  }
+
+  .sketchbook-page::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    z-index: 4;
+    inset: 0;
+    background-image: url("./assets/sketchbook-rings.png");
+    background-position: center top;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    clip-path: inset(0 85% 0 0);
+  }
+
+  .sketchbook-page::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+    top: 0;
+    bottom: 0;
+    left: 14.72%;
+    width: 1px;
+    background: rgba(190, 91, 78, 0.42);
+    box-shadow:
+      1px 0 rgba(255, 255, 255, 0.3),
+      -1px 0 rgba(190, 91, 78, 0.12);
+  }
+
+  .sketchbook-page > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .sketchbook-page--tasks,
+  .sketchbook-page--calendar {
+    padding-left: 3.7rem !important;
+    padding-right: 0.75rem !important;
+    padding-top: 0 !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  .sketchbook-page-header {
+    height: 3rem !important;
+    min-height: 3rem !important;
+    max-height: 3rem !important;
+    margin-top: 0.45rem !important;
+    margin-bottom: 0.15rem !important;
+    overflow: visible !important;
+  }
+
+  /* 월 선택창을 연 동안에만 헤더를 달력 본문보다 위로 올려 셀 내용과 겹치지 않게 한다. */
+  .sketchbook-page-header:has(.dropdown[open]) {
+    z-index: 100 !important;
+  }
+
+  .sketchbook-page-header__title {
+    line-height: 1 !important;
+  }
+
+  .sketchbook-page .sketchbook-header {
+    margin-bottom: 0.15rem;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--sketchbook-ink);
+    box-shadow: none !important;
+  }
+
+  .sketchbook-page .sketchbook-header h1 {
+    position: relative;
+    overflow: visible;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.72rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--sketchbook-ink);
+  }
+
+  .sketchbook-page .sketchbook-main-title {
+    width: calc(100% - 3.5rem);
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sketchbook-page .sketchbook-header h1::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    right: 5%;
+    bottom: -0.18rem;
+    left: 2%;
+    height: 0.42rem;
+    border-radius: 50%;
+    background: rgba(233, 174, 39, 0.55);
+    clip-path: polygon(0 35%, 22% 18%, 48% 36%, 73% 12%, 100% 31%, 97% 82%, 72% 68%, 45% 88%, 19% 67%, 2% 86%);
+    transform: rotate(-1.5deg);
+  }
+
+  .sketchbook-login-page {
+    padding: 0 1.25rem 1.25rem 3.7rem;
+  }
+
+  .sketchbook-login-page__body {
+    padding-bottom: 3.5rem;
+  }
+
+  .sketchbook-login-page__content {
+    position: relative;
+    padding: 2rem 1.25rem 1.55rem;
+    border-top: 1px solid rgba(72, 69, 62, 0.2);
+    border-bottom: 1px solid rgba(72, 69, 62, 0.2);
+    background: rgba(255, 250, 231, 0.42);
+    box-shadow: 0 10px 24px rgba(101, 78, 35, 0.06);
+  }
+
+  .sketchbook-login-page__content::before {
+    content: "";
+    position: absolute;
+    top: -0.36rem;
+    left: 12%;
+    width: 4.5rem;
+    height: 0.72rem;
+    background: rgba(231, 177, 63, 0.32);
+    clip-path: polygon(2% 27%, 97% 8%, 100% 78%, 3% 100%);
+    transform: rotate(-1.8deg);
+  }
+
+  .sketchbook-login-page__eyebrow {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.28rem;
+    font-weight: 700;
+    color: var(--sketchbook-ink);
+  }
+
+  .sketchbook-login-page__description,
+  .sketchbook-login-page__note {
+    color: rgba(63, 59, 50, 0.68);
+  }
+
+  .sketchbook-login-button {
+    min-height: 2.9rem;
+    border: 1.5px solid rgba(72, 69, 62, 0.3);
+    border-radius: 0.72rem 0.88rem 0.7rem 0.82rem;
+    box-shadow:
+      1px 2px 0 rgba(72, 69, 62, 0.12),
+      inset 0 1px rgba(255, 255, 255, 0.45);
+    color: var(--sketchbook-ink);
+    transform: rotate(-0.15deg);
+  }
+
+  .sketchbook-login-button:nth-child(even) {
+    transform: rotate(0.18deg);
+  }
+
+  .sketchbook-login-button:hover {
+    filter: saturate(1.04) brightness(0.99);
+    transform: translateY(-1px) rotate(0deg);
+  }
+
+  .sketchbook-login-button:active {
+    box-shadow: inset 1px 2px 3px rgba(72, 69, 62, 0.12);
+    transform: translateY(1px) rotate(0deg);
+  }
+
+  .sketchbook-login-button--apple {
+    border-color: rgba(54, 52, 47, 0.58);
+    background: rgba(62, 60, 54, 0.9);
+    color: #fffaf0;
+  }
+
+  .sketchbook-login-button--kakao {
+    border-color: rgba(184, 146, 34, 0.42);
+    background: rgba(244, 211, 91, 0.72);
+  }
+
+  .sketchbook-login-button--naver {
+    border-color: rgba(85, 130, 90, 0.45);
+    background: rgba(118, 159, 112, 0.76);
+    color: #fffdf2;
+  }
+
+  .sketchbook-page .sketchbook-header button {
+    border-color: transparent !important;
+    background: transparent !important;
+    color: var(--sketchbook-ink);
+    box-shadow: none !important;
+    transform-origin: center;
+  }
+
+  .sketchbook-page .sketchbook-header .sketchbook-header__binding-action {
+    left: -3.05rem;
+    z-index: 2;
+    width: 2.2rem;
+    min-width: 2.2rem;
+  }
+
+  .sketchbook-page .sketchbook-header .sketchbook-header__menu-note {
+    left: -3.18rem;
+    width: 2.72rem;
+    min-width: 2.72rem;
+    height: 2.18rem;
+    min-height: 2.18rem;
+    border: 1px solid rgba(164, 112, 49, 0.22) !important;
+    border-radius: 3px 8px 5px 7px !important;
+    background:
+      linear-gradient(165deg, rgba(255, 255, 255, 0.26), transparent 42%),
+      #efc86f !important;
+    color: rgba(71, 56, 37, 0.9) !important;
+    box-shadow:
+      2px 3px 5px rgba(83, 61, 31, 0.16),
+      inset 0 -1px rgba(147, 102, 45, 0.14) !important;
+    clip-path: polygon(2% 4%, 96% 0, 100% 88%, 88% 100%, 4% 96%);
+    transform: translateY(-50%) rotate(-2.2deg) !important;
+    transition: transform 150ms ease, box-shadow 150ms ease !important;
+  }
+
+  .sketchbook-page .sketchbook-header .sketchbook-header__menu-note:active {
+    box-shadow: 1px 1px 2px rgba(83, 61, 31, 0.14) !important;
+    transform: translateY(calc(-50% + 1px)) rotate(-1deg) scale(0.97) !important;
+  }
+
+  .sketchbook-header__menu-note-label {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .sketchbook-header__help-action {
+    right: 0.5rem !important;
+    top: 50% !important;
+    width: 2.25rem !important;
+    min-width: 2.25rem !important;
+    height: 2.25rem !important;
+    min-height: 2.25rem !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    box-shadow: none !important;
+    transform: translateY(-50%) rotate(3deg) !important;
+  }
+
+  /* 메인·캘린더 종이의 우측 안쪽 여백을 상쇄해 보조 화면과 같은 화면 좌표에 놓는다. */
+  .sketchbook-page--tasks .sketchbook-header__help-action,
+  .sketchbook-page--calendar .sketchbook-header__help-action {
+    right: -0.25rem !important;
+  }
+
+  .sketchbook-page--tasks .sketchbook-header > .pointer-events-none {
+    display: none;
+  }
+
+  .sketchbook-page .date-todos-route {
+    color: var(--sketchbook-ink);
+  }
+
+  .sketchbook-page .date-todos-board {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.28rem 0.22rem;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-page .date-todos-body-scroll {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sketchbook-page .date-todos-empty-state {
+    min-height: 15rem;
+    gap: 0.65rem;
+    padding: 1.15rem 0.5rem;
+    color: var(--sketchbook-ink);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-page .date-todos-empty-state__icon {
+    width: 2.7rem;
+    height: 2.7rem;
+    border: 2px solid rgba(83, 78, 68, 0.55);
+    border-radius: 49% 51% 46% 54% / 54% 46% 53% 47%;
+    background: transparent !important;
+    color: rgba(75, 70, 61, 0.7);
+    transform: rotate(-4deg);
+  }
+
+  .sketchbook-page .date-todos-empty-state__copy {
+    max-width: 18rem;
+  }
+
+  .sketchbook-page .date-todos-empty-state__title {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.2rem;
+    line-height: 1.1;
+    color: var(--sketchbook-ink) !important;
+  }
+
+  .sketchbook-page .date-todos-empty-state__copy > p:last-child,
+  .sketchbook-page .weekday-routine-preview__copy > p:last-child {
+    font-family: "Noto Sans KR", sans-serif;
+    color: rgba(66, 62, 54, 0.58) !important;
+  }
+
+  .sketchbook-page .date-todos-empty-state__action {
+    min-height: 2.55rem;
+    border: 2px solid var(--sketchbook-green) !important;
+    border-radius: 13px 17px 12px 16px !important;
+    background:
+      linear-gradient(transparent 62%, rgba(99, 138, 105, 0.11) 62% 88%, transparent 88%),
+      rgba(255, 252, 235, 0.12) !important;
+    color: rgba(55, 73, 59, 0.95) !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    box-shadow: none !important;
+    transform: rotate(-0.25deg);
+  }
+
+  .sketchbook-page .date-todos-empty-state__action:nth-child(even) {
+    border-color: var(--sketchbook-orange) !important;
+    color: rgba(121, 72, 57, 0.92) !important;
+    transform: rotate(0.35deg);
+  }
+
+  .sketchbook-page .weekday-routine-preview {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-page .weekday-routine-preview__copy > p:first-child {
+    font-size: 1.18rem;
+    color: var(--sketchbook-ink) !important;
+  }
+
+  .sketchbook-page .weekday-routine-preview__list {
+    border: 1px dashed rgba(80, 75, 65, 0.35) !important;
+    border-radius: 48% 52% 49% 51% / 3% 4% 3% 4% !important;
+    background: rgba(255, 250, 229, 0.22) !important;
+  }
+
+  .sketchbook-page .weekday-routine-preview__item {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(89, 117, 137, 0.18) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    font-size: 0.9rem;
+    color: rgba(58, 55, 48, 0.78) !important;
+  }
+
+  .sketchbook-page .todo-item-card {
+    position: relative;
+    container-type: inline-size;
+    min-height: 3.75rem;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(72, 74, 68, 0.2);
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.62rem 3.65rem 0.54rem 0.18rem;
+    color: var(--sketchbook-ink);
+    box-shadow: none;
+  }
+
+  .sketchbook-page .todo-item-list > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.18rem;
+  }
+
+  .sketchbook-page .todo-item-card__main-row {
+    min-height: 2.55rem;
+  }
+
+  .sketchbook-page .todo-item-card::after {
+    content: "";
+    position: absolute;
+    right: 4%;
+    bottom: -2px;
+    left: 1%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(71, 67, 58, 0.2) 5%, rgba(71, 67, 58, 0.11) 82%, transparent);
+    transform: rotate(-0.15deg);
+  }
+
+  .sketchbook-page .todo-item-card[data-write-animating="true"]::after {
+    transform-origin: left center;
+    animation: todo-line-draw 520ms cubic-bezier(0.22, 0.72, 0.2, 1) 70ms both;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-zone {
+    touch-action: none;
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 3.45rem;
+    cursor: crosshair;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-zone:focus-visible {
+    outline: 2px solid rgba(86, 124, 167, 0.48);
+    outline-offset: -3px;
+    border-radius: 9px;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-affordance {
+    pointer-events: none;
+    position: absolute;
+    inset: 0.22rem 0.08rem 0.22rem 0.18rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.04rem;
+    border-left: 1px dashed rgba(82, 111, 88, 0.2);
+    color: rgba(73, 105, 78, 0.48);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1;
+    transform: rotate(-1.5deg);
+    transition: color 160ms ease, opacity 160ms ease, background-color 160ms ease;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-affordance svg {
+    stroke-width: 1.8;
+    transform: rotate(-8deg);
+  }
+
+  .sketchbook-page .todo-item-card__gesture-zone:is(:hover, :focus-visible) .todo-item-card__gesture-affordance {
+    color: rgba(73, 105, 78, 0.78);
+    background: rgba(112, 147, 118, 0.05);
+  }
+
+  .sketchbook-page .todo-item-card__gesture-zone[data-help-visible="true"] .todo-item-card__gesture-affordance {
+    opacity: 0.2;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-help {
+    pointer-events: none;
+    position: absolute;
+    z-index: 5;
+    top: 50%;
+    right: 3.15rem;
+    display: flex;
+    width: max-content;
+    align-items: center;
+    gap: 0.55rem;
+    border: 1px dashed rgba(78, 108, 83, 0.44);
+    border-radius: 8px 11px 9px 12px;
+    background: #f8edca;
+    padding: 0.34rem 0.52rem;
+    color: rgba(57, 65, 53, 0.88);
+    box-shadow: 0 5px 14px rgba(79, 57, 28, 0.14);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(0.3rem, -50%) rotate(-0.5deg) scale(0.96);
+    transition: opacity 160ms ease, transform 180ms ease, visibility 0s linear 180ms;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-zone[data-help-visible="true"] .todo-item-card__gesture-help {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(0, -50%) rotate(-0.5deg) scale(1);
+    transition-delay: 0s;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-zone::after {
+    content: "절반 이상 그으면 삭제";
+    position: absolute;
+    top: 72%;
+    right: 0.22rem;
+    width: max-content;
+    height: auto;
+    color: rgba(177, 76, 65, 0.56);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 100ms ease;
+  }
+
+  .sketchbook-page .todo-item-card__gesture-zone[data-delete-guide-visible="true"]::after {
+    opacity: 1;
+  }
+
+  .sketchbook-page .todo-item-card__muted-reminder {
+    position: relative;
+    isolation: isolate;
+    width: 1.35rem;
+    height: 1.35rem;
+    border: 0 !important;
+    border-radius: 47% 53% 44% 56%;
+    background: transparent !important;
+    color: rgba(76, 104, 80, 0.7) !important;
+    transform: rotate(-6deg);
+  }
+
+  .sketchbook-page .todo-item-card__muted-reminder::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0.12rem -0.03rem 0.08rem;
+    border-radius: 43% 57% 48% 52%;
+    background:
+      linear-gradient(101deg, transparent 3%, rgba(117, 151, 121, 0.13) 9% 88%, transparent 96%),
+      repeating-linear-gradient(
+        -8deg,
+        rgba(117, 151, 121, 0.08) 0 1px,
+        transparent 1px 3px
+      );
+    transform: rotate(3deg);
+  }
+
+  .sketchbook-page .todo-item-card__muted-reminder svg {
+    position: relative;
+    filter: drop-shadow(0.4px 0.5px 0 rgba(61, 79, 63, 0.2));
+    stroke-width: 1.8;
+  }
+
+  .sketchbook-page .todo-item-card__scheduled-time {
+    position: relative;
+    isolation: isolate;
+    padding: 0.04rem 0.08rem 0.1rem;
+    color: rgba(71, 102, 112, 0.78) !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    transform: rotate(-1deg);
+  }
+
+  .sketchbook-page .todo-item-card__scheduled-time::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    right: 0;
+    bottom: -0.03rem;
+    left: 0.05rem;
+    height: 0.28rem;
+    border-radius: 52% 48% 57% 43%;
+    background:
+      repeating-linear-gradient(
+        -5deg,
+        rgba(111, 167, 178, 0.12) 0 1px,
+        rgba(111, 167, 178, 0.23) 1px 2px,
+        transparent 2px 4px
+      );
+    transform: rotate(0.8deg);
+  }
+
+  .sketchbook-page .todo-item-card__scheduled-time svg {
+    color: rgba(75, 119, 129, 0.68);
+    filter: drop-shadow(0.4px 0.5px 0 rgba(62, 91, 98, 0.14));
+    stroke-width: 1.8;
+  }
+
+  .sketchbook-page .todo-item-card p {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: rgba(54, 51, 44, 0.93);
+  }
+
+  .sketchbook-page .todo-item-card__label-slot {
+    overflow: hidden;
+  }
+
+  .sketchbook-page .todo-item-card__label-slot[data-actionable="true"] {
+    cursor: pointer;
+  }
+
+  .sketchbook-page .todo-item-card__label-slot[data-actionable="true"]:focus-visible {
+    outline: 2px solid rgba(86, 124, 167, 0.48);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  .sketchbook-page .todo-item-card__label-ink {
+    position: relative;
+    display: inline-block;
+    min-width: 3.8rem;
+    max-width: 100%;
+    vertical-align: middle;
+    contain: layout;
+  }
+
+  .sketchbook-page .todo-item-card[data-write-animating="true"] {
+    animation: todo-row-settle 360ms cubic-bezier(0.2, 0.78, 0.24, 1) both;
+  }
+
+  .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__label-ink p {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+    animation: todo-ink-reveal var(--todo-write-duration, 760ms) cubic-bezier(0.18, 0.76, 0.18, 1)
+      var(--todo-write-delay, 140ms) forwards;
+    will-change: clip-path, opacity;
+  }
+
+  .sketchbook-page .todo-item-card__writing-pencil {
+    pointer-events: none;
+    position: absolute;
+    z-index: 4;
+    bottom: 0.02rem;
+    left: -0.1rem;
+    display: block;
+    width: 1rem;
+    height: 1rem;
+    color: rgba(126, 93, 42, 0.72);
+    opacity: 0;
+    transform: translateY(0);
+    animation: todo-pencil-write var(--todo-write-duration, 760ms) cubic-bezier(0.18, 0.7, 0.2, 1)
+      var(--todo-write-delay, 140ms) forwards;
+    will-change: left, transform, opacity;
+  }
+
+  .sketchbook-page .todo-item-card__writing-pencil svg {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+    filter: drop-shadow(0 1px 0 rgba(78, 58, 29, 0.12));
+    transform: rotate(-4deg);
+    stroke-width: 1.7;
+  }
+
+  @keyframes todo-row-settle {
+    from {
+      opacity: 0.62;
+      transform: translateY(0.28rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes todo-line-draw {
+    from {
+      opacity: 0.25;
+      transform: scaleX(0) rotate(-0.15deg);
+    }
+    to {
+      opacity: 1;
+      transform: scaleX(1) rotate(-0.15deg);
+    }
+  }
+
+  @keyframes todo-ink-reveal {
+    0% {
+      clip-path: inset(0 100% 0 0);
+      opacity: 0;
+    }
+    10% {
+      opacity: 0.72;
+    }
+    86% {
+      clip-path: inset(0 4% 0 0);
+      opacity: 0.96;
+    }
+    100% {
+      clip-path: inset(0 0 0 0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes todo-pencil-write {
+    0% {
+      left: -0.1rem;
+      opacity: 0;
+      transform: translateY(0.04rem);
+    }
+    4% {
+      opacity: 1;
+    }
+    34% {
+      transform: translateY(-0.08rem);
+    }
+    62% {
+      transform: translateY(0.02rem);
+    }
+    84% {
+      opacity: 1;
+      transform: translateY(-0.06rem);
+    }
+    92% {
+      left: calc(100% - 0.1rem);
+      opacity: 1;
+    }
+    100% {
+      left: calc(100% + 0.04rem);
+      opacity: 0;
+      transform: translateY(0);
+    }
+  }
+
+  .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__status {
+    border-color: transparent !important;
+    background: transparent !important;
+  }
+
+  .sketchbook-page .todo-item-card__status-ring {
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+    inset: -0.18rem;
+    width: calc(100% + 0.36rem);
+    height: calc(100% + 0.36rem);
+    overflow: visible;
+  }
+
+  .sketchbook-page .todo-item-card__status-ring circle {
+    fill: none;
+    stroke: var(--sketchbook-orange);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: todo-status-ring-draw 430ms cubic-bezier(0.2, 0.72, 0.18, 1) 40ms forwards;
+  }
+
+  .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__status > svg:not(.todo-item-card__status-ring) {
+    opacity: 0;
+    animation: todo-status-icon-in 180ms ease-out 390ms forwards;
+  }
+
+  .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__meta,
+  .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__actions {
+    opacity: 0;
+    transform: translateX(-0.2rem);
+    animation: todo-meta-in 240ms ease-out var(--todo-meta-delay, 760ms) forwards;
+  }
+
+  @keyframes todo-status-ring-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes todo-status-icon-in {
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes todo-meta-in {
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sketchbook-page .todo-item-card[data-write-animating="true"],
+    .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__label-ink p,
+    .sketchbook-page .todo-item-card[data-write-animating="true"]::after,
+    .sketchbook-page .todo-item-card__status-ring circle,
+    .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__status > svg,
+    .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__meta,
+    .sketchbook-page .todo-item-card[data-write-animating="true"] .todo-item-card__actions {
+      animation: none;
+      clip-path: none;
+      opacity: 1;
+      transform: none;
+    }
+
+    .sketchbook-page .todo-item-card__writing-pencil {
+      display: none;
+    }
+
+    .sketchbook-page .todo-item-card__status-ring circle {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  .sketchbook-page .todo-item-card__status {
+    position: relative;
+    display: inline-grid;
+    width: 1.62rem;
+    height: 1.62rem;
+    flex: 0 0 1.62rem;
+    place-items: center;
+    border: 3px solid rgba(75, 72, 64, 0.32);
+    border-radius: 47% 53% 48% 52%;
+    transform: rotate(-6deg);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="todo"] .todo-item-card__status,
+  .sketchbook-page .todo-item-card[data-task-status="done"] .todo-item-card__status {
+    border-color: var(--sketchbook-orange);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="in_progress"] .todo-item-card__status {
+    border-color: rgba(201, 146, 42, 0.82);
+    background: rgba(230, 180, 65, 0.12);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="paused"] .todo-item-card__status {
+    border-color: rgba(86, 124, 167, 0.72);
+    background: rgba(86, 124, 167, 0.1);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="overdue"] .todo-item-card__status {
+    border-color: rgba(177, 76, 65, 0.48);
+    background: rgba(190, 101, 82, 0.07);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="overdue"] .todo-item-card__status > svg {
+    color: rgba(177, 76, 65, 0.66) !important;
+    filter: drop-shadow(0.4px 0.5px 0 rgba(119, 60, 51, 0.16));
+    stroke-width: 1.8;
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="overdue"] p {
+    color: rgba(166, 79, 68, 0.76) !important;
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="overdue"]::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(190, 101, 82, 0.18) 5%,
+      rgba(190, 101, 82, 0.08) 82%,
+      transparent
+    );
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="done"] .todo-item-card__status > svg:not(.todo-item-card__status-ring) {
+    display: none;
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="todo"] .todo-item-card__status > svg:not(.todo-item-card__status-ring) {
+    display: block;
+    margin-left: 0.08rem;
+    color: var(--sketchbook-orange);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="paused"] .todo-item-card__status > svg:not(.todo-item-card__status-ring) {
+    margin-left: 0.08rem;
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="done"] .todo-item-card__status {
+    border-color: var(--sketchbook-green);
+    background: rgba(99, 138, 105, 0.14);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="done"] .todo-item-card__status::before,
+  .sketchbook-page .todo-item-card[data-task-status="done"] .todo-item-card__status::after {
+    content: "";
+    position: absolute;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--sketchbook-green);
+    transform-origin: left center;
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="done"] .todo-item-card__status::before {
+    left: 0.28rem;
+    top: 0.68rem;
+    width: 0.5rem;
+    transform: rotate(44deg);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="done"] .todo-item-card__status::after {
+    left: 0.62rem;
+    top: 0.9rem;
+    width: 0.86rem;
+    transform: rotate(-48deg);
+  }
+
+  .sketchbook-page .todo-item-card[data-task-status="done"] p {
+    text-decoration-color: rgba(99, 138, 105, 0.82);
+    text-decoration-thickness: 3px;
+  }
+
+  .sketchbook-page .todo-item-card__actions {
+    margin-top: 0.05rem;
+    padding-left: 2.08rem;
+  }
+
+  .sketchbook-page .todo-item-card__action,
+  .sketchbook-page .todo-item-card__state {
+    min-height: 1.55rem !important;
+    height: auto !important;
+    border: 0 !important;
+    border-bottom: 2px solid rgba(99, 138, 105, 0.42) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.05rem 0.18rem !important;
+    color: rgba(69, 66, 57, 0.72) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.88rem !important;
+    font-weight: 700;
+    transform: rotate(-0.5deg);
+  }
+
+  .sketchbook-page .todo-item-card__state {
+    border-bottom-color: rgba(190, 101, 82, 0.38) !important;
+  }
+
+  .sketchbook-page .todo-item-card__completed-focus {
+    border: 0;
+    border-bottom: 2px solid rgba(99, 138, 105, 0.38);
+    background: transparent;
+    padding: 0.08rem 0.12rem 0.02rem;
+    color: rgba(72, 105, 76, 0.8);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.8rem;
+    line-height: 1;
+    white-space: nowrap;
+    transform: rotate(-1deg);
+  }
+
+  .sketchbook-page .date-todos-footer {
+    margin-top: 0.35rem;
+    border-color: rgba(77, 72, 62, 0.25);
+    border-top-style: dashed;
+    padding-top: 0.48rem;
+  }
+
+  .sketchbook-page .todo-quick-actions > button {
+    min-height: 2.55rem;
+    border: 1.5px solid rgba(75, 71, 61, 0.48) !important;
+    border-radius: 13px 17px 12px 15px !important;
+    background: rgba(255, 252, 237, 0.16) !important;
+    color: var(--sketchbook-ink) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.96rem;
+  }
+
+  .sketchbook-page .todo-quick-actions {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.42rem 0.55rem;
+  }
+
+  .sketchbook-page .todo-quick-actions__write {
+    position: relative;
+    border: 2px solid rgba(74, 70, 61, 0.58) !important;
+    border-radius: 14px 19px 13px 17px !important;
+    background:
+      linear-gradient(transparent 64%, rgba(223, 169, 45, 0.13) 64% 88%, transparent 88%),
+      rgba(255, 255, 255, 0.1) !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1rem !important;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    transform: rotate(-0.35deg);
+    justify-content: flex-start;
+  }
+
+  .sketchbook-page .todo-quick-actions__secondary {
+    min-height: 2rem;
+    min-width: 4.25rem;
+    border-color: rgba(173, 101, 78, 0.46) !important;
+    background:
+      linear-gradient(transparent 61%, rgba(190, 101, 82, 0.1) 61% 88%, transparent 88%),
+      rgba(255, 252, 237, 0.1) !important;
+  }
+
+  .sketchbook-page .todo-quick-actions__write svg {
+    color: var(--sketchbook-green);
+    stroke-width: 2.4;
+  }
+
+  .sketchbook-page .todo-quick-actions__secondary:nth-child(2) {
+    transform: rotate(-0.4deg);
+  }
+
+  .sketchbook-page .session-progress-card {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.45rem 0.15rem 0.1rem !important;
+    color: var(--sketchbook-ink);
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-page .session-progress-card::before,
+  .sketchbook-page .session-progress-card::after {
+    display: none;
+  }
+
+  .sketchbook-page .session-progress-card__metrics {
+    margin-bottom: 0.4rem;
+    gap: 0;
+    border-top: 1px solid rgba(84, 79, 68, 0.18);
+    border-bottom: 1px solid rgba(84, 79, 68, 0.18);
+  }
+
+  .sketchbook-page .session-progress-card__metric {
+    border: 0 !important;
+    border-right: 1px dashed rgba(84, 79, 68, 0.25) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.3rem 0.2rem !important;
+  }
+
+  .sketchbook-page .session-progress-card__metric:last-child {
+    border-right: 0 !important;
+  }
+
+  .sketchbook-page .session-progress-card__metric p:first-child {
+    color: rgba(65, 61, 53, 0.58) !important;
+  }
+
+  .sketchbook-page .session-progress-card__metric p:last-child {
+    margin-top: 0 !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.05rem;
+    color: var(--sketchbook-ink) !important;
+  }
+
+  .sketchbook-page .session-progress-card__track {
+    height: 0.34rem !important;
+    border: 1px solid rgba(77, 73, 63, 0.18);
+    border-radius: 48% 52% 47% 53%;
+    background: rgba(75, 71, 61, 0.08) !important;
+    transform: rotate(-0.15deg);
+  }
+
+  .sketchbook-page .session-progress-card__fill {
+    border-radius: inherit;
+    background: rgba(99, 138, 105, 0.78) !important;
+  }
+
+  .sketchbook-page .session-progress-card__detail {
+    margin-top: 0.35rem !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.28rem 0.15rem !important;
+  }
+
+  .sketchbook-page .session-progress-card__detail > div:first-child {
+    line-height: 1.05;
+  }
+
+  .sketchbook-page .session-progress-card__rest-button {
+    border: 1.5px solid rgba(91, 119, 96, 0.52) !important;
+    border-radius: 10px 13px 9px 12px !important;
+    background:
+      linear-gradient(transparent 58%, rgba(99, 138, 105, 0.13) 58% 88%, transparent 88%) !important;
+    color: rgba(56, 79, 61, 0.88) !important;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-page .session-progress-card [class*="bg-success"] {
+    background-color: var(--sketchbook-green);
+  }
+
+  .sketchbook-page--calendar .sketchbook-header--calendar {
+    min-height: 3.15rem;
+  }
+
+  .sketchbook-page--calendar .sketchbook-header--calendar > div {
+    position: relative;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-weight: 700;
+  }
+
+  .sketchbook-page--calendar .sketchbook-header--calendar > div::after {
+    content: "";
+    position: absolute;
+    right: 4%;
+    bottom: 0;
+    left: 4%;
+    height: 0.38rem;
+    border-radius: 50%;
+    background: rgba(233, 174, 39, 0.5);
+    clip-path: polygon(0 45%, 20% 21%, 43% 37%, 68% 18%, 100% 39%, 96% 84%, 66% 65%, 39% 88%, 17% 68%, 1% 82%);
+  }
+
+  .sketchbook-page--calendar .calendar-root-page {
+    color: var(--sketchbook-ink);
+  }
+
+  .sketchbook-page--calendar .sketchbook-calendar-weekdays {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.9rem;
+    color: rgba(64, 59, 50, 0.8);
+  }
+
+  .sketchbook-page--calendar .sketchbook-calendar-weekdays > div:first-child {
+    color: var(--sketchbook-red);
+  }
+
+  .sketchbook-page--calendar .sketchbook-calendar-weekdays > div:last-child {
+    color: var(--sketchbook-blue);
+  }
+
+  .sketchbook-page--calendar .sketchbook-calendar-grid {
+    border: 1px solid rgba(73, 70, 61, 0.34);
+    border-radius: 0.4rem;
+    background: rgba(255, 252, 237, 0.18);
+    padding: 0;
+    box-shadow: 1px 2px 0 rgba(76, 66, 44, 0.06);
+  }
+
+  .sketchbook-page--calendar .sketchbook-calendar-panel {
+    gap: 0 !important;
+  }
+
+  .sketchbook-page--calendar .calendar-date-cell {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    border-right: 1px solid rgba(76, 73, 64, 0.21) !important;
+    border-bottom: 1px solid rgba(76, 73, 64, 0.21) !important;
+    border-radius: 0 !important;
+    background: rgba(255, 252, 237, 0.16) !important;
+    color: var(--sketchbook-ink);
+    box-shadow: none;
+  }
+
+  .sketchbook-page--calendar .calendar-date-cell[data-calendar-current-month="false"] {
+    background: rgba(126, 111, 80, 0.045) !important;
+    opacity: 0.46;
+  }
+
+  .sketchbook-page--calendar .calendar-date-cell[data-calendar-selected="true"] {
+    z-index: 2;
+    border: 2px solid rgba(76, 120, 184, 0.66) !important;
+    background: rgba(76, 120, 184, 0.09) !important;
+    transform: rotate(-0.35deg);
+  }
+
+  .sketchbook-page--calendar .calendar-date-number {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: rgba(55, 52, 45, 0.92);
+  }
+
+  .sketchbook-page--calendar .calendar-today-mark {
+    top: -0.46rem;
+    right: auto;
+    bottom: auto;
+    left: -0.47rem;
+    width: 1.72rem;
+    height: 1.72rem;
+    border: 3px solid rgba(216, 105, 70, 0.82);
+    border-radius: 48% 52% 45% 55%;
+    background: transparent;
+    transform: rotate(-9deg);
+  }
+
+  .sketchbook-page--calendar .calendar-date-bar {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden;
+    border-radius: 43% 57% 49% 51%;
+    background: rgba(76, 120, 184, 0.2);
+    color: #365b91;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: rotate(-0.45deg);
+  }
+
+  /* 항목 내용의 고유 너비가 날짜 칸을 밀어내지 못하게 하고 칸 내부에서만 그린다. */
+  .sketchbook-page--calendar .calendar-date-preview {
+    inline-size: 100% !important;
+    max-inline-size: 100% !important;
+    min-inline-size: 0 !important;
+    contain: inline-size paint;
+  }
+
+  .sketchbook-page--calendar .calendar-date-cell:nth-child(3n + 1) .calendar-date-bar {
+    background: rgba(99, 138, 105, 0.22);
+    color: #4c7052;
+  }
+
+  .sketchbook-page--calendar .calendar-date-cell:nth-child(3n + 2) .calendar-date-bar {
+    background: rgba(230, 169, 40, 0.24);
+    color: #8b6416;
+  }
+
+  .sketchbook-page--calendar .calendar-date-icon {
+    border-width: 2px;
+    background: rgba(255, 252, 237, 0.72);
+    box-shadow: none;
+  }
+
+  .sketchbook-page--calendar .date-tasks-sheet {
+    border-color: rgba(83, 72, 51, 0.2) !important;
+    background-color: var(--sketchbook-paper) !important;
+    background-image:
+      radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.32) 0 1px, transparent 1.8px),
+      linear-gradient(102deg, rgba(255, 255, 255, 0.28), transparent 42%);
+    color: var(--sketchbook-ink);
+    box-shadow: 0 -12px 32px rgba(88, 68, 31, 0.16) !important;
+  }
+
+  .sketchbook-page--calendar .date-tasks-sheet > div:first-child > div,
+  .sketchbook-page--calendar .date-tasks-sheet > div:first-child + div {
+    border-color: rgba(83, 72, 51, 0.16) !important;
+    background-color: rgba(255, 250, 229, 0.48) !important;
+  }
+
+  .sketchbook-page .todo-add-sheet {
+    color: var(--sketchbook-ink);
+    background-color: var(--sketchbook-paper);
+    background-image:
+      radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.36) 0 1px, transparent 1.8px),
+      linear-gradient(102deg, rgba(255, 255, 255, 0.28), transparent 44%);
+  }
+
+  .sketchbook-page .todo-add-sheet header,
+  .sketchbook-page .todo-add-sheet > div:last-child {
+    border-color: rgba(83, 72, 51, 0.18);
+    background-color: rgba(255, 250, 229, 0.38);
+  }
+
+  .handwriting-canvas {
+    border: 2px solid rgba(76, 120, 184, 0.46);
+    background-color: #fffdf5;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2.15rem,
+      rgba(91, 137, 166, 0.18) 2.2rem,
+      transparent 2.25rem
+    );
+    box-shadow:
+      1px 2px 0 rgba(73, 65, 46, 0.08),
+      inset 0 0 18px rgba(124, 92, 39, 0.055);
+    cursor: crosshair;
+  }
+
+  .sketchbook-page .handwriting-canvas {
+    border-color: var(--sketchbook-blue);
+    border-radius: 48% 52% 49% 51% / 3% 4% 3% 4%;
+    transform: rotate(-0.15deg);
+  }
+
+  .inline-todo-handwriting {
+    position: relative;
+    margin-top: 0.35rem;
+    border-top: 1px dashed rgba(77, 72, 62, 0.2);
+    padding-top: 0.3rem;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .inline-todo-handwriting[data-expanded="true"] {
+    min-height: 3rem;
+  }
+
+  .inline-todo-handwriting[data-expanded="true"][data-mode="handwriting"] {
+    min-height: 10.5rem;
+  }
+
+  .inline-todo-handwriting__trigger {
+    display: flex;
+    width: 100%;
+    min-height: 2.8rem;
+    align-items: center;
+    gap: 0.45rem;
+    border: 0;
+    border-bottom: 1.5px solid rgba(91, 137, 166, 0.24);
+    background: transparent;
+    padding: 0.25rem 0.55rem 0.35rem;
+    color: rgba(63, 59, 50, 0.74);
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    text-align: left;
+  }
+
+  .inline-todo-handwriting__trigger svg {
+    color: var(--sketchbook-green);
+  }
+
+  .inline-todo-handwriting__text-entry {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 0.18rem;
+    min-height: 2.8rem;
+    border-bottom: 1.5px solid rgba(91, 137, 166, 0.28);
+    padding: 0.1rem 0.18rem 0.2rem 0.55rem;
+  }
+
+  .inline-todo-handwriting__text-entry input {
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    padding: 0.2rem 0;
+    color: var(--sketchbook-ink);
+    font: inherit;
+    font-size: 1.08rem;
+    font-weight: 700;
+    outline: none;
+  }
+
+  .inline-todo-handwriting__text-entry input::placeholder {
+    color: rgba(63, 59, 50, 0.42);
+  }
+
+  .inline-todo-handwriting__text-entry button {
+    display: inline-grid;
+    width: 1.85rem;
+    min-width: 1.85rem;
+    height: 1.85rem;
+    min-height: 1.85rem;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: rgba(63, 59, 50, 0.6);
+  }
+
+  .inline-todo-handwriting__text-entry .inline-todo-handwriting__submit {
+    border: 1.5px solid rgba(99, 138, 105, 0.66);
+    border-radius: 48% 52% 46% 54%;
+    color: var(--sketchbook-green);
+    transform: rotate(-3deg);
+  }
+
+  .inline-todo-handwriting__text-entry button:disabled {
+    opacity: 0.3;
+  }
+
+  .inline-todo-handwriting__toolbar {
+    display: flex;
+    min-height: 1.65rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0 0.2rem;
+    color: rgba(63, 59, 50, 0.58);
+  }
+
+  .inline-todo-handwriting__toolbar p {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .inline-todo-handwriting__toolbar > div {
+    display: flex;
+    gap: 0.15rem;
+  }
+
+  .inline-todo-handwriting__toolbar button,
+  .inline-todo-handwriting__result button {
+    display: inline-grid;
+    width: 1.9rem;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    min-height: 1.9rem;
+    place-items: center;
+    border: 0;
+    border-radius: 8px 11px 9px 10px;
+    background: rgba(255, 252, 237, 0.2);
+    color: var(--sketchbook-ink);
+  }
+
+  .inline-todo-handwriting__toolbar button:disabled,
+  .inline-todo-handwriting__result button:disabled {
+    opacity: 0.3;
+  }
+
+  .sketchbook-page .inline-todo-handwriting .handwriting-canvas {
+    width: 100%;
+    height: 7.8rem;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background-color: transparent;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2.45rem,
+      rgba(91, 137, 166, 0.22) 2.49rem,
+      transparent 2.54rem
+    );
+    box-shadow: none;
+    transform: none;
+  }
+
+  .inline-todo-handwriting__result {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.1rem 0.2rem 0;
+  }
+
+  .inline-todo-handwriting__result input {
+    min-width: 0;
+    border: 0;
+    border-bottom: 2px solid rgba(104, 131, 107, 0.55);
+    background: rgba(255, 252, 237, 0.32);
+    padding: 0.25rem 0.35rem;
+    color: var(--sketchbook-ink);
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    outline: none;
+  }
+
+  .inline-todo-handwriting__result button {
+    border: 1.5px solid rgba(104, 131, 107, 0.68);
+    color: var(--sketchbook-green);
+  }
+
+  .inline-todo-handwriting__error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    margin: 0.1rem 0.2rem 0;
+    color: rgba(153, 72, 59, 0.9);
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .inline-todo-handwriting__error span {
+    min-width: 0;
+  }
+
+  .inline-todo-handwriting__error button {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.2rem;
+    border: 0;
+    border-bottom: 1.5px solid rgba(184, 85, 70, 0.56);
+    background: transparent;
+    padding: 0.15rem 0.1rem;
+    color: inherit;
+    font: inherit;
+  }
+
+  .inline-todo-handwriting__recognize-row {
+    display: flex;
+    min-height: 1.8rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    margin: 0.05rem 0.2rem 0;
+    color: rgba(153, 72, 59, 0.9);
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .inline-todo-handwriting__recognize-row span {
+    min-width: 0;
+  }
+
+  .inline-todo-handwriting__recognize-row button {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.25rem;
+    border: 0;
+    border-bottom: 1.5px solid rgba(99, 138, 105, 0.55);
+    background: transparent;
+    padding: 0.18rem 0.12rem;
+    color: rgba(61, 91, 66, 0.9);
+    font: inherit;
+  }
+
+  .inline-todo-handwriting__recognize-row button:disabled {
+    opacity: 0.35;
+  }
+
+  .todo-item-card__gesture-stroke {
+    pointer-events: none;
+    position: absolute;
+    z-index: 3;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    opacity: 0.62;
+  }
+
+  .todo-item-card__gesture-stroke path {
+    fill: none;
+    stroke: rgba(67, 63, 55, 0.78);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .todo-item-card__gesture-stroke--complete path {
+    stroke: rgba(73, 126, 83, 0.52);
+  }
+
+  .todo-item-card__gesture-stroke--delete path {
+    stroke: rgba(177, 76, 65, 0.5);
+  }
+
+  .sketchbook-page .todo-item-card__status {
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .sketchbook-page .todo-item-card__status:disabled {
+    cursor: default;
+  }
+
+  .todo-gesture-undo {
+    position: absolute;
+    z-index: 8;
+    right: 0.45rem;
+    bottom: 0.45rem;
+    left: 0.45rem;
+    display: flex;
+    min-height: 2.55rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1.5px solid rgba(177, 91, 72, 0.55);
+    border-radius: 12px 16px 11px 15px;
+    background: rgba(248, 237, 202, 0.96);
+    padding: 0.45rem 0.6rem 0.45rem 0.75rem;
+    color: rgba(76, 57, 49, 0.9);
+    box-shadow: 0 5px 16px rgba(62, 49, 38, 0.16);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.93rem;
+  }
+
+  .todo-gesture-undo button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border: 0;
+    border-bottom: 2px solid rgba(177, 91, 72, 0.52);
+    background: transparent;
+    padding: 0.2rem 0.25rem;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+  }
+
+  .sketchbook-root-page-turn-stage {
+    isolation: isolate;
+    width: 100%;
+    height: 100%;
+    perspective: 1450px;
+    perspective-origin: 42% center;
+    background: var(--sketchbook-paper, #f8edca);
+    transform-style: preserve-3d;
+  }
+
+  .sketchbook-root-page-turn-underlay {
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    opacity: min(1, calc(var(--root-page-turn-progress, 0) * 2.15));
+    transform: scale(calc(0.988 + var(--root-page-turn-progress, 0) * 0.012));
+    box-shadow: inset 0 0 42px rgba(92, 64, 28, 0.16);
+    backface-visibility: hidden;
+    transform-style: preserve-3d;
+    will-change: transform, opacity;
+  }
+
+  .sketchbook-root-page-turn-underlay--settling {
+    transition:
+      transform var(--root-page-turn-duration, 460ms) cubic-bezier(0.18, 0.76, 0.2, 1),
+      opacity var(--root-page-turn-duration, 460ms) ease-out;
+  }
+
+  .sketchbook-root-page-turn-sheet {
+    z-index: 1;
+    transform-style: preserve-3d;
+    backface-visibility: visible;
+    will-change: transform;
+  }
+
+  .sketchbook-root-page-turn-sheet > :not(.sketchbook-root-page-turn-backface) {
+    backface-visibility: hidden;
+  }
+
+  .sketchbook-root-page-turn-sheet--settling {
+    transition: transform var(--root-page-turn-duration, 460ms) cubic-bezier(0.18, 0.76, 0.2, 1);
+  }
+
+  .sketchbook-root-page-turn-backface {
+    pointer-events: none;
+    position: absolute !important;
+    z-index: 7 !important;
+    inset: 0;
+    transform: rotateY(180deg) translateZ(0.5px);
+    backface-visibility: hidden;
+    background-color: var(--sketchbook-paper, #f8edca);
+    background-image:
+      linear-gradient(90deg, rgba(76, 53, 27, 0.18), transparent 9%, transparent 76%, rgba(255, 253, 235, 0.54)),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='2'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .06'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    box-shadow: inset 18px 0 26px rgba(72, 51, 29, 0.13);
+  }
+
+  .sketchbook-root-page-turn-curl {
+    pointer-events: none;
+    position: absolute !important;
+    z-index: 8 !important;
+    top: 0;
+    bottom: 0;
+    width: clamp(2.5rem, calc(8% + var(--root-page-turn-progress, 0) * 23%), 9rem);
+    opacity: calc(var(--root-page-turn-progress, 0) * 0.86);
+    filter: blur(0.15px);
+  }
+
+  .sketchbook-root-page-turn-depth {
+    pointer-events: none;
+    position: absolute;
+    z-index: 9;
+    inset: 0;
+    opacity: calc(var(--root-page-turn-progress, 0) * 0.44);
+    background: linear-gradient(90deg, rgba(47, 35, 22, 0.15), transparent 10%, transparent 88%, rgba(47, 35, 22, 0.09));
+    mix-blend-mode: multiply;
+  }
+
+  .sketchbook-root-page-turn-stage[data-page-turn-direction="next"] .sketchbook-root-page-turn-sheet {
+    box-shadow:
+      26px 4px 36px rgba(62, 45, 25, calc(var(--root-page-turn-progress, 0) * 0.38)),
+      7px 0 12px rgba(62, 45, 25, calc(var(--root-page-turn-progress, 0) * 0.2));
+  }
+
+  .sketchbook-root-page-turn-stage[data-page-turn-direction="previous"] .sketchbook-root-page-turn-sheet {
+    z-index: 0;
+    box-shadow: inset 16px 0 24px rgba(62, 45, 25, calc(var(--root-page-turn-progress, 0) * 0.12));
+  }
+
+  .sketchbook-root-page-turn-stage[data-page-turn-direction="previous"] .sketchbook-root-page-turn-underlay {
+    z-index: 2;
+    box-shadow:
+      26px 4px 38px rgba(62, 45, 25, calc(var(--root-page-turn-progress, 0) * 0.36)),
+      inset 0 0 30px rgba(92, 64, 28, 0.12);
+  }
+
+  .sketchbook-root-page-turn-stage[data-page-turn-direction="next"] .sketchbook-root-page-turn-curl {
+    right: 0;
+    background: linear-gradient(90deg, transparent 4%, rgba(255, 253, 235, 0.78) 52%, rgba(92, 68, 39, 0.26) 88%, rgba(50, 37, 23, 0.11));
+  }
+
+  .sketchbook-root-page-turn-stage[data-page-turn-direction="previous"] .sketchbook-root-page-turn-curl {
+    display: none;
+  }
+
+  .sketchbook-page-turn-viewport {
+    position: relative;
+    isolation: isolate;
+    perspective: 1320px;
+    perspective-origin: center center;
+    transform-style: preserve-3d;
+  }
+
+  .sketchbook-page-turn-underlay,
+  .sketchbook-page-turn-viewport[data-page-turn-direction="next"] .sketchbook-page-turn-sheet,
+  .sketchbook-page-turn-viewport[data-page-turn-direction="previous"] .sketchbook-page-turn-sheet {
+    background-color: var(--sketchbook-paper);
+    background-image:
+      linear-gradient(
+        to right,
+        transparent 0 14.65%,
+        rgba(190, 91, 78, 0.38) 14.65% 14.9%,
+        transparent 14.9%
+      ),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .08'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(to bottom, transparent 0 2.85rem, rgba(99, 132, 145, 0.16) 2.9rem 2.94rem);
+  }
+
+  .sketchbook-page-turn-underlay {
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    padding: 0 0.125rem;
+    opacity: min(1, calc(var(--page-turn-progress, 0) * 1.8));
+    transform: scale(calc(0.985 + var(--page-turn-progress, 0) * 0.015));
+    transform-origin: center;
+    box-shadow: inset 0 0 22px rgba(113, 79, 35, 0.13);
+  }
+
+  .sketchbook-page-turn-sheet {
+    position: relative;
+    z-index: 1;
+    background-color: transparent;
+    background-image: none;
+    transform-style: preserve-3d;
+    backface-visibility: visible;
+    will-change: transform;
+    box-shadow: none;
+  }
+
+  .sketchbook-page-turn-sheet--settling {
+    transition: transform var(--page-turn-duration, 420ms) cubic-bezier(0.18, 0.78, 0.2, 1);
+  }
+
+  .sketchbook-page-turn-sheet > :not(.sketchbook-page-turn-sheet__back) {
+    backface-visibility: hidden;
+  }
+
+  .sketchbook-page-turn-sheet__back {
+    pointer-events: none;
+    position: absolute !important;
+    z-index: 11 !important;
+    inset: 0;
+    transform: rotateY(180deg) translateZ(0.5px);
+    backface-visibility: hidden;
+    background-color: var(--sketchbook-paper);
+    background-image:
+      linear-gradient(90deg, rgba(72, 52, 31, 0.15), transparent 12%, transparent 78%, rgba(255, 253, 237, 0.48)),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='2'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .055'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .date-todos-turn-preview__footer {
+    pointer-events: none;
+    flex: 0 0 7.4rem;
+    padding: 0.65rem 0.5rem 0.35rem;
+    border-top: 1px solid rgba(91, 87, 72, 0.24);
+    opacity: 0.48;
+  }
+
+  .date-todos-turn-preview__actions {
+    display: grid;
+    grid-template-columns: 1.7fr 0.75fr 0.75fr;
+    gap: 0.45rem;
+  }
+
+  .date-todos-turn-preview__actions span {
+    height: 2.4rem;
+    border: 1px solid rgba(91, 87, 72, 0.45);
+    border-radius: 0.8rem;
+    background: rgba(248, 237, 202, 0.2);
+  }
+
+  .date-todos-turn-preview__footer i {
+    display: block;
+    height: 0.3rem;
+    margin-top: 0.75rem;
+    border-radius: 999px;
+    background: rgba(89, 91, 77, 0.24);
+  }
+
+  .date-todos-turn-preview__footer i:last-child {
+    width: 36%;
+    height: 0.18rem;
+    margin-top: 0.55rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sketchbook-root-page-turn-underlay--settling,
+    .sketchbook-root-page-turn-sheet--settling,
+    .sketchbook-page-turn-sheet--settling {
+      transition-duration: 1ms;
+    }
+
+    .sketchbook-root-page-turn-curl,
+    .sketchbook-root-page-turn-depth,
+    .sketchbook-page-turn-sheet::before,
+    .sketchbook-page-turn-sheet::after {
+      display: none;
+    }
+  }
+
+  .sketchbook-page-turn-sheet::before,
+  .sketchbook-page-turn-sheet::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    z-index: 10;
+    top: 0;
+    bottom: 0;
+  }
+
+  .sketchbook-page-turn-sheet::after {
+    right: 0;
+    left: 0;
+    opacity: calc(var(--page-turn-progress, 0) * 0.82);
+  }
+
+  .sketchbook-page-turn-viewport[data-page-turn-direction="next"] .sketchbook-page-turn-sheet::after {
+    background: linear-gradient(90deg, rgba(58, 46, 31, 0.28), transparent 28%, transparent 70%, rgba(255, 252, 233, 0.74));
+  }
+
+  .sketchbook-page-turn-viewport[data-page-turn-direction="previous"] .sketchbook-page-turn-sheet::after {
+    background: linear-gradient(90deg, rgba(255, 252, 233, 0.74), transparent 30%, transparent 72%, rgba(58, 46, 31, 0.28));
+  }
+
+  .sketchbook-page-turn-viewport[data-page-turn-direction="next"] .sketchbook-page-turn-sheet {
+    box-shadow: 16px 2px 24px rgba(69, 50, 29, calc(var(--page-turn-progress, 0) * 0.32));
+  }
+
+  .sketchbook-page-turn-viewport[data-page-turn-direction="previous"] .sketchbook-page-turn-sheet {
+    box-shadow: -16px 2px 24px rgba(69, 50, 29, calc(var(--page-turn-progress, 0) * 0.32));
+  }
+
+  .sketchbook-page-turn-viewport[data-page-turn-direction="next"] .sketchbook-page-turn-sheet::before,
+  .sketchbook-page-turn-viewport[data-page-turn-direction="previous"] .sketchbook-page-turn-sheet::before {
+    width: clamp(1.5rem, calc(8% + var(--page-turn-progress, 0) * 24%), 7rem);
+    opacity: calc(var(--page-turn-progress, 0) * 0.9);
+  }
+
+  .sketchbook-page-turn-viewport[data-page-turn-direction="next"] .sketchbook-page-turn-sheet::before {
+    right: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 253, 235, 0.78) 62%, rgba(89, 66, 38, 0.2));
+  }
+
+  .sketchbook-page-turn-viewport[data-page-turn-direction="previous"] .sketchbook-page-turn-sheet::before {
+    left: 0;
+    background: linear-gradient(90deg, rgba(89, 66, 38, 0.2), rgba(255, 253, 235, 0.78) 38%, transparent);
+  }
+
+  .sketchbook-drawer {
+    border-right: 1px solid rgba(167, 124, 64, 0.38) !important;
+    background-color: #f8edca !important;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .08'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(to bottom, transparent 0 2.85rem, rgba(99, 132, 145, 0.16) 2.9rem 2.94rem);
+    color: #3f3b32;
+    box-shadow: 9px 0 26px rgba(55, 46, 35, 0.24) !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-drawer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 1.25rem;
+    width: 1px;
+    background: rgba(190, 91, 78, 0.38);
+  }
+
+  .sketchbook-drawer > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .sketchbook-drawer__account {
+    padding-left: 0.75rem;
+  }
+
+  .sketchbook-drawer__account > p:first-child {
+    color: rgba(184, 85, 70, 0.82) !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+  }
+
+  .sketchbook-drawer__rule {
+    height: 1px !important;
+    background: rgba(77, 72, 62, 0.22) !important;
+    transform: rotate(-0.25deg);
+  }
+
+  .sketchbook-drawer__menu-button {
+    min-height: 2.45rem;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: rgba(61, 57, 49, 0.86) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.02rem;
+  }
+
+  .sketchbook-drawer__menu-button[data-active="true"] {
+    background: linear-gradient(transparent 58%, rgba(223, 169, 45, 0.24) 58% 88%, transparent 88%) !important;
+    color: #3f3b32 !important;
+    transform: rotate(-0.35deg);
+  }
+
+  .sketchbook-drawer__version {
+    border-color: rgba(77, 72, 62, 0.22) !important;
+  }
+
+  .sketchbook-secondary-overlay {
+    background-color: var(--sketchbook-paper, #f8edca);
+    background-image:
+      linear-gradient(
+        to right,
+        transparent 0 14.65%,
+        rgba(190, 91, 78, 0.38) 14.65% 14.9%,
+        transparent 14.9%
+      ),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .08'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(to bottom, transparent 0 2.85rem, rgba(99, 132, 145, 0.16) 2.9rem 2.94rem);
+    padding: 0 !important;
+    color: #3f3b32;
+  }
+
+  .sketchbook-secondary-overlay .sketchbook-secondary-header {
+    margin: 0;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #3f3b32;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-secondary-overlay .sketchbook-secondary-header h1 {
+    position: relative;
+    overflow: visible;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.55rem;
+    color: #3f3b32 !important;
+  }
+
+  .sketchbook-secondary-overlay .sketchbook-secondary-header h1::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 0.35rem;
+    background: rgba(223, 169, 45, 0.4);
+    transform: rotate(-1deg);
+  }
+
+  .sketchbook-secondary-overlay .sketchbook-secondary-header button {
+    border: 0 !important;
+    background: transparent !important;
+    color: #3f3b32 !important;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-secondary-content {
+    padding: 0.15rem 0.55rem 0.5rem;
+    color: #3f3b32;
+  }
+
+  .sketchbook-secondary-content h2,
+  .sketchbook-secondary-content h3,
+  .sketchbook-secondary-content button {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-secondary-content [class*="bg-base-100"],
+  .sketchbook-secondary-content [class*="bg-base-200"] {
+    background-color: rgba(255, 252, 235, 0.26) !important;
+  }
+
+  .sketchbook-secondary-content [class*="border-base-300"] {
+    border-color: rgba(78, 74, 64, 0.25) !important;
+  }
+
+  .sketchbook-floating-overlay {
+    background: rgba(66, 55, 37, 0.2) !important;
+    backdrop-filter: blur(1px);
+  }
+
+  /* 드롭다운과 팝업은 아래 화면이 비치지 않는 한 장의 종이처럼 표시한다. */
+  .sketchbook-floating-surface,
+  .sketchbook-secondary-content .sketchbook-floating-surface {
+    isolation: isolate;
+    border-color: rgba(79, 73, 60, 0.32) !important;
+    background-color: #f8edca !important;
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 2.5rem,
+        rgba(98, 132, 144, 0.1) 2.54rem,
+        transparent 2.58rem
+      ),
+      radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.34), transparent 40%),
+      linear-gradient(98deg, rgba(255, 251, 230, 0.42), rgba(142, 104, 44, 0.05)) !important;
+    color: #3f3b32 !important;
+    opacity: 1 !important;
+    box-shadow:
+      0 16px 34px rgba(79, 57, 28, 0.23),
+      0 2px 6px rgba(79, 57, 28, 0.12) !important;
+    backdrop-filter: none !important;
+  }
+
+  .page-help-overlay {
+    padding:
+      max(1rem, env(safe-area-inset-top))
+      max(1rem, env(safe-area-inset-right))
+      max(1rem, env(safe-area-inset-bottom))
+      max(1rem, env(safe-area-inset-left));
+  }
+
+  .page-help-backdrop {
+    border: 0;
+    background: rgba(58, 49, 34, 0.24);
+    backdrop-filter: blur(1.6px) saturate(0.82);
+  }
+
+  .page-help-note {
+    max-height: min(82dvh, 40rem);
+    border-radius: 11px 17px 13px 15px !important;
+    padding: 1.15rem 1rem 0.95rem !important;
+    transform: rotate(-0.18deg);
+  }
+
+  .page-help-note__tape {
+    pointer-events: none;
+    position: absolute;
+    z-index: 2;
+    top: -0.38rem;
+    left: 50%;
+    width: 4.4rem;
+    height: 0.92rem;
+    border-radius: 2px 4px 3px 2px;
+    background:
+      repeating-linear-gradient(
+        -8deg,
+        rgba(225, 185, 91, 0.2) 0 2px,
+        rgba(245, 214, 136, 0.34) 2px 5px
+      );
+    box-shadow: inset 0 0 0 1px rgba(161, 124, 48, 0.08);
+    transform: translateX(-50%) rotate(-2deg);
+  }
+
+  .page-help-note__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.15rem 0.08rem 0.68rem;
+    border-bottom: 1px dashed rgba(78, 73, 62, 0.24);
+  }
+
+  .page-help-note__heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .page-help-note__question {
+    display: inline-flex;
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(94, 125, 98, 0.65);
+    border-radius: 46% 54% 43% 57%;
+    background: rgba(137, 171, 140, 0.1);
+    color: rgba(65, 91, 69, 0.88);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.22rem;
+    font-weight: 700;
+    line-height: 1;
+    transform: rotate(-7deg);
+  }
+
+  .page-help-note__eyebrow {
+    margin: 0 0 0.05rem;
+    color: rgba(139, 89, 58, 0.68);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .page-help-note__header h2 {
+    position: relative;
+    z-index: 0;
+    width: fit-content;
+    margin: 0;
+    color: #3f3b32;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.34rem;
+    font-weight: 700;
+    line-height: 1.05;
+  }
+
+  .page-help-note__header h2::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    right: -0.3rem;
+    bottom: -0.03rem;
+    left: -0.12rem;
+    height: 0.34rem;
+    border-radius: 48% 52% 44% 56%;
+    background: rgba(223, 169, 45, 0.28);
+    transform: rotate(-1.5deg);
+  }
+
+  .page-help-note__close {
+    display: inline-flex;
+    width: 1.85rem;
+    height: 1.85rem;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 0 !important;
+    border-radius: 48% 52% 45% 55%;
+    background: transparent !important;
+    color: rgba(63, 59, 50, 0.7) !important;
+    box-shadow: none !important;
+    transform: rotate(4deg);
+  }
+
+  .page-help-note__close:active {
+    background: rgba(189, 101, 86, 0.08) !important;
+    transform: scale(0.94) rotate(1deg);
+  }
+
+  .page-help-note__body {
+    max-height: calc(min(82dvh, 40rem) - 5.25rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.72rem 0.1rem 0.05rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(98, 91, 75, 0.25) transparent;
+  }
+
+  .page-help-note__description {
+    margin: 0 0.15rem 0.72rem;
+    border-left: 3px solid rgba(223, 169, 45, 0.42);
+    padding: 0.08rem 0.2rem 0.08rem 0.68rem;
+    color: rgba(63, 59, 50, 0.74);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .page-help-note__list {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .page-help-note__list li {
+    display: grid;
+    grid-template-columns: 0.62rem minmax(0, 1fr);
+    align-items: start;
+    gap: 0.48rem;
+    margin: 0;
+    border-bottom: 1px solid rgba(99, 132, 145, 0.14);
+    padding: 0.43rem 0.22rem 0.46rem;
+    color: rgba(63, 59, 50, 0.82);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 0.96rem;
+    font-weight: 700;
+    line-height: 1.32;
+  }
+
+  .page-help-note__list li:last-child {
+    border-bottom: 0;
+  }
+
+  .page-help-note__list li::before {
+    content: "";
+    width: 0.47rem;
+    height: 0.47rem;
+    margin-top: 0.28rem;
+    border-radius: 43% 57% 46% 54%;
+    background: rgba(103, 139, 108, 0.64);
+    box-shadow: 1px 0 rgba(103, 139, 108, 0.17);
+    transform: rotate(-12deg);
+  }
+
+  .page-help-note__list li:nth-child(3n + 2)::before {
+    background: rgba(218, 157, 44, 0.68);
+    transform: rotate(9deg);
+  }
+
+  .page-help-note__list li:nth-child(3n)::before {
+    background: rgba(178, 96, 82, 0.58);
+    transform: rotate(-4deg);
+  }
+
+  .page-help-note__body--visual {
+    padding-top: 0.8rem;
+  }
+
+  .sketchbook-secondary-content .rounded-xl,
+  .sketchbook-secondary-content .rounded-2xl {
+    border-radius: 12px 17px 11px 15px !important;
+    box-shadow: none !important;
+  }
+
+  .routine-bundle-route,
+  .routine-bundle-import {
+    color: #433e35;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .routine-bundle-intro {
+    border-bottom: 1px dashed rgba(84, 76, 62, 0.24);
+  }
+
+  .routine-bundle-layout {
+    gap: 0.35rem !important;
+  }
+
+  .routine-bundle-list {
+    max-height: 9.5rem;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(89, 80, 65, 0.22) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.45rem 0.2rem 0.6rem !important;
+  }
+
+  .routine-bundle-choice {
+    min-height: 2.8rem;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(91, 84, 69, 0.2) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgba(67, 62, 53, 0.76) !important;
+  }
+
+  .routine-bundle-choice[data-active="true"] {
+    background: linear-gradient(transparent 57%, rgba(224, 173, 55, 0.22) 57% 88%, transparent 88%) !important;
+    color: #4d4435 !important;
+    transform: rotate(-0.2deg);
+  }
+
+  .routine-bundle-detail {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.45rem 0.25rem !important;
+  }
+
+  .routine-bundle-detail__heading {
+    min-height: 2rem;
+    border-bottom: 2px solid rgba(101, 139, 108, 0.38);
+    transform: rotate(-0.15deg);
+  }
+
+  .routine-bundle-task-row {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(103, 136, 145, 0.24) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0.55rem 0.45rem !important;
+  }
+
+  .routine-bundle-task-row:nth-child(even) {
+    transform: rotate(0.12deg);
+  }
+
+  .routine-bundle-actions {
+    border-color: rgba(83, 76, 63, 0.24) !important;
+  }
+
+  .routine-bundle-actions button {
+    border-color: rgba(80, 75, 65, 0.36) !important;
+    border-radius: 11px 15px 10px 14px !important;
+    background: rgba(255, 250, 228, 0.16) !important;
+    color: #474036 !important;
+    box-shadow: 1px 2px 0 rgba(80, 67, 42, 0.08) !important;
+  }
+
+  .routine-bundle-actions button:last-child {
+    border-color: rgba(91, 128, 98, 0.5) !important;
+    background: rgba(101, 145, 109, 0.12) !important;
+  }
+
+  .sketchbook-bundle-manage {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.25rem 0 !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-bundle-manage > .grid:first-child {
+    border-bottom: 1px solid rgba(87, 79, 65, 0.23);
+  }
+
+  .sketchbook-bundle-manage > .grid:first-child button {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgba(67, 62, 53, 0.68) !important;
+  }
+
+  .sketchbook-bundle-manage > .grid:first-child button.btn-primary {
+    background: linear-gradient(transparent 58%, rgba(224, 173, 55, 0.28) 58% 88%, transparent 88%) !important;
+    color: #433e35 !important;
+  }
+
+  .sketchbook-bundle-manage > div.mt-3 > section {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding-inline: 0 !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-panel {
+    padding: 0 !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-list,
+  .sketchbook-bundle-manage .bundle-manage-detail,
+  .sketchbook-bundle-manage .bundle-weekday-board,
+  .sketchbook-bundle-manage .bundle-weekday-library {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-list,
+  .sketchbook-bundle-manage .bundle-manage-detail {
+    padding: 0.35rem 0.3rem !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-list {
+    border-bottom: 1px dashed rgba(83, 77, 65, 0.25) !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-list > div:first-child,
+  .sketchbook-bundle-manage .bundle-manage-detail > div:first-child {
+    margin-bottom: 0.35rem !important;
+    padding: 0 0.25rem 0.3rem;
+    border-bottom: 1px solid rgba(99, 132, 145, 0.18);
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-count {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: linear-gradient(transparent 56%, rgba(224, 173, 55, 0.22) 56% 90%, transparent 90%) !important;
+    color: rgba(67, 62, 53, 0.72) !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-template-item,
+  .sketchbook-bundle-manage .bundle-manage-task-row {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(99, 132, 145, 0.24) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #433e35 !important;
+    padding-block: 0.55rem !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-template-item:nth-child(even),
+  .sketchbook-bundle-manage .bundle-manage-task-row:nth-child(odd) {
+    transform: rotate(0.1deg);
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-template-item[data-active="true"] {
+    background: linear-gradient(transparent 59%, rgba(224, 173, 55, 0.19) 59% 89%, transparent 89%) !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-template-item button:last-child,
+  .sketchbook-bundle-manage .bundle-manage-task-row button:last-child {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-detail__content,
+  .sketchbook-bundle-manage .bundle-manage-empty {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-empty {
+    padding-inline: 0.35rem !important;
+    color: rgba(67, 62, 53, 0.58) !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-create-action {
+    border-top-style: dashed !important;
+    border-color: rgba(83, 77, 65, 0.25) !important;
+    background: transparent !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-manage-create-action button {
+    border: 1.5px solid rgba(91, 128, 98, 0.48) !important;
+    border-radius: 12px 17px 11px 15px !important;
+    background: rgba(101, 145, 109, 0.1) !important;
+    color: #433e35 !important;
+    box-shadow: 1px 2px 0 rgba(80, 67, 42, 0.08) !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-weekday-board {
+    border-bottom: 1px dashed rgba(83, 77, 65, 0.25) !important;
+  }
+
+  .sketchbook-bundle-manage .bundle-weekday-library {
+    padding-inline: 0.25rem !important;
+  }
+
+  .saved-task-picker {
+    color: #433e35;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .saved-task-picker__tasks,
+  .saved-task-picker__categories {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.15rem 0.25rem !important;
+  }
+
+  .saved-task-picker__categories {
+    border-left: 1px solid rgba(86, 79, 66, 0.22) !important;
+    padding-left: 0.5rem !important;
+  }
+
+  .saved-task-picker .task-management-task-item {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(99, 132, 145, 0.24) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding-block: 0.58rem !important;
+  }
+
+  .saved-task-picker .task-management-task-item[data-active="true"] {
+    background: linear-gradient(transparent 60%, rgba(101, 145, 109, 0.17) 60% 89%, transparent 89%) !important;
+    transform: rotate(-0.12deg);
+  }
+
+  .saved-task-picker .task-management-collection-item {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(86, 79, 66, 0.18) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .saved-task-picker .task-management-collection-item[data-active="true"] {
+    background: linear-gradient(transparent 55%, rgba(190, 101, 82, 0.15) 55% 90%, transparent 90%) !important;
+    transform: rotate(0.25deg);
+  }
+
+  .saved-task-picker__footer {
+    border-top-style: dashed !important;
+    border-color: rgba(83, 77, 65, 0.24) !important;
+  }
+
+  .saved-task-picker__selection {
+    min-height: 4.2rem !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(99, 132, 145, 0.22) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  .saved-task-picker__selection button {
+    border: 0 !important;
+    border-bottom: 2px solid rgba(99, 138, 105, 0.36) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgba(67, 93, 70, 0.88) !important;
+  }
+
+  .saved-task-picker__footer > button {
+    border: 1.5px solid rgba(91, 128, 98, 0.5) !important;
+    border-radius: 12px 17px 11px 15px !important;
+    background: rgba(101, 145, 109, 0.12) !important;
+    color: #433e35 !important;
+    box-shadow: 1px 2px 0 rgba(80, 67, 42, 0.08) !important;
+  }
+
+  .sketchbook-task-management {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.25rem 0 !important;
+    color: #433e35;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-task-management .task-management-board__tasks,
+  .sketchbook-task-management .task-management-board__collections {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.2rem 0.25rem !important;
+  }
+
+  .sketchbook-task-management .task-management-board__collections {
+    border-left: 1px solid rgba(86, 79, 66, 0.22) !important;
+    padding-left: 0.55rem !important;
+  }
+
+  .sketchbook-task-management .task-management-task-item {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(99, 132, 145, 0.24) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding-block: 0.58rem !important;
+  }
+
+  .sketchbook-task-management .task-management-task-item[data-active="true"] {
+    background: linear-gradient(transparent 60%, rgba(101, 145, 109, 0.17) 60% 89%, transparent 89%) !important;
+    transform: rotate(-0.12deg);
+  }
+
+  .sketchbook-task-management .task-management-collection-item {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(86, 79, 66, 0.18) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-task-management .task-management-collection-item[data-active="true"] {
+    background: linear-gradient(transparent 55%, rgba(190, 101, 82, 0.15) 55% 90%, transparent 90%) !important;
+    transform: rotate(0.2deg);
+  }
+
+  .sketchbook-task-management .task-management-controls {
+    border-top-style: dashed !important;
+    border-color: rgba(83, 77, 65, 0.25) !important;
+  }
+
+  .sketchbook-task-management .task-management-actions button {
+    border: 1.5px solid rgba(80, 75, 65, 0.34) !important;
+    border-radius: 11px 15px 10px 14px !important;
+    background: rgba(255, 250, 228, 0.14) !important;
+    color: #474036 !important;
+    box-shadow: 1px 2px 0 rgba(80, 67, 42, 0.07) !important;
+  }
+
+  .sketchbook-task-management .task-management-actions button:last-child {
+    border-color: rgba(91, 128, 98, 0.48) !important;
+    background: rgba(101, 145, 109, 0.1) !important;
+  }
+
+  .sketchbook-task-management .task-management-footer {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(99, 132, 145, 0.22) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding-inline: 0.35rem !important;
+  }
+
+  @media (min-width: 768px) {
+    .routine-bundle-list {
+      max-height: none;
+      border-right: 1px solid rgba(89, 80, 65, 0.22) !important;
+      border-bottom: 0 !important;
+      padding-right: 0.65rem !important;
+    }
+  }
+
+  .sketchbook-settings-page {
+    --settings-ink: #3f3b32;
+    background: transparent;
+    padding: 0.6rem 0.85rem 1.5rem 2rem !important;
+    color: var(--settings-ink);
+  }
+
+  .sketchbook-memo-detail {
+    background-color: var(--sketchbook-paper, #f8edca) !important;
+    background-image:
+      linear-gradient(
+        to right,
+        transparent 0 14.65%,
+        rgba(190, 91, 78, 0.38) 14.65% 14.9%,
+        transparent 14.9%
+      ),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .08'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(to bottom, transparent 0 2.85rem, rgba(99, 132, 145, 0.16) 2.9rem 2.94rem) !important;
+  }
+
+  .sketchbook-memo-editor {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    color: #433e35;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-memo-editor .memo-editor-toolbar {
+    border: 0 !important;
+    border-bottom: 1px dashed rgba(83, 77, 65, 0.28) !important;
+    border-radius: 0 !important;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(229, 197, 113, 0.12) 8%,
+      rgba(229, 197, 113, 0.2) 50%,
+      rgba(229, 197, 113, 0.12) 92%,
+      transparent 100%
+    ) !important;
+    box-shadow: none !important;
+    margin-bottom: 0.35rem !important;
+    padding-top: 0.45rem !important;
+    padding-bottom: 0.55rem !important;
+  }
+
+  .sketchbook-memo-editor .memo-editor-toolbar > button {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgba(67, 62, 53, 0.76) !important;
+  }
+
+  .sketchbook-memo-editor .memo-editor-toolbar > button.btn-primary {
+    background: linear-gradient(
+      transparent 58%,
+      rgba(224, 173, 55, 0.24) 58% 88%,
+      transparent 88%
+    ) !important;
+    color: #433e35 !important;
+  }
+
+  .sketchbook-memo-editor .memo-editor {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-memo-editor .memo-editor .ProseMirror {
+    background: transparent !important;
+    color: #433e35;
+    padding-inline: 0.65rem !important;
+  }
+
+  .sketchbook-settings-home,
+  .settings-detail-shell {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.5rem 0 !important;
+  }
+
+  .settings-sketch-menu-item {
+    position: relative;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(75, 71, 61, 0.24) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--settings-ink) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .settings-sketch-menu-item:nth-child(odd) {
+    transform: rotate(-0.18deg);
+  }
+
+  .settings-sketch-menu-item__icon {
+    border: 1.5px solid rgba(99, 138, 105, 0.52);
+    border-radius: 11px 14px 10px 13px !important;
+    background: rgba(99, 138, 105, 0.08) !important;
+    color: rgba(73, 103, 78, 0.9) !important;
+  }
+
+  .settings-detail-shell > p {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.05rem;
+    color: rgba(63, 59, 50, 0.72) !important;
+  }
+
+  .settings-detail-shell__content > div,
+  .settings-detail-shell__content > button {
+    border: 0 !important;
+    border-bottom: 1px dashed rgba(75, 71, 61, 0.28) !important;
+    border-radius: 0 !important;
+    background: rgba(255, 252, 235, 0.13) !important;
+    box-shadow: none !important;
+  }
+
+  .sketchbook-settings-page button {
+    box-shadow: none !important;
+  }
+
+  .sketchbook-stats-page {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.35rem 0.25rem 1rem !important;
+    color: #454037;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-stats-page > div {
+    gap: 1.15rem;
+  }
+
+  .sketchbook-stats-page article,
+  .sketchbook-stats-page .stats-period-filter > div:last-child {
+    border: 1.5px solid rgba(78, 72, 61, 0.3) !important;
+    border-radius: 12px 17px 13px 16px !important;
+    background: rgba(255, 251, 232, 0.2) !important;
+    box-shadow:
+      1px 2px 0 rgba(82, 65, 39, 0.07),
+      inset 0 0 18px rgba(129, 95, 43, 0.035) !important;
+  }
+
+  .sketchbook-stats-page h3,
+  .sketchbook-stats-page h4 {
+    position: relative;
+    width: fit-content;
+    color: #454037 !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-weight: 700;
+  }
+
+  .sketchbook-stats-page h3::after,
+  .sketchbook-stats-page h4::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    right: -0.25rem;
+    bottom: -0.05rem;
+    left: -0.15rem;
+    height: 0.38rem;
+    border-radius: 45%;
+    background: rgba(233, 174, 39, 0.28);
+    transform: rotate(-1deg);
+  }
+
+  .sketchbook-stats-page .stats-period-filter button {
+    min-height: 2.2rem;
+    border: 1.5px solid rgba(78, 72, 61, 0.34) !important;
+    border-radius: 11px 15px 10px 14px !important;
+    background: rgba(255, 251, 232, 0.18) !important;
+    color: #514b40 !important;
+    box-shadow: none !important;
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+
+  .sketchbook-stats-page .stats-period-filter button.btn-primary {
+    border-color: rgba(104, 131, 107, 0.62) !important;
+    background:
+      linear-gradient(transparent 55%, rgba(132, 172, 137, 0.28) 55% 88%, transparent 88%),
+      rgba(255, 251, 232, 0.18) !important;
+  }
+
+  .sketchbook-stats-page .stats-metric-card {
+    min-height: 5.25rem;
+    border: 0 !important;
+    border-bottom: 2px solid rgba(83, 77, 65, 0.25) !important;
+    border-radius: 8px 13px 7px 11px !important;
+    padding: 0.65rem !important;
+    transform: rotate(-0.35deg);
+  }
+
+  .sketchbook-stats-page .stats-metric-card:nth-child(3n + 1) {
+    background: rgba(170, 203, 174, 0.28) !important;
+  }
+
+  .sketchbook-stats-page .stats-metric-card:nth-child(3n + 2) {
+    background: rgba(174, 205, 219, 0.3) !important;
+    transform: rotate(0.3deg);
+  }
+
+  .sketchbook-stats-page .stats-metric-card:nth-child(3n) {
+    background: rgba(238, 190, 154, 0.27) !important;
+    transform: rotate(-0.15deg);
+  }
+
+  .sketchbook-stats-page .stats-metric-card p:first-child {
+    color: rgba(69, 64, 55, 0.7) !important;
+    font-size: 0.78rem;
+  }
+
+  .sketchbook-stats-page .stats-metric-card p:nth-child(2) {
+    color: #454037;
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+
+  .sketchbook-stats-page .stats-chart-card {
+    overflow: hidden;
+    background:
+      linear-gradient(rgba(255, 252, 238, 0.32), rgba(255, 252, 238, 0.18)),
+      repeating-linear-gradient(to bottom, transparent 0 2.3rem, rgba(94, 130, 145, 0.09) 2.34rem 2.38rem) !important;
+  }
+
+  .sketchbook-stats-page .recharts-wrapper,
+  .sketchbook-stats-page .recharts-surface,
+  .sketchbook-stats-page .recharts-text {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif !important;
+  }
+
+  .sketchbook-stats-page .recharts-cartesian-grid line {
+    stroke-dasharray: 2 5;
+    stroke-linecap: round;
+  }
+
+  .sketchbook-stats-page .recharts-rectangle {
+    filter: url(#stats-crayon-rough);
+    opacity: 0.9;
+  }
+
+  .sketchbook-stats-page .recharts-legend-item-text {
+    color: #5a5347 !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif !important;
+  }
+
+  .sketchbook-stats-page .stats-chart-tooltip {
+    border: 1.5px solid rgba(78, 72, 61, 0.34) !important;
+    border-radius: 9px 13px 8px 12px !important;
+    background: #fbf0ce !important;
+    color: #454037;
+    box-shadow: 3px 5px 12px rgba(67, 52, 32, 0.16) !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .sketchbook-stats-page [class*="bg-emerald"],
+  .sketchbook-stats-page [class*="bg-success"] {
+    background-color: rgba(157, 196, 164, 0.28) !important;
+  }
+
+  .sketchbook-stats-page [class*="bg-amber"],
+  .sketchbook-stats-page [class*="bg-warning"] {
+    background-color: rgba(236, 192, 137, 0.28) !important;
+  }
+
+  .sketchbook-stats-page [class*="bg-info"],
+  .sketchbook-stats-page [class*="bg-cyan"] {
+    background-color: rgba(155, 194, 211, 0.27) !important;
+  }
+
+  .sketchbook-stats-page .stats-journal {
+    padding: 0.15rem 0.15rem 1.5rem;
+  }
+
+  .stats-period-filter__tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .stats-period-filter__caption {
+    margin: 0.45rem 0 0;
+    padding-left: 0.2rem;
+    color: rgba(69, 64, 55, 0.58);
+    font-size: 0.72rem;
+  }
+
+  .stats-summary-note {
+    position: relative;
+    overflow: hidden;
+    padding: 1rem 0.85rem 0.9rem;
+    border-top: 1px solid rgba(81, 75, 63, 0.2);
+    border-bottom: 1px solid rgba(81, 75, 63, 0.2);
+    background:
+      linear-gradient(transparent 45%, rgba(238, 191, 93, 0.18) 45% 84%, transparent 84%);
+  }
+
+  .stats-summary-note::before {
+    content: "";
+    position: absolute;
+    top: 0.6rem;
+    right: 4%;
+    left: 52%;
+    height: 0.42rem;
+    border-radius: 48%;
+    background: rgba(239, 179, 54, 0.24);
+    transform: rotate(-1.2deg);
+  }
+
+  .stats-summary-note__eyebrow {
+    margin: 0 0 0.3rem;
+    color: rgba(104, 73, 44, 0.7);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .stats-summary-note__sentence {
+    margin: 0;
+    color: #454037;
+    font-size: clamp(1.05rem, 4.3vw, 1.28rem);
+    line-height: 1.4;
+  }
+
+  .stats-summary-note__sentence p {
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .stats-summary-note__sentence p + p {
+    margin-top: 0.08rem;
+  }
+
+  .stats-summary-note__sentence strong {
+    font-size: 1.13em;
+    font-weight: 700;
+  }
+
+  .stats-summary-note__completion {
+    overflow: hidden;
+    height: 0.36rem;
+    margin-top: 0.7rem;
+    border-radius: 999px;
+    background: rgba(83, 77, 65, 0.12);
+    transform: rotate(-0.25deg);
+  }
+
+  .stats-summary-note__completion span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background:
+      repeating-linear-gradient(100deg, rgba(82, 128, 91, 0.86) 0 5px, rgba(106, 151, 113, 0.75) 5px 8px);
+    box-shadow: 0 0 0 1px rgba(69, 115, 78, 0.12);
+    transition: width 360ms ease-out;
+  }
+
+  .stats-record-section,
+  .stats-highlight-section {
+    padding: 0 0.15rem;
+  }
+
+  .stats-section-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .stats-section-heading h3,
+  .stats-highlight-section > h3 {
+    margin: 0;
+    font-size: 1.08rem;
+  }
+
+  .stats-section-heading p {
+    margin: 0.16rem 0 0;
+    color: rgba(69, 64, 55, 0.56);
+    font-size: 0.7rem;
+  }
+
+  .stats-crayon-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    color: rgba(69, 64, 55, 0.66);
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+
+  .stats-crayon-legend span::before {
+    content: "";
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.28rem;
+    margin-right: 0.16rem;
+    border-radius: 45%;
+    vertical-align: 0.05rem;
+    background: #789c7d;
+  }
+
+  .stats-crayon-legend span[data-tone="incomplete"]::before {
+    background: #d98e7e;
+  }
+
+  .stats-crayon-legend span[data-tone="focus"]::before {
+    background: #769eb0;
+  }
+
+  .stats-crayon-timeline {
+    border-top: 1px solid rgba(77, 73, 63, 0.16);
+    border-bottom: 1px solid rgba(77, 73, 63, 0.16);
+  }
+
+  .stats-crayon-row {
+    position: relative;
+    border-bottom: 1px solid rgba(102, 126, 137, 0.12);
+  }
+
+  .stats-crayon-row:last-child {
+    border-bottom: 0;
+  }
+
+  .stats-crayon-row:not([data-empty="true"])::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    inset: 0.42rem 0.25rem 0.38rem 3.75rem;
+    border-radius: 5px 10px 6px 9px;
+    background:
+      linear-gradient(96deg, rgba(245, 224, 158, 0.14), rgba(255, 251, 229, 0.04) 72%);
+    clip-path: polygon(0 6%, 100% 0, 99% 92%, 2% 100%);
+    transform: rotate(-0.12deg);
+    pointer-events: none;
+  }
+
+  .stats-crayon-row__button {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: 100%;
+    min-height: 4.25rem;
+    grid-template-columns: 3.7rem minmax(0, 1fr) 0.85rem;
+    align-items: start;
+    gap: 0.5rem;
+    border: 0;
+    background: transparent;
+    padding: 0.62rem 0.25rem 0.55rem 0.1rem;
+    color: #454037;
+    font: inherit;
+    text-align: left;
+  }
+
+  .stats-crayon-row__button:active {
+    background: rgba(224, 193, 121, 0.08);
+  }
+
+  .stats-crayon-row__button:disabled {
+    cursor: default;
+  }
+
+  .stats-crayon-row__date {
+    padding-top: 0.08rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .stats-crayon-row__main {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.48rem;
+  }
+
+  .stats-crayon-row__summary {
+    display: flex;
+    min-height: 1.05rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.72rem;
+    color: rgba(69, 64, 55, 0.8);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .stats-crayon-row__summary span {
+    white-space: nowrap;
+  }
+
+  .stats-crayon-row__summary b {
+    margin-right: 0.22rem;
+    color: rgba(69, 64, 55, 0.48);
+    font-size: 0.61rem;
+    font-weight: 500;
+  }
+
+  .stats-crayon-row__tracks {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding-right: 0.15rem;
+  }
+
+  .stats-crayon-row__todo-track {
+    display: flex;
+    overflow: hidden;
+    min-width: 0;
+    height: 0.28rem;
+    border-radius: 2px 4px 3px 2px;
+    transform: rotate(-0.35deg);
+    box-shadow: inset 0 1px rgba(255, 252, 235, 0.24);
+  }
+
+  .stats-crayon-row__todo-track i[data-tone="done"] {
+    background:
+      repeating-linear-gradient(105deg, rgba(103, 146, 108, 0.88) 0 4px, rgba(127, 163, 129, 0.72) 4px 7px);
+  }
+
+  .stats-crayon-row__todo-track i[data-tone="incomplete"] {
+    background:
+      repeating-linear-gradient(102deg, rgba(210, 125, 108, 0.76) 0 4px, rgba(226, 151, 132, 0.68) 4px 7px);
+  }
+
+  .stats-crayon-row__focus-track {
+    display: block;
+    height: 0.18rem;
+    border-radius: 3px 2px 4px 2px;
+    background:
+      repeating-linear-gradient(98deg, rgba(103, 150, 169, 0.84) 0 4px, rgba(129, 171, 186, 0.68) 4px 7px);
+    transform: rotate(0.3deg);
+    box-shadow: inset 0 1px rgba(255, 252, 235, 0.2);
+  }
+
+  .stats-crayon-row__chevron {
+    align-self: center;
+    color: rgba(69, 64, 55, 0.46);
+    transition: transform 180ms ease;
+  }
+
+  .stats-crayon-row[data-empty="true"] .stats-crayon-row__button {
+    min-height: 2.4rem;
+    align-items: center;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .stats-crayon-row[data-empty="true"] .stats-crayon-row__date {
+    padding-top: 0;
+    color: rgba(69, 64, 55, 0.58);
+    font-weight: 600;
+  }
+
+  .stats-crayon-row[data-empty="true"] .stats-crayon-row__summary {
+    position: relative;
+    min-height: auto;
+    color: rgba(69, 64, 55, 0.34);
+    font-size: 0.63rem;
+    font-weight: 400;
+  }
+
+  .stats-crayon-row[data-empty="true"] .stats-crayon-row__summary::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    margin-left: 0.3rem;
+    background: repeating-linear-gradient(90deg, rgba(89, 117, 129, 0.16) 0 3px, transparent 3px 7px);
+  }
+
+  .stats-crayon-row[data-expanded="true"] .stats-crayon-row__chevron {
+    transform: rotate(180deg);
+  }
+
+  .stats-crayon-row__details {
+    position: relative;
+    z-index: 1;
+    margin: -0.1rem 0.35rem 0.65rem 3.8rem;
+    padding: 0.58rem 0.68rem;
+    border-left: 2px solid rgba(119, 151, 123, 0.36);
+    background: rgba(255, 250, 227, 0.28);
+    color: rgba(69, 64, 55, 0.68);
+    font-family: "Noto Sans KR", sans-serif;
+    font-size: 0.68rem;
+    line-height: 1.55;
+  }
+
+  .stats-crayon-row__details p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .stats-crayon-row__details p + p {
+    margin-top: 0.22rem;
+  }
+
+  .stats-crayon-row__details b {
+    display: inline-block;
+    min-width: 2.8rem;
+    color: rgba(69, 64, 55, 0.85);
+  }
+
+  .stats-monthly-overview__years {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid rgba(77, 73, 63, 0.16);
+  }
+
+  .stats-monthly-year h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.16rem;
+    margin: 0 0 0.38rem;
+    color: rgba(69, 64, 55, 0.62);
+    font-size: 0.7rem;
+    font-weight: 500;
+  }
+
+  .stats-monthly-year h4::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: repeating-linear-gradient(90deg, rgba(88, 110, 119, 0.18) 0 3px, transparent 3px 7px);
+  }
+
+  .stats-monthly-year h4 span {
+    color: rgba(69, 64, 55, 0.82);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .stats-monthly-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .stats-month-card {
+    --month-activity-opacity: 0.15;
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 5.15rem;
+    flex-direction: column;
+    align-items: flex-start;
+    overflow: hidden;
+    padding: 0.58rem 0.55rem 0.48rem;
+    border: 0;
+    border-radius: 3px 8px 5px 7px;
+    background: rgba(255, 251, 232, 0.28);
+    color: #454037;
+    font: inherit;
+    text-align: left;
+    clip-path: polygon(1% 3%, 98% 0, 100% 94%, 95% 100%, 2% 97%);
+    isolation: isolate;
+  }
+
+  .stats-month-card::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: rgba(235, 201, 113, 0.48);
+    opacity: var(--month-activity-opacity);
+  }
+
+  .stats-month-card:nth-child(3n + 2)::before {
+    background: rgba(156, 193, 207, 0.44);
+  }
+
+  .stats-month-card:nth-child(3n)::before {
+    background: rgba(166, 197, 168, 0.44);
+  }
+
+  .stats-month-card:active:not(:disabled),
+  .stats-month-card[data-selected="true"] {
+    transform: translateY(1px) rotate(-0.35deg);
+  }
+
+  .stats-month-card[data-selected="true"] {
+    box-shadow: inset 0 -2px rgba(81, 119, 91, 0.36);
+  }
+
+  .stats-month-card[data-empty="true"] {
+    min-height: 3.15rem;
+    justify-content: space-between;
+    background: transparent;
+    color: rgba(69, 64, 55, 0.54);
+  }
+
+  .stats-month-card[data-empty="true"]::before {
+    background: rgba(98, 124, 136, 0.07);
+    opacity: 1;
+  }
+
+  .stats-month-card__month {
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .stats-month-card strong {
+    margin-top: 0.3rem;
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .stats-month-card small {
+    display: block;
+    max-width: 100%;
+    margin-top: 0.22rem;
+    overflow: hidden;
+    color: rgba(69, 64, 55, 0.52);
+    font-size: 0.57rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stats-month-card__stroke {
+    display: flex;
+    overflow: hidden;
+    width: 100%;
+    height: 0.22rem;
+    margin-top: auto;
+    border-radius: 2px 4px 3px 2px;
+    transform: rotate(-0.7deg);
+    box-shadow: inset 0 1px rgba(255, 252, 235, 0.22);
+  }
+
+  .stats-month-card__stroke i[data-tone="done"] {
+    background: repeating-linear-gradient(103deg, rgba(91, 139, 99, 0.86) 0 4px, rgba(119, 160, 124, 0.7) 4px 7px);
+  }
+
+  .stats-month-card__stroke i[data-tone="incomplete"] {
+    background: repeating-linear-gradient(102deg, rgba(207, 122, 105, 0.75) 0 4px, rgba(227, 153, 135, 0.66) 4px 7px);
+  }
+
+  .stats-monthly-detail {
+    margin-top: 0.75rem;
+    padding: 0.7rem 0.75rem;
+    border-left: 2px solid rgba(119, 151, 123, 0.4);
+    background:
+      linear-gradient(transparent 0 1.55rem, rgba(112, 154, 174, 0.1) 1.55rem 1.62rem, transparent 1.62rem),
+      rgba(255, 250, 227, 0.24);
+    color: rgba(69, 64, 55, 0.7);
+    font-family: "Noto Sans KR", sans-serif;
+    font-size: 0.68rem;
+    line-height: 1.55;
+  }
+
+  .stats-monthly-detail h4 {
+    margin: 0 0 0.45rem;
+    color: rgba(69, 64, 55, 0.88);
+    font-size: 0.78rem;
+  }
+
+  .stats-monthly-detail p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .stats-monthly-detail p + p {
+    margin-top: 0.2rem;
+  }
+
+  .stats-monthly-detail b {
+    display: inline-block;
+    min-width: 2.8rem;
+    color: rgba(69, 64, 55, 0.86);
+  }
+
+  .stats-highlight-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 0.65rem;
+  }
+
+  .sketchbook-stats-page .stats-highlight-grid article {
+    min-height: 5.3rem;
+    padding: 0.7rem 0.75rem;
+    border: 0 !important;
+    border-radius: 3px 8px 5px 7px !important;
+    background: rgba(172, 203, 216, 0.32) !important;
+    box-shadow: 1px 3px 5px rgba(75, 59, 35, 0.1) !important;
+    clip-path: polygon(1% 2%, 98% 0, 100% 95%, 95% 100%, 2% 97%);
+    transform: rotate(-0.45deg);
+  }
+
+  .sketchbook-stats-page .stats-highlight-grid article[data-tone="coral"] {
+    background: rgba(232, 169, 145, 0.3) !important;
+    transform: rotate(0.35deg);
+  }
+
+  .sketchbook-stats-page .stats-highlight-grid article[data-tone="green"] {
+    background: rgba(162, 197, 166, 0.31) !important;
+    transform: rotate(0.28deg);
+  }
+
+  .sketchbook-stats-page .stats-highlight-grid article[data-tone="yellow"] {
+    background: rgba(237, 199, 113, 0.28) !important;
+    transform: rotate(-0.25deg);
+  }
+
+  .stats-highlight-grid p,
+  .stats-highlight-grid strong,
+  .stats-highlight-grid small {
+    display: block;
+    overflow: hidden;
+    margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stats-highlight-grid p {
+    color: rgba(69, 64, 55, 0.62);
+    font-size: 0.7rem;
+  }
+
+  .stats-highlight-grid strong {
+    margin-top: 0.2rem;
+    color: #454037;
+    font-size: 1rem;
+  }
+
+  .stats-highlight-grid small {
+    margin-top: 0.12rem;
+    color: rgba(69, 64, 55, 0.53);
+    font-size: 0.64rem;
+  }
+
+  .sketchbook-stats-page .stats-ai-note {
+    position: relative;
+    overflow: hidden;
+    border: 0 !important;
+    border-radius: 4px 10px 6px 8px !important;
+    background: rgba(241, 207, 118, 0.32) !important;
+    box-shadow: 2px 4px 8px rgba(79, 61, 34, 0.12) !important;
+    clip-path: polygon(0 1%, 96% 0, 100% 14%, 99% 98%, 3% 100%, 1% 91%);
+    transform: rotate(-0.22deg);
+  }
+
+  .stats-ai-note::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 2.2rem;
+    height: 2.2rem;
+    background: linear-gradient(225deg, rgba(136, 102, 47, 0.13) 0 48%, rgba(255, 247, 211, 0.48) 50% 100%);
+  }
+
+  .stats-ai-note__toggle {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: 100%;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.65rem;
+    border: 0;
+    background: transparent;
+    padding: 0.9rem 1rem 0.85rem 0.85rem;
+    color: #454037;
+    font: inherit;
+    text-align: left;
+  }
+
+  .stats-ai-note__icon {
+    display: inline-grid;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border: 1.5px solid rgba(80, 75, 63, 0.38);
+    border-radius: 48% 52% 45% 55%;
+  }
+
+  .stats-ai-note__toggle strong,
+  .stats-ai-note__toggle small {
+    display: block;
+  }
+
+  .stats-ai-note__toggle strong {
+    font-size: 0.95rem;
+  }
+
+  .stats-ai-note__toggle small {
+    margin-top: 0.08rem;
+    color: rgba(69, 64, 55, 0.57);
+    font-size: 0.68rem;
+  }
+
+  .stats-ai-note__chevron {
+    transition: transform 180ms ease;
+  }
+
+  .stats-ai-note[data-expanded="true"] .stats-ai-note__chevron {
+    transform: rotate(180deg);
+  }
+
+  .stats-ai-note__body {
+    position: relative;
+    z-index: 1;
+    margin: 0 0.8rem 0.8rem;
+    padding-top: 0.65rem;
+    border-top: 1px dashed rgba(80, 75, 63, 0.3);
+  }
+
+  .sketchbook-stats-page .stats-ai-note__body > div {
+    border: 0 !important;
+    background: rgba(255, 251, 231, 0.28) !important;
+    box-shadow: none !important;
+  }
+
+  @media (max-width: 380px) {
+    .stats-crayon-row__button {
+      grid-template-columns: 3.15rem minmax(0, 1fr) 0.7rem;
+      gap: 0.35rem;
+    }
+
+    .stats-crayon-row__date {
+      font-size: 0.7rem;
+    }
+
+    .stats-crayon-row__details {
+      margin-left: 3.3rem;
+    }
+
+    .stats-crayon-legend {
+      display: none;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .sketchbook-page--tasks,
+    .sketchbook-page--calendar {
+      padding-left: 3.05rem !important;
+      padding-right: 0.42rem !important;
+    }
+
+    .sketchbook-page .sketchbook-main-title {
+      width: calc(100% - 3rem);
+      font-size: 1.48rem;
+    }
+
+    .sketchbook-page .todo-quick-actions {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sketchbook-page .todo-quick-actions__write,
+    .sketchbook-page--calendar .calendar-date-cell[data-calendar-selected="true"],
+    .sketchbook-page--calendar .calendar-today-mark {
+      transform: none;
+    }
+  }
+
   .overlay-enter {
     animation: overlay-enter 320ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
   }
@@ -359,11 +3943,11 @@
   }
 
   .confirm-modal__actions {
-    margin-top: 0.95rem;
+    margin-top: 0.8rem;
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 0.5rem;
+    gap: 0.72rem;
   }
 
   .action-sheet-overlay {
@@ -480,6 +4064,371 @@
     font-weight: 700;
     color: var(--color-base-content);
     letter-spacing: -0.012em;
+  }
+
+  /* 공통 피드백 UI를 스케치북의 종이·연필선 질감으로 맞춘다. */
+  .toast-card {
+    border: 1.5px solid rgba(79, 73, 60, 0.28);
+    border-radius: 9px 13px 10px 12px;
+    background-color: var(--sketchbook-paper, #f8edca);
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 1.72rem,
+        rgba(98, 132, 144, 0.12) 1.76rem,
+        transparent 1.8rem
+      ),
+      radial-gradient(circle at 18% 24%, rgba(255, 255, 255, 0.32), transparent 38%),
+      linear-gradient(98deg, rgba(255, 251, 230, 0.38), rgba(142, 104, 44, 0.05));
+    color: var(--sketchbook-ink, #3f3b32);
+    backdrop-filter: none;
+    box-shadow: 0 9px 20px rgba(79, 57, 28, 0.2), 0 2px 4px rgba(79, 57, 28, 0.12);
+  }
+
+  .toast-card--positive {
+    border-color: rgba(87, 126, 91, 0.52);
+    color: #536d57;
+  }
+
+  .toast-card--error {
+    border-color: rgba(177, 76, 65, 0.52);
+    color: #9e4e43;
+  }
+
+  .toast-card__icon-wrap {
+    border: 2px solid currentColor;
+    border-radius: 46% 54% 48% 52%;
+    background: rgba(255, 250, 227, 0.34);
+    transform: rotate(-5deg);
+  }
+
+  .toast-card__title {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.02rem;
+  }
+
+  .toast-card__message {
+    font-family: "Noto Sans KR", sans-serif;
+    font-size: 0.8rem;
+  }
+
+  .toast-card__close {
+    border-radius: 43% 57% 51% 49%;
+  }
+
+  .confirm-overlay,
+  .action-sheet-overlay {
+    background: rgba(66, 55, 37, 0.18) !important;
+  }
+
+  .confirm-modal,
+  .action-sheet-panel {
+    border: 1.5px solid rgba(79, 73, 60, 0.3) !important;
+    background-color: var(--sketchbook-paper, #f8edca) !important;
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 2.54rem,
+        rgba(98, 132, 144, 0.13) 2.58rem,
+        transparent 2.62rem
+      ),
+      radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.28), transparent 38%),
+      linear-gradient(98deg, rgba(255, 251, 230, 0.4), rgba(142, 104, 44, 0.05));
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    box-shadow: 0 16px 34px rgba(79, 57, 28, 0.25), 0 2px 6px rgba(79, 57, 28, 0.12);
+  }
+
+  .confirm-modal {
+    border-radius: 11px 16px 12px 14px;
+  }
+
+  .confirm-modal__title,
+  .action-sheet-panel__title,
+  .action-sheet-panel__item-label {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .confirm-modal__title {
+    font-size: 1.18rem;
+    color: var(--sketchbook-ink, #3f3b32) !important;
+  }
+
+  .confirm-modal__message,
+  .action-sheet-panel__message,
+  .action-sheet-panel__item-description {
+    color: rgba(63, 59, 50, 0.62) !important;
+  }
+
+  .confirm-modal__button {
+    position: relative;
+    min-height: 2rem !important;
+    height: 2rem !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.12rem 0.35rem 0.28rem !important;
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1rem !important;
+    transform: rotate(-0.6deg);
+  }
+
+  .confirm-modal__button::after {
+    content: "";
+    position: absolute;
+    right: 0.18rem;
+    bottom: 0.16rem;
+    left: 0.08rem;
+    height: 2px;
+    border-radius: 55% 45% 60% 40%;
+    background: currentColor;
+    opacity: 0.38;
+    transform: rotate(-1.2deg) scaleX(0.96);
+  }
+
+  .confirm-modal__button:nth-child(even) {
+    transform: rotate(0.7deg);
+  }
+
+  .confirm-modal__button:active:not(:disabled) {
+    transform: translateY(1px) rotate(0deg);
+  }
+
+  .confirm-modal__button[data-tone="primary"] {
+    color: #536d57 !important;
+  }
+
+  .confirm-modal__button[data-tone="danger"] {
+    color: #9e4e43 !important;
+  }
+
+  .todo-focus-sheet-overlay {
+    background: rgba(66, 55, 37, 0.18);
+  }
+
+  .todo-focus-sheet {
+    position: relative;
+    border: 1.5px solid rgba(79, 73, 60, 0.3);
+    border-bottom: 0;
+    border-radius: 18px 22px 0 0;
+    background-color: var(--sketchbook-paper, #f8edca);
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 2.48rem,
+        rgba(98, 132, 144, 0.13) 2.52rem,
+        transparent 2.56rem
+      ),
+      radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.28), transparent 38%),
+      linear-gradient(98deg, rgba(255, 251, 230, 0.4), rgba(142, 104, 44, 0.05));
+    padding: 1.15rem 1rem calc(0.9rem + env(safe-area-inset-bottom));
+    color: var(--sketchbook-ink, #3f3b32);
+    box-shadow: 0 -10px 28px rgba(79, 57, 28, 0.2);
+  }
+
+  .todo-focus-sheet::before {
+    content: "";
+    position: absolute;
+    top: 0.42rem;
+    left: 50%;
+    width: 2.5rem;
+    height: 3px;
+    border-radius: 999px 72% 999px 63%;
+    background: rgba(72, 69, 62, 0.32);
+    transform: translateX(-50%) rotate(-1deg);
+  }
+
+  .todo-focus-sheet__title {
+    color: var(--sketchbook-ink, #3f3b32);
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.18rem;
+  }
+
+  .todo-focus-sheet__close {
+    border: 0 !important;
+    background: transparent !important;
+    color: rgba(63, 59, 50, 0.68) !important;
+    box-shadow: none !important;
+  }
+
+  .todo-focus-sheet__input {
+    height: 2.65rem !important;
+    border: 0 !important;
+    border-bottom: 2px solid rgba(99, 138, 105, 0.48) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.05rem;
+  }
+
+  .todo-focus-sheet__button {
+    position: relative;
+    min-height: 2rem !important;
+    height: 2rem !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0.12rem 0.3rem 0.28rem !important;
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1rem !important;
+  }
+
+  .todo-focus-sheet__button::after {
+    content: "";
+    position: absolute;
+    right: 0.1rem;
+    bottom: 0.12rem;
+    left: 0.06rem;
+    height: 2px;
+    border-radius: 55% 45% 60% 40%;
+    background: currentColor;
+    opacity: 0.38;
+    transform: rotate(-1deg);
+  }
+
+  .todo-focus-sheet__button[data-tone="primary"] {
+    color: var(--sketchbook-green, #68836b) !important;
+  }
+
+  .action-sheet-panel {
+    max-height: min(78svh, 42rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 18px 21px 8px 10px;
+  }
+
+  .action-sheet-panel__handle {
+    height: 3px !important;
+    border-radius: 999px 72% 999px 63%;
+    background: rgba(72, 69, 62, 0.38) !important;
+    transform: rotate(-1deg);
+  }
+
+  .action-sheet-panel__title {
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    font-size: 1.18rem !important;
+    text-decoration: underline;
+    text-decoration-color: rgba(223, 169, 45, 0.5);
+    text-decoration-thickness: 3px;
+    text-underline-offset: 0.2rem;
+  }
+
+  .action-sheet-panel__items {
+    margin-top: 0.55rem;
+  }
+
+  .action-sheet-panel__item {
+    border: 0 !important;
+    border-bottom: 1px solid rgba(98, 132, 144, 0.2) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    box-shadow: none !important;
+  }
+
+  .action-sheet-panel__item:active:not(:disabled) {
+    background: rgba(223, 169, 45, 0.08) !important;
+  }
+
+  .action-sheet-panel__item-label {
+    font-size: 1.02rem !important;
+    color: inherit !important;
+  }
+
+  .action-sheet-panel__item-icon {
+    width: 1.55rem;
+    height: 1.55rem;
+    justify-content: center;
+    border: 1.5px solid currentColor;
+    border-radius: 46% 54% 49% 51%;
+    opacity: 0.72;
+    transform: rotate(-4deg);
+  }
+
+  .action-sheet-panel__item[data-tone="primary"] {
+    color: var(--sketchbook-green, #68836b) !important;
+  }
+
+  .action-sheet-panel__item[data-tone="danger"] {
+    color: var(--sketchbook-red, #bd6556) !important;
+  }
+
+  .action-sheet-panel__item[data-tone="muted"] {
+    color: rgba(63, 59, 50, 0.58) !important;
+  }
+
+  .time-picker-sheet-panel {
+    border-radius: 18px 22px 0 0;
+  }
+
+  .time-picker-sheet__header {
+    color: var(--sketchbook-ink, #3f3b32);
+  }
+
+  .time-picker-sheet__header > p:first-child {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1.16rem;
+  }
+
+  .time-picker-sheet__wheel-frame {
+    border: 1.5px solid rgba(79, 73, 60, 0.24) !important;
+    border-radius: 8px 12px 9px 11px !important;
+    background: rgba(255, 250, 227, 0.28) !important;
+  }
+
+  .time-picker-sheet__selection {
+    border: 0 !important;
+    border-top: 2px solid rgba(223, 169, 45, 0.38) !important;
+    border-bottom: 2px solid rgba(223, 169, 45, 0.55) !important;
+    border-radius: 0 !important;
+    background: rgba(223, 169, 45, 0.06) !important;
+    transform: translateY(-50%) rotate(-0.35deg) !important;
+  }
+
+  .time-picker-sheet__fade--top {
+    background: linear-gradient(to bottom, var(--sketchbook-paper, #f8edca), transparent) !important;
+  }
+
+  .time-picker-sheet__fade--bottom {
+    background: linear-gradient(to top, var(--sketchbook-paper, #f8edca), transparent) !important;
+  }
+
+  .time-picker-sheet__button {
+    border: 0 !important;
+    border-bottom: 2px solid rgba(72, 69, 62, 0.34) !important;
+    background: transparent !important;
+    color: var(--sketchbook-ink, #3f3b32) !important;
+    box-shadow: none !important;
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+    font-size: 1rem !important;
+  }
+
+  .time-picker-sheet__button--apply {
+    border-bottom-color: rgba(87, 126, 91, 0.7) !important;
+    color: var(--sketchbook-green, #68836b) !important;
+  }
+
+  .time-picker-wheel-option,
+  .time-picker-wheel-highlight-item {
+    font-family: "Gaegu", "Noto Sans KR", sans-serif;
+  }
+
+  .time-picker-wheel-highlight-wrapper {
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .time-picker-wheel-highlight-item {
+    font-size: 27px;
+    color: var(--sketchbook-ink, #3f3b32);
   }
 
   [data-theme="black"] .confirm-overlay,

@@ -10,7 +10,7 @@ export function RoutinePreviewDetailPanel({ previewTemplate, scrollContainerRef 
   return (
     <section className="flex h-[13rem] min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75 p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="m-0 text-sm font-semibold text-base-content">루틴 상세</p>
+        <p className="m-0 text-sm font-semibold text-base-content">묶음 내용</p>
         <span className="rounded-md border border-base-300/80 bg-base-200/45 px-2 py-0.5 text-[11px] text-base-content/70">
           {previewTemplate ? `${previewTemplate.items.length}개` : "0개"}
         </span>
@@ -34,7 +34,7 @@ export function RoutinePreviewDetailPanel({ previewTemplate, scrollContainerRef 
         </div>
       ) : (
         <div className="mt-2 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border border-dashed border-base-300/80 bg-base-200/35 px-3 text-center text-xs text-base-content/60">
-          루틴을 선택하면 할 일 목록이 보여요.
+          할 일 묶음을 선택하면 내용이 보여요.
         </div>
       )}
     </section>

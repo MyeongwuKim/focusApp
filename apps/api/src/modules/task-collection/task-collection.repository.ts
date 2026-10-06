@@ -58,6 +58,15 @@ interface SetTaskFavoriteInput {
   isFavorite: boolean;
 }
 
+interface SaveTaskSuggestionCandidateInput {
+  userId: string;
+  normalizedText: string;
+  displayText: string;
+  countedDateKeys: string[];
+  countStartedAt: Date | null;
+  snoozedUntil: Date | null;
+}
+
 export class TaskCollecitonRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -168,6 +177,71 @@ export class TaskCollecitonRepository {
         id: taskId,
         userId
       }
+    });
+  }
+
+  /** 사용자의 관리 할 일 전체에서 정규화된 제목 중복을 확인할 때 사용할 제목과 ID를 조회한다. */
+  findTasksForTitleCheck(userId: string) {
+    return this.prisma.task.findMany({
+      where: {
+        userId,
+        isArchived: false,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+    });
+  }
+
+  /** 정규화된 문구를 기준으로 사용자의 반복 입력 후보를 조회한다. */
+  findTaskSuggestionCandidate(userId: string, normalizedText: string) {
+    return this.prisma.taskSuggestionCandidate.findUnique({
+      where: {
+        userId_normalizedText: {
+          userId,
+          normalizedText,
+        },
+      },
+    });
+  }
+
+  /** 저장 제안 횟수·집계 시작일·숨김 기한을 현재 후보 상태로 생성하거나 교체한다. */
+  saveTaskSuggestionCandidate(input: SaveTaskSuggestionCandidateInput) {
+    return this.prisma.taskSuggestionCandidate.upsert({
+      where: {
+        userId_normalizedText: {
+          userId: input.userId,
+          normalizedText: input.normalizedText,
+        },
+      },
+      create: input,
+      update: {
+        displayText: input.displayText,
+        countedDateKeys: input.countedDateKeys,
+        countStartedAt: input.countStartedAt,
+        snoozedUntil: input.snoozedUntil,
+      },
+    });
+  }
+
+  /** 저장 또는 거절할 후보가 현재 사용자에게 속하는지 확인하며 ID로 조회한다. */
+  findTaskSuggestionCandidateById(userId: string, suggestionId: string) {
+    return this.prisma.taskSuggestionCandidate.findFirst({
+      where: {
+        id: suggestionId,
+        userId,
+      },
+    });
+  }
+
+  /** 제안을 수락했거나 이미 관리 중인 문구로 확인된 후보를 집계 대상에서 제거한다. */
+  deleteTaskSuggestionCandidate(userId: string, suggestionId: string) {
+    return this.prisma.taskSuggestionCandidate.deleteMany({
+      where: {
+        id: suggestionId,
+        userId,
+      },
     });
   }
 

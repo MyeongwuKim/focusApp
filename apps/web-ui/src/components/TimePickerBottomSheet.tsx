@@ -109,15 +109,15 @@ export function TimePickerBottomSheet({
         onClick={onClose}
       />
       <section className="action-sheet-panel time-picker-sheet-panel border border-base-300 bg-base-100 text-base-content">
-        <div className="px-1 pb-1">
+        <div className="time-picker-sheet__header px-1 pb-1">
           <p className="m-0 text-sm font-semibold">{title}</p>
           <p className="mt-0.5 mb-0 text-xs text-base-content/60">{description}</p>
         </div>
 
-        <div className="relative mt-3 overflow-hidden rounded-xl border border-base-300/70 bg-base-100">
-          <div className="pointer-events-none absolute inset-x-1 top-1/2 z-20 h-9 -translate-y-1/2 rounded-lg border border-primary/35 bg-primary/10" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-12 bg-gradient-to-b from-base-100 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-12 bg-gradient-to-t from-base-100 to-transparent" />
+        <div className="time-picker-sheet__wheel-frame relative mt-3 overflow-hidden rounded-xl border border-base-300/70 bg-base-100">
+          <div className="time-picker-sheet__selection pointer-events-none absolute inset-x-1 top-1/2 z-20 h-9 -translate-y-1/2 rounded-lg border border-primary/35 bg-primary/10" />
+          <div className="time-picker-sheet__fade time-picker-sheet__fade--top pointer-events-none absolute inset-x-0 top-0 z-20 h-12 bg-gradient-to-b from-base-100 to-transparent" />
+          <div className="time-picker-sheet__fade time-picker-sheet__fade--bottom pointer-events-none absolute inset-x-0 bottom-0 z-20 h-12 bg-gradient-to-t from-base-100 to-transparent" />
 
           <div className="time-picker-wheel relative z-10 px-2 py-1">
             <WheelPickerWrapper className="time-picker-wheel-grid">
@@ -172,17 +172,17 @@ export function TimePickerBottomSheet({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="time-picker-sheet__actions mt-3 grid grid-cols-2 gap-2">
           <button
             type="button"
-            className="btn btn-sm h-9 min-h-9 rounded-full border border-base-300 bg-base-100"
+            className="time-picker-sheet__button time-picker-sheet__button--cancel btn btn-sm h-9 min-h-9 rounded-full border border-base-300 bg-base-100"
             onClick={onClose}
           >
             {cancelLabel}
           </button>
           <button
             type="button"
-            className="btn btn-sm btn-primary h-9 min-h-9 rounded-full"
+            className="time-picker-sheet__button time-picker-sheet__button--apply btn btn-sm btn-primary h-9 min-h-9 rounded-full"
             onClick={() => {
               const shouldClose = onApply(toHHmm(mergedValue));
               if (shouldClose === false) {

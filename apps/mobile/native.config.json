@@ -1,11 +1,11 @@
 {
   "test": {
-    "projectName": "timestackT",
-    "appName": "타임스택 (T)",
+    "projectName": "dailoT",
+    "appName": "데일로(T)",
     "appScheme": "mobile-test",
     "ios": {
       "bundleIdentifier": "com.myeongwu.focushybrid.t",
-      "buildNumber": "24"
+      "buildNumber": "25"
     },
     "android": {
       "package": "com.myeongwu.focushybrid.t",
@@ -13,8 +13,8 @@
     }
   },
   "prod": {
-    "projectName": "timestack",
-    "appName": "타임스택",
+    "projectName": "dailo",
+    "appName": "데일로",
     "appScheme": "mobile",
     "ios": {
       "bundleIdentifier": "com.myeongwu.focushybrid",

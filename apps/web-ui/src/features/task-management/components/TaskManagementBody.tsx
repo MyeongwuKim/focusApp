@@ -523,7 +523,7 @@ export function TaskManagementBody() {
   }, [collections, onSelectCollection, selectedCollectionId]);
 
   return (
-    <div className="min-h-0 flex-1 select-none">
+    <div className="task-management-board min-h-0 flex-1 select-none">
       <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_136px] gap-2">
         <DndContext
           sensors={sensors}
@@ -538,7 +538,7 @@ export function TaskManagementBody() {
             setDraggingCollectionWidth(null);
           }}
         >
-          <div className="min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+          <div className="task-management-board__tasks min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
             <div
               className="no-scrollbar h-full space-y-1.5 overflow-y-auto pr-0.5"
             >
@@ -570,7 +570,7 @@ export function TaskManagementBody() {
             </div>
           </div>
 
-          <aside ref={collectionPaneRef} className="min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
+          <aside ref={collectionPaneRef} className="task-management-board__collections min-h-0 min-w-0 rounded-xl border border-base-300/75 bg-base-200/35 p-2">
             <div className="no-scrollbar h-full space-y-1.5 overflow-y-auto">
               <TaskManagementCollectionItem
                 name="전체"

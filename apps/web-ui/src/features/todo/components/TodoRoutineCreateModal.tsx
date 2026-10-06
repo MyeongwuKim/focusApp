@@ -385,10 +385,10 @@ export function TodoRoutineCreateModal({ onClose, onCreate, initialDraft = null 
     <div className="flex h-full min-h-0 flex-1 flex-col bg-base-100/75">
       <div className="min-h-0 flex flex-1 flex-col gap-2 overflow-hidden p-2">
         <div className="rounded-xl border border-base-300/80 bg-base-200/35 p-2.5">
-          <label className="mb-1 block text-xs font-semibold text-base-content/75">루틴 이름</label>
+          <label className="mb-1 block text-xs font-semibold text-base-content/75">묶음 이름</label>
           <InputField
             className="h-10 w-full rounded-lg"
-            placeholder="예: 평일 아침 루틴"
+            placeholder="예: 평일 아침 준비"
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
@@ -509,7 +509,7 @@ export function TodoRoutineCreateModal({ onClose, onCreate, initialDraft = null 
           <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
             {selectedTasks.length === 0 ? (
               <p className="m-0 px-1 py-2 text-sm text-base-content/60">
-                위 목록에서 루틴에 넣을 할일을 선택해 주세요.
+                위 목록에서 묶음에 넣을 할 일을 선택해 주세요.
               </p>
             ) : null}
             {selectedTasks.length > 0 ? (
@@ -547,15 +547,15 @@ export function TodoRoutineCreateModal({ onClose, onCreate, initialDraft = null 
           disabled={!canSave}
           onClick={handleSave}
         >
-          {isSaving ? "저장 중..." : "루틴 저장"}
+          {isSaving ? "저장 중..." : "묶음 저장"}
         </Button>
       </div>
 
       <TimePickerBottomSheet
         isOpen={editingTimeTaskId !== null}
-        title="루틴 시간 설정"
+        title="묶음 시간 설정"
         initialValue={editingTimeTaskId ? selectedTaskTimes[editingTimeTaskId] ?? "09:00" : "09:00"}
-        description="위로 스크롤해 루틴 시작 시간을 선택해 주세요."
+        description="위로 스크롤해 묶음 시작 시간을 선택해 주세요."
         applyLabel="저장"
         onClose={() => setEditingTimeTaskId(null)}
         onApply={(next) => {

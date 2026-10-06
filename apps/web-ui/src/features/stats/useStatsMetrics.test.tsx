@@ -141,7 +141,7 @@ describe("useStatsMetrics cache recompute", () => {
     });
   });
 
-  it("집중시간과 재개 횟수로 작업당 평균 재개와 평균 집중 구간을 계산한다", async () => {
+  it("완료한 할 일의 실제 집중 시간을 분 단위로 계산한다", async () => {
     const queryClient = createQueryClient();
     const start = new Date(2026, 3, 25);
     const end = new Date(2026, 3, 25);
@@ -162,20 +162,7 @@ describe("useStatsMetrics cache recompute", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.focusResume.focusMinutes).toBe(60);
-      expect(result.current.focusResume.resumeCount).toBe(2);
-      expect(result.current.focusResume.averageResumesPerTask).toBe(2);
-      expect(result.current.focusResume.averageFocusSegmentMinutes).toBe(20);
-      expect(result.current.focusResume.data).toEqual([
-        {
-          id: `${dateKey}-todo-1`,
-          dateKey,
-          taskLabel: "할일 1",
-          focusMin: 60,
-          resumeCount: 2,
-          done: true,
-        },
-      ]);
+      expect(result.current.time.totalFocus).toBe(60);
     });
   });
 
@@ -199,8 +186,6 @@ describe("useStatsMetrics cache recompute", () => {
 
     await waitFor(() => {
       expect(result.current.time.totalFocus).toBe(60);
-      expect(result.current.focusResume.averageResumesPerTask).toBe(1);
-      expect(result.current.focusResume.averageFocusSegmentMinutes).toBe(30);
     });
   });
 });

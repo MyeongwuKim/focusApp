@@ -491,6 +491,12 @@ function syncIos(input) {
   );
   plistContent = replaceRequired(
     plistContent,
+    /(<key>CFBundleName<\/key>\s*<string>)[^<]+(<\/string>)/,
+    `$1${escapedAppName}$2`,
+    "iOS CFBundleName"
+  );
+  plistContent = replaceRequired(
+    plistContent,
     /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+(<\/string>)/,
     "$1$(MARKETING_VERSION)$2",
     "iOS CFBundleShortVersionString"

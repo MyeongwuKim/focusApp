@@ -507,13 +507,13 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
 
     const normalizedName = templateDraft.name.trim();
     if (!normalizedName) {
-      toast.error("루틴 이름을 입력해 주세요.", "저장 실패");
+      toast.error("묶음 이름을 입력해 주세요.", "저장 실패");
       return;
     }
 
     const normalizedItems = sanitizeDraftItems(nextItems);
     if (normalizedItems.length === 0) {
-      toast.error("루틴 항목을 1개 이상 입력해 주세요.", "저장 실패");
+      toast.error("묶음에 할 일을 1개 이상 넣어 주세요.", "저장 실패");
       return;
     }
 
@@ -535,7 +535,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
       const nextDraft = buildDraftFromTemplate(updated);
       setTemplateDraft(nextDraft);
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "루틴 저장 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "묶음 저장 중 오류가 발생했어요.");
       toast.error(message, "저장 실패");
     }
   }, [templateDraft.name, templateDraft.templateId, updateRoutineTemplateMutation]);
@@ -543,7 +543,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
   const handleRemoveTemplateItemByClientId = useCallback((clientId: string) => {
     setTemplateDraft((prev) => {
       if (prev.items.length <= 1) {
-        toast.error("루틴 항목을 1개 이상 남겨 주세요.", "삭제 제한");
+        toast.error("묶음 항목을 1개 이상 남겨 주세요.", "삭제 제한");
         return prev;
       }
       const next = {
@@ -638,8 +638,8 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
     }
 
     const accepted = await confirm({
-      title: "루틴 템플릿을 삭제할까요?",
-      message: "해당 템플릿은 요일 할당에서도 해제됩니다.",
+      title: "할 일 묶음을 삭제할까요?",
+      message: "삭제하면 요일별 지정에서도 함께 해제돼요.",
       buttons: [
         { label: "취소", value: "cancel", tone: "neutral" },
         { label: "삭제", value: "delete", tone: "danger" },
@@ -654,9 +654,9 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
         routineTemplateId: templateId,
       });
       setSelectedTemplateKey(null);
-      toast.positive("루틴 템플릿을 삭제했어요.", "삭제 완료");
+      toast.positive("할 일 묶음을 삭제했어요.", "삭제 완료");
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "루틴 삭제 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "묶음 삭제 중 오류가 발생했어요.");
       toast.error(message, "삭제 실패");
     }
   }, [deleteRoutineTemplateMutation]);
@@ -694,9 +694,9 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
       const nextDraft = buildDraftFromTemplate(updatedTemplate);
       setSelectedTemplateKey(updatedTemplate.id);
       setTemplateDraft(nextDraft);
-      toast.positive(routeState.mode === "edit" ? "루틴 템플릿을 수정했어요." : "새 루틴 템플릿을 저장했어요.", "저장 완료");
+      toast.positive(routeState.mode === "edit" ? "할 일 묶음을 수정했어요." : "새 할 일 묶음을 저장했어요.", "저장 완료");
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "루틴 저장 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "묶음 저장 중 오류가 발생했어요.");
       toast.error(message, "저장 실패");
       throw error;
     }
@@ -712,21 +712,21 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
           value: "rename",
           tone: "muted",
           icon: <FiEdit2 size={14} />,
-          description: "루틴 이름을 변경해요.",
+          description: "묶음 이름을 변경해요.",
         },
         {
-          label: "루틴 수정",
+          label: "묶음 수정",
           value: "edit",
           tone: "primary",
           icon: <FiPlus size={14} />,
           description: "구성과 항목 순서를 수정해요.",
         },
         {
-          label: "루틴 삭제",
+          label: "묶음 삭제",
           value: "delete",
           tone: "danger",
           icon: <FiTrash2 size={14} />,
-          description: "이 루틴을 목록에서 지워요.",
+          description: "이 묶음을 목록에서 지워요.",
         },
       ],
     });
@@ -758,7 +758,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
     }
     const nextName = renameInput.trim();
     if (!nextName) {
-      toast.error("루틴 이름을 입력해 주세요.", "수정 실패");
+      toast.error("묶음 이름을 입력해 주세요.", "수정 실패");
       return;
     }
     try {
@@ -781,9 +781,9 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
       setSelectedTemplateKey(updated.id);
       setTemplateDraft(nextDraft);
       setRenameTemplateId(null);
-      toast.positive("루틴 이름을 변경했어요.", "수정 완료");
+      toast.positive("묶음 이름을 변경했어요.", "수정 완료");
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "루틴 이름 변경 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "묶음 이름 변경 중 오류가 발생했어요.");
       toast.error(message, "수정 실패");
     }
   };
@@ -841,7 +841,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
       const nextSaved = buildAssignmentMap(updated);
       setDraftAssignments(nextSaved);
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "요일별 루틴 자동 저장 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "요일별 묶음 자동 저장 중 오류가 발생했어요.");
       toast.error(message, "자동 저장 실패");
     }
   }
@@ -860,14 +860,14 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
         <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75">
           {routeState.mode === "edit" && !editingTemplateForRoute ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
-              <p className="m-0 text-sm text-base-content/70">수정할 루틴을 찾을 수 없어요.</p>
+              <p className="m-0 text-sm text-base-content/70">수정할 할 일 묶음을 찾을 수 없어요.</p>
               <Button
                 variant="primary"
                 size="sm"
                 className="rounded-lg"
                 onClick={() => goPage(ROUTINE_MANAGE_PATH, { replace: true })}
               >
-                루틴 관리로 돌아가기
+                할 일 묶음으로 돌아가기
               </Button>
             </div>
           ) : (
@@ -899,27 +899,27 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-2xl border border-base-300 bg-base-200/50 px-1.5 pt-1.5 pb-0">
+    <section className="sketchbook-bundle-manage flex h-full min-h-0 flex-col rounded-2xl border border-base-300 bg-base-200/50 px-1.5 pt-1.5 pb-0">
       <div className="grid shrink-0 grid-cols-2 gap-2">
         <Button
           size="sm"
           variant={activeTab === "templates" ? "primary" : "default"}
           onClick={() => setActiveTab("templates")}
         >
-          루틴 템플릿
+          저장한 묶음
         </Button>
         <Button
           size="sm"
           variant={activeTab === "weekdays" ? "primary" : "default"}
           onClick={() => setActiveTab("weekdays")}
         >
-          요일별 루틴
+          요일별 묶음
         </Button>
       </div>
 
       <div className="mt-3 min-h-0 flex-1">
         {activeTab === "templates" ? (
-          <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_3.5rem] overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75 p-2">
+          <section className="bundle-manage-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_3.5rem] overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75 p-2">
             <div className="flex min-h-0 flex-1 flex-col gap-2">
               <RoutineTemplateListPanel
                 routineTemplates={routineTemplates}
@@ -954,7 +954,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
                 ) : null}
               </RoutineTemplateDetailPanel>
             </div>
-            <div className="shrink-0 border-t border-base-300/80 bg-base-100 p-2">
+            <div className="bundle-manage-create-action shrink-0 border-t border-base-300/80 bg-base-100 p-2">
               <Button
                 variant="primary"
                 block
@@ -965,7 +965,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
                   });
                 }}
               >
-                루틴 만들기
+                묶음 만들기
               </Button>
             </div>
           </section>
@@ -979,11 +979,11 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
                 onDragEnd={handleWeekdayAssignmentDragEnd}
                 onDragCancel={() => setDraggingTemplateId(null)}
               >
-                <section className="shrink-0 rounded-xl border border-base-300/80 bg-base-100/75 p-3">
+                <section className="bundle-weekday-board shrink-0 rounded-xl border border-base-300/80 bg-base-100/75 p-3">
                   <div className="mb-3 flex items-start justify-between gap-2">
                     <div>
-                      <p className="m-0 text-sm font-semibold text-base-content">주간 루틴</p>
-                      <p className="m-0 mt-0.5 text-xs text-base-content/60">루틴 카드를 날짜 칸에 놓으면 매주 자동 적용</p>
+                      <p className="m-0 text-sm font-semibold text-base-content">요일별 묶음</p>
+                      <p className="m-0 mt-0.5 text-xs text-base-content/60">묶음 카드를 요일 칸에 놓으면 매주 자동 적용</p>
                     </div>
                     <span className="rounded-md border border-primary/25 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                       {assignedDayCount}/7일 활성
@@ -1009,14 +1009,14 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
                   </div>
                 </section>
 
-                <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-base-300/80 bg-base-100/75 p-3">
+                <section className="bundle-weekday-library flex min-h-0 flex-1 flex-col rounded-xl border border-base-300/80 bg-base-100/75 p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="m-0 text-sm font-semibold text-base-content">루틴</p>
+                    <p className="m-0 text-sm font-semibold text-base-content">할 일 묶음</p>
                     <span className="rounded-md border border-base-300/80 bg-base-200/45 px-2 py-0.5 text-[11px] text-base-content/70">
                       {routineTemplates.length}개
                     </span>
                   </div>
-                  <p className="m-0 text-xs text-base-content/60">카드를 요일 칸으로 드래그해 매주 루틴을 배치해요.</p>
+                  <p className="m-0 text-xs text-base-content/60">카드를 요일 칸으로 드래그해 매주 사용할 묶음을 배치해요.</p>
                   <div className="no-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
                     {routineTemplates.map((template) => (
                       <RoutineTemplateDraggableCard
@@ -1030,7 +1030,7 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
                     ))}
                     {routineTemplates.length === 0 ? (
                       <p className="m-0 rounded-lg border border-base-300/60 bg-base-200/45 px-3 py-2 text-xs text-base-content/60">
-                        저장된 루틴 템플릿이 없어요.
+                        저장된 할 일 묶음이 없어요.
                       </p>
                     ) : null}
                   </div>
@@ -1093,16 +1093,16 @@ export function RoutineManageView({ forcedPathname }: RoutineManageViewProps) {
           <button
             type="button"
             className="absolute inset-0"
-            aria-label="루틴 이름 변경 닫기"
+            aria-label="묶음 이름 변경 닫기"
             onClick={() => setRenameTemplateId(null)}
           />
           <section className="relative z-10 w-full max-w-sm rounded-2xl border border-base-300 bg-base-100 p-4 shadow-2xl">
-            <p className="m-0 text-sm font-semibold text-base-content">루틴 이름 변경</p>
+            <p className="m-0 text-sm font-semibold text-base-content">묶음 이름 변경</p>
             <div className="mt-3">
               <InputField
                 value={renameInput}
                 autoFocus
-                placeholder="루틴 이름"
+                placeholder="묶음 이름"
                 onChange={(event) => setRenameInput(event.target.value)}
               />
             </div>

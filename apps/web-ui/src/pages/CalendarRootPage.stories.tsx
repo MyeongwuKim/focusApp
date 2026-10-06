@@ -15,13 +15,12 @@ const meta: Meta<typeof CalendarRootPage> = {
   decorators: [
     (Story) => (
       <PageStoryProviders initialEntry="/calendar" activeRoute="calendar">
-        <Story />
+        <div className="sketchbook-page sketchbook-page--calendar flex min-h-0 flex-1 flex-col">
+          <Story />
+        </div>
       </PageStoryProviders>
     ),
   ],
-  args: {
-    isOverlayActive: false,
-  },
 };
 
 export default meta;
@@ -29,13 +28,3 @@ export default meta;
 type Story = StoryObj<typeof CalendarRootPage>;
 
 export const Main: Story = {};
-
-export const DateSheetOpenedFromRoute: Story = {
-  decorators: [
-    (Story) => (
-      <PageStoryProviders initialEntry="/calendar?sheet=1&date=2026-05-13" activeRoute="calendar">
-        <Story />
-      </PageStoryProviders>
-    ),
-  ],
-};

@@ -28,7 +28,7 @@ type UseDateTodosRoutineActionsParams = {
   routineTemplates: RoutineTemplate[];
   handleDateAddTasks: (
     items: Array<{ label: string; taskId?: string | null; scheduledStartAt?: string | null }>
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   createRoutineTemplate: (input: {
     name: string;
     items: Array<{
@@ -87,8 +87,8 @@ export function useDateTodosRoutineActions({
     if (!routine) {
       toast.show({
         type: "error",
-        title: "루틴 없음",
-        message: "선택한 루틴을 찾을 수 없어요.",
+        title: "묶음 없음",
+        message: "선택한 할 일 묶음을 찾을 수 없어요.",
         duration: 2200,
       });
       return;
@@ -112,7 +112,7 @@ export function useDateTodosRoutineActions({
       toast.show({
         type: "error",
         title: "저장 실패",
-        message: "루틴 이름을 입력해 주세요.",
+        message: "묶음 이름을 입력해 주세요.",
         duration: 2200,
       });
       return;
@@ -125,7 +125,7 @@ export function useDateTodosRoutineActions({
       toast.show({
         type: "error",
         title: "저장 실패",
-        message: "같은 이름의 루틴이 이미 있어요.",
+        message: "같은 이름의 묶음이 이미 있어요.",
         duration: 2200,
       });
       return;
@@ -144,7 +144,7 @@ export function useDateTodosRoutineActions({
       toast.show({
         type: "error",
         title: "저장 실패",
-        message: "루틴 항목을 1개 이상 입력해 주세요.",
+        message: "묶음에 할 일을 1개 이상 넣어 주세요.",
         duration: 2200,
       });
       return;
@@ -163,15 +163,15 @@ export function useDateTodosRoutineActions({
       });
       toast.show({
         type: "positive",
-        title: "루틴 저장됨",
-        message: `${created.name} 루틴을 저장했어요.`,
+        title: "묶음 저장됨",
+        message: `${created.name} 묶음을 저장했어요.`,
         duration: 1800,
       });
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "루틴 저장 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "묶음 저장 중 오류가 발생했어요.");
       toast.show({
         type: "error",
-        title: "루틴 저장 실패",
+        title: "묶음 저장 실패",
         message,
         duration: 2200,
       });
@@ -193,7 +193,7 @@ export function useDateTodosRoutineActions({
       toast.show({
         type: "error",
         title: "수정 실패",
-        message: "루틴 항목을 1개 이상 남겨 주세요.",
+        message: "묶음 항목을 1개 이상 남겨 주세요.",
         duration: 2200,
       });
       return;
@@ -213,15 +213,15 @@ export function useDateTodosRoutineActions({
       });
       toast.show({
         type: "positive",
-        title: "루틴 수정됨",
-        message: "루틴 항목이 업데이트되었어요.",
+        title: "묶음 수정됨",
+        message: "묶음 항목이 업데이트되었어요.",
         duration: 1800,
       });
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "루틴 수정 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "묶음 수정 중 오류가 발생했어요.");
       toast.show({
         type: "error",
-        title: "루틴 수정 실패",
+        title: "묶음 수정 실패",
         message,
         duration: 2200,
       });
@@ -233,15 +233,15 @@ export function useDateTodosRoutineActions({
       await deleteRoutineTemplate({ routineTemplateId });
       toast.show({
         type: "positive",
-        title: "루틴 삭제됨",
-        message: "저장된 루틴을 삭제했어요.",
+        title: "묶음 삭제됨",
+        message: "저장된 할 일 묶음을 삭제했어요.",
         duration: 1800,
       });
     } catch (error) {
-      const message = getUserFacingErrorMessage(error, "루틴 삭제 중 오류가 발생했어요.");
+      const message = getUserFacingErrorMessage(error, "묶음 삭제 중 오류가 발생했어요.");
       toast.show({
         type: "error",
-        title: "루틴 삭제 실패",
+        title: "묶음 삭제 실패",
         message,
         duration: 2200,
       });

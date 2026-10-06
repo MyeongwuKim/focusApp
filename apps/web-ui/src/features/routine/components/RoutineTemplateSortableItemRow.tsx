@@ -31,7 +31,7 @@ export const RoutineTemplateSortableItemRow = memo(function RoutineTemplateSorta
       style={style}
       {...dragHandleProps}
       className={[
-        "rounded-lg border border-base-300/70 bg-base-100 px-2.5 py-2 transition-[border-color,background-color,box-shadow]",
+        "bundle-manage-task-row rounded-lg border border-base-300/70 bg-base-100 px-2.5 py-2 transition-[border-color,background-color,box-shadow]",
         isDragging ? "border-primary/65 bg-base-100 shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_24px_rgba(0,0,0,0.22)]" : "",
       ].join(" ")}
     >
@@ -52,7 +52,7 @@ export const RoutineTemplateSortableItemRow = memo(function RoutineTemplateSorta
             event.stopPropagation();
             void onOpenMenu(item);
           }}
-          aria-label="루틴 항목 메뉴"
+          aria-label="묶음 항목 메뉴"
         >
           :
         </Button>

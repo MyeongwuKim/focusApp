@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "타임스택",
-    "slug": "timestack",
+    "name": "데일로",
+    "slug": "dailo",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
@@ -25,9 +25,8 @@
     "android": {
       "permissions": ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION"],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F8EDCA",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
@@ -56,12 +55,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#0B1220",
+          "image": "./assets/images/splash-full-base.png",
+          "resizeMode": "cover",
+          "enableFullScreenImage_legacy": true,
+          "backgroundColor": "#F8EDCA",
           "dark": {
-            "backgroundColor": "#0B1220"
+            "backgroundColor": "#F8EDCA"
           }
         }
       ]

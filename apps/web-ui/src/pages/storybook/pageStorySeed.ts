@@ -233,7 +233,7 @@ const routineTemplates = [
   {
     id: "routine-1",
     userId: "storybook-user",
-    name: "아침 루틴",
+    name: "아침 준비",
     items: [
       {
         id: "routine-item-1",

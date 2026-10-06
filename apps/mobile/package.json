@@ -9,11 +9,13 @@
     "native:sync:prod": "node ./scripts/sync-native-config.js prod",
     "android": "expo run:android",
     "ios:device": "expo run:ios --device",
-    "ios:local": "expo run:ios",
+    "ios:local": "expo start --ios --dev-client --host lan --port 8081",
+    "ios:install": "expo run:ios",
     "ios:dev": "bash ./scripts/build-ios-dev.sh",
     "ios:prod": "APP_VARIANT=prod APP_PLATFORM=ios eas build --platform ios --profile production --auto-submit-with-profile production",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@bacons/apple-targets": "4.0.7",

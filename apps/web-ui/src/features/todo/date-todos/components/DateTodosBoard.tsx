@@ -8,20 +8,28 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { FiClipboard } from "react-icons/fi";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { FiClipboard, FiRotateCcw } from "react-icons/fi";
 import { fetchDailyLogByDate } from "../../../../api/dailyLogApi";
 import { useHorizontalSwipeGesture } from "../../../../hooks/useHorizontalSwipeGesture";
 import { useSortableItem } from "../../../../hooks/useSortableItem";
 import { useSortableSensors } from "../../../../hooks/useSortableSensors";
 import { useRoutineTemplateWeekdayAssignmentsQuery } from "../../../../queries";
 import { dailyLogByDateQueryKey } from "../../../../queries/daily-log/queries";
+import { confirm } from "../../../../stores";
 import { reorderStringIdsByDrag } from "../../../../utils/dnd";
 import { formatDateKey } from "../../../../utils/holidays";
 import { shiftDateKey } from "../../../calendar/utils/date";
 import { TodoItemCard } from "../../components/TodoItemCard";
+import { InlineTodoHandwritingComposer } from "../../components/InlineTodoHandwritingComposer";
 import type { TaskItem } from "../../types";
 import { useDateTodosRouteContext } from "../DateTodosRouteProvider";
+import { useRepeatTaskSuggestionPrompt } from "../hooks/useRepeatTaskSuggestionPrompt";
+import { mapDailyLogPreviewToTaskItems } from "../utils/dateTodosPreview";
+import {
+  resolvePageTurnDurationMs,
+  shouldCompletePageTurn,
+} from "../utils/pageTurnMotion";
 import { DateTodosEmptyState } from "./DateTodosEmptyState";
 import { RestCoffeeScene } from "./RestCoffeeScene";
 import type { WeekdayRoutinePreviewItem } from "./WeekdayRoutinePreviewCard";
@@ -29,34 +37,19 @@ import type { WeekdayRoutinePreviewItem } from "./WeekdayRoutinePreviewCard";
 type DateTodosBoardProps = {
   dateKey: string;
   onShiftDate: (days: number) => void;
+  enableDateSwipe?: boolean;
+  /** 되돌리기 대기 중인 삭제 항목 ID를 전달해 하단 진행률을 즉시 갱신한다. */
+  onPendingGestureDeletionChange?: (taskId: string | null) => void;
 };
 
-type DailyLogPreview = {
-  todos?: Array<{
-    id: string;
-    content: string;
-    done: boolean;
-    order: number;
-    startedAt: string | null;
-    scheduledStartAt: string | null;
-    targetFocusMinutes: number | null;
-    pausedAt: string | null;
-    completedAt: string | null;
-    deviationSeconds?: number;
-    actualFocusSeconds: number | null;
-  }>;
-} | null;
+type PendingWriteAnimation = {
+  existingIds: Set<string>;
+  label: string;
+};
 
-const SWIPE_DISTANCE_THRESHOLD = 56;
+const PAGE_TURN_FALLBACK_BUFFER_MS = 180;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
-
-function toEpochMillis(value: string | null) {
-  if (!value) {
-    return null;
-  }
-  const epoch = new Date(value).getTime();
-  return Number.isFinite(epoch) ? epoch : null;
-}
+const GESTURE_DELETE_UNDO_DELAY_MS = 4000;
 
 function parseDateKeyToLocalDate(dateKey: string) {
   const [yearRaw, monthRaw, dayRaw] = dateKey.split("-");
@@ -87,47 +80,6 @@ function parseDateKeyToLocalDate(dateKey: string) {
   return date;
 }
 
-function mapPreviewLogToTaskItems(dateKey: string, log: DailyLogPreview): TaskItem[] {
-  const todos = log?.todos ?? [];
-  const todayKey = formatDateKey(new Date());
-  const isPastDate = dateKey < todayKey;
-
-  return [...todos]
-    .sort((a, b) => a.order - b.order)
-    .map((todo) => {
-      const startedAt = toEpochMillis(todo.startedAt);
-      const scheduledStartAt = toEpochMillis(todo.scheduledStartAt);
-      const targetFocusMinutes = typeof todo.targetFocusMinutes === "number" ? Math.floor(todo.targetFocusMinutes) : null;
-      const completedAt = toEpochMillis(todo.completedAt);
-      const completedDurationMs = todo.done ? (todo.actualFocusSeconds ?? 0) * 1000 : null;
-      const status: TaskItem["status"] = todo.done
-        ? "done"
-        : isPastDate
-          ? "overdue"
-          : todo.pausedAt
-            ? "paused"
-            : startedAt
-              ? "in_progress"
-              : "todo";
-
-      return {
-        id: todo.id,
-        label: todo.content,
-        status,
-        accumulatedMs: completedDurationMs ?? 0,
-        startedAt: status === "in_progress" ? startedAt : null,
-        deviationSeconds:
-          typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
-            ? Math.max(Math.floor(todo.deviationSeconds), 0)
-            : 0,
-        scheduledStartAt,
-        targetFocusMinutes,
-        completedAt: status === "done" ? completedAt : null,
-        completedDurationMs,
-      };
-    });
-}
-
 function isSwipeBlockedTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) {
     return false;
@@ -152,19 +104,23 @@ function isSwipeBlockedTarget(target: EventTarget | null) {
 function SortableTaskRow({
   item,
   onTaskAction,
-  onEditActualFocus,
   onTaskMenuAction,
+  onDeleteGesture,
   disableActions,
   canRunFocus,
   isLongPressActive,
+  isWriteAnimating,
+  onWriteAnimationStarted,
 }: {
   item: TaskItem;
   onTaskAction: (taskId: string, action: "start" | "pause" | "resume" | "complete") => void;
-  onEditActualFocus: (taskId: string) => void;
   onTaskMenuAction: (taskId: string) => void;
+  onDeleteGesture: (taskId: string) => void;
   disableActions: boolean;
   canRunFocus: boolean;
   isLongPressActive: boolean;
+  isWriteAnimating: boolean;
+  onWriteAnimationStarted: (taskId: string) => void;
 }) {
   const { setNodeRef, style, isDragging, dragHandleProps } = useSortableItem({
     id: item.id,
@@ -175,12 +131,14 @@ function SortableTaskRow({
       <TodoItemCard
         item={item}
         onTaskAction={onTaskAction}
-        onEditActualFocus={onEditActualFocus}
         onOpenMenu={onTaskMenuAction}
+        onDeleteGesture={onDeleteGesture}
         disableActions={disableActions}
         canRunFocus={canRunFocus}
         isDragging={isDragging}
         isLongPressActive={isLongPressActive}
+        isWriteAnimating={isWriteAnimating}
+        onWriteAnimationStarted={onWriteAnimationStarted}
       />
     </div>
   );
@@ -209,7 +167,7 @@ function PreviewTaskList({ items, isLoading }: { items: TaskItem[]; isLoading: b
   }
 
   return (
-    <div className="space-y-2">
+    <div className="todo-item-list space-y-2">
       {items.map((item) => (
         <TodoItemCard
           key={`preview-${item.id}`}
@@ -228,14 +186,19 @@ function PreviewTaskList({ items, isLoading }: { items: TaskItem[]; isLoading: b
   );
 }
 
-export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
+export function DateTodosBoard({
+  dateKey,
+  onShiftDate,
+  enableDateSwipe = true,
+  onPendingGestureDeletionChange,
+}: DateTodosBoardProps) {
   const {
     items,
     isItemsHydrating,
     reorderTasksByIds,
     handleDateTaskAction,
-    handleEditActualFocus,
     handleDateTaskMenuAction,
+    handleDateTaskGestureDelete,
     handleDateAddTasks,
     openRoutineImport,
     routineTemplates,
@@ -244,6 +207,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     session,
   } = useDateTodosRouteContext();
   const { routineTemplateWeekdayAssignmentsQuery } = useRoutineTemplateWeekdayAssignmentsQuery();
+  const { promptTaskSuggestion } = useRepeatTaskSuggestionPrompt();
   const queryClient = useQueryClient();
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -252,10 +216,21 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   const [settleDirection, setSettleDirection] = useState<-1 | 0 | 1>(0);
   const [pendingShiftDays, setPendingShiftDays] = useState<-1 | 0 | 1>(0);
   const [isSettling, setIsSettling] = useState(false);
+  const [settleDurationMs, setSettleDurationMs] = useState(420);
   const [isApplyingWeekdayRoutine, setIsApplyingWeekdayRoutine] = useState(false);
   const [isApplyingCarryOver, setIsApplyingCarryOver] = useState(false);
   const [isApplyingRoutineAndCarryOver, setIsApplyingRoutineAndCarryOver] = useState(false);
+  const [pendingGestureDeletion, setPendingGestureDeletion] = useState<TaskItem | null>(null);
+  const [pendingWriteAnimation, setPendingWriteAnimation] = useState<PendingWriteAnimation | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(1);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const gestureDeleteTimerRef = useRef<number | null>(null);
+  /** 삭제를 요청한 날짜의 처리 함수를 보관해, 날짜가 바뀐 뒤에도 원래 항목을 확정 삭제한다. */
+  const pendingGestureDeleteCommitRef = useRef<(() => void) | null>(null);
+  /** 빠르게 여러 항목을 지워도 서버 응답이 역순으로 반영되지 않도록 삭제 요청을 순서대로 연결한다. */
+  const gestureDeleteCommitChainRef = useRef<Promise<void>>(Promise.resolve());
+  const hasCompletedPageTurnRef = useRef(false);
   const todayDateKey = formatDateKey(new Date());
   const isPastDate = dateKey < todayDateKey;
   const isFutureDate = dateKey > todayDateKey;
@@ -305,14 +280,16 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     handleTouchEnd: handleBoardSwipeTouchEnd,
     handleTouchCancel: handleBoardSwipeTouchCancel,
   } = useHorizontalSwipeGesture({
-    canStart: (event) => !(draggingId || isSettling || isSwipeBlockedTarget(event.target)),
+    canStart: (event) => enableDateSwipe && !(draggingId || isSettling || isSwipeBlockedTarget(event.target)),
     onStart: () => {
+      hasCompletedPageTurnRef.current = false;
+      setViewportWidth(viewportRef.current?.clientWidth ?? 1);
       setDragX(0);
     },
     onHorizontalMove: ({ deltaX }) => {
       setDragX(deltaX);
     },
-    onEnd: ({ axis, deltaX }) => {
+    onEnd: ({ axis, deltaX, velocityX }) => {
       if (axis !== "horizontal") {
         setDragX(0);
         setPendingShiftDays(0);
@@ -321,7 +298,9 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
         return;
       }
 
-      if (Math.abs(deltaX) > SWIPE_DISTANCE_THRESHOLD) {
+      setSettleDurationMs(resolvePageTurnDurationMs(velocityX));
+
+      if (shouldCompletePageTurn(deltaX, velocityX)) {
         const nextDirection = deltaX < 0 ? -1 : 1;
         const nextShiftDays = deltaX < 0 ? 1 : -1;
         setPendingShiftDays(nextShiftDays as -1 | 1);
@@ -376,7 +355,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   });
 
   const previousItems = useMemo(
-    () => mapPreviewLogToTaskItems(previousDateKey, previousQuery.data ?? null),
+    () => mapDailyLogPreviewToTaskItems(previousDateKey, previousQuery.data ?? null),
     [previousDateKey, previousQuery.data]
   );
   const yesterdayIncompleteItems = useMemo(
@@ -391,7 +370,7 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   );
   const yesterdayIncompleteCount = yesterdayIncompleteItems.length;
   const nextItems = useMemo(
-    () => mapPreviewLogToTaskItems(nextDateKey, nextQuery.data ?? null),
+    () => mapDailyLogPreviewToTaskItems(nextDateKey, nextQuery.data ?? null),
     [nextDateKey, nextQuery.data]
   );
 
@@ -437,7 +416,146 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     const baseOrderedIds = orderedIds.length > 0 ? orderedIds : items.map((item) => item.id);
     return baseOrderedIds.map((id) => itemMap.get(id)).filter((item): item is TaskItem => Boolean(item));
   }, [items, orderedIds]);
-  const sortableIds = useMemo(() => orderedItems.map((item) => item.id), [orderedItems]);
+  const visibleOrderedItems = useMemo(
+    () => orderedItems.filter((item) => item.id !== pendingGestureDeletion?.id),
+    [orderedItems, pendingGestureDeletion?.id]
+  );
+
+  useEffect(() => {
+    onPendingGestureDeletionChange?.(pendingGestureDeletion?.id ?? null);
+  }, [onPendingGestureDeletionChange, pendingGestureDeletion?.id]);
+
+  useEffect(() => {
+    return () => onPendingGestureDeletionChange?.(null);
+  }, [onPendingGestureDeletionChange]);
+
+  const sortableIds = useMemo(() => visibleOrderedItems.map((item) => item.id), [visibleOrderedItems]);
+  const writeAnimatingTaskId = pendingWriteAnimation
+    ? items.find(
+        (item) =>
+          !pendingWriteAnimation.existingIds.has(item.id) &&
+          item.label.trim() === pendingWriteAnimation.label.trim()
+      )?.id ?? items.find((item) => !pendingWriteAnimation.existingIds.has(item.id))?.id ?? null
+    : null;
+
+  const clearGestureDeleteTimer = useCallback(() => {
+    if (gestureDeleteTimerRef.current !== null) {
+      window.clearTimeout(gestureDeleteTimerRef.current);
+      gestureDeleteTimerRef.current = null;
+    }
+  }, []);
+
+  const undoGestureDelete = useCallback(() => {
+    clearGestureDeleteTimer();
+    pendingGestureDeleteCommitRef.current = null;
+    setPendingGestureDeletion(null);
+  }, [clearGestureDeleteTimer]);
+
+  /** 되돌리기 대기 중인 삭제를 즉시 실행한다. 날짜 이동·화면 이탈 전에 호출하면 원래 날짜의 항목을 삭제한다. */
+  const commitPendingGestureDelete = useCallback(() => {
+    clearGestureDeleteTimer();
+    const commit = pendingGestureDeleteCommitRef.current;
+    pendingGestureDeleteCommitRef.current = null;
+    setPendingGestureDeletion(null);
+    commit?.();
+  }, [clearGestureDeleteTimer]);
+
+  /**
+   * 종이 전환을 한 번만 마무리하고 확정된 경우에만 날짜를 이동한다.
+   * transitionend와 안전 타이머가 동시에 실행돼도 중복 이동하지 않는다.
+   */
+  const completePageTurn = useCallback(() => {
+    if (hasCompletedPageTurnRef.current || !isSettling) {
+      return;
+    }
+    hasCompletedPageTurnRef.current = true;
+
+    if (pendingShiftDays !== 0) {
+      commitPendingGestureDelete();
+      onShiftDate(pendingShiftDays);
+    }
+    setPendingShiftDays(0);
+    setSettleDirection(0);
+    setIsSettling(false);
+    setDragX(0);
+  }, [commitPendingGestureDelete, isSettling, onShiftDate, pendingShiftDays]);
+
+  /** WebView가 transform 종료 이벤트를 전달하지 않아도 페이지가 중간에서 멈추지 않게 전환을 강제로 마무리한다. */
+  useEffect(() => {
+    if (!isSettling) {
+      return;
+    }
+    const timer = window.setTimeout(
+      completePageTurn,
+      settleDurationMs + PAGE_TURN_FALLBACK_BUFFER_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [completePageTurn, isSettling, settleDurationMs]);
+
+  /**
+   * 선 긋기로 삭제할 항목을 화면에서 먼저 숨기고 4초 동안 되돌릴 수 있게 대기시킨다.
+   * 완료 항목은 집중 기록도 함께 사라지므로 확인을 받은 뒤에만 삭제 대기 상태로 전환한다.
+   */
+  const queueGestureDelete = async (taskId: string) => {
+    const target = items.find((item) => item.id === taskId);
+    if (!target) {
+      return;
+    }
+
+    if (target.status === "done") {
+      const selected = await confirm({
+        title: "완료한 할 일을 지울까요?",
+        message: "삭제하면 완료 상태와 집중 기록도 함께 사라져요.",
+        buttons: [
+          { label: "그대로 두기", value: "cancel", tone: "neutral" },
+          { label: "삭제", value: "delete", tone: "danger" },
+        ],
+      });
+      if (selected !== "delete") {
+        return;
+      }
+    }
+
+    if (pendingGestureDeletion) {
+      commitPendingGestureDelete();
+    }
+
+    setPendingGestureDeletion(target);
+    const commitDeletion = () => {
+      gestureDeleteCommitChainRef.current = gestureDeleteCommitChainRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          await handleDateTaskGestureDelete(taskId);
+        });
+    };
+    pendingGestureDeleteCommitRef.current = commitDeletion;
+    clearGestureDeleteTimer();
+    gestureDeleteTimerRef.current = window.setTimeout(() => {
+      gestureDeleteTimerRef.current = null;
+      pendingGestureDeleteCommitRef.current = null;
+      setPendingGestureDeletion((current) => (current?.id === taskId ? null : current));
+      commitDeletion();
+    }, GESTURE_DELETE_UNDO_DELAY_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearGestureDeleteTimer();
+      const commit = pendingGestureDeleteCommitRef.current;
+      pendingGestureDeleteCommitRef.current = null;
+      commit?.();
+    };
+  }, [clearGestureDeleteTimer]);
+
+  /** 새 카드가 글씨 쓰기 효과를 시작하면 추가 요청의 대기 상태를 즉시 소비해 재조회 시 재생되는 일을 막는다. */
+  const consumeWriteAnimation = useCallback((taskId: string) => {
+    setPendingWriteAnimation((current) => {
+      if (!current || current.existingIds.has(taskId)) {
+        return current;
+      }
+      return null;
+    });
+  }, []);
 
   const clearDraggingState = () => {
     setDraggingId(null);
@@ -447,7 +565,30 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
   useEffect(() => {
     setOrderedIds([]);
     clearDraggingState();
-  }, [dateKey]);
+    commitPendingGestureDelete();
+  }, [commitPendingGestureDelete, dateKey]);
+
+  const pageTurnProgress = isSettling && settleDirection !== 0
+    ? 1
+    : Math.min(Math.abs(dragX) / Math.max(viewportWidth * 0.82, 1), 1);
+  const pageTurnDirection = settleDirection < 0 || (settleDirection === 0 && dragX < 0)
+    ? "next"
+    : settleDirection > 0 || dragX > 0
+      ? "previous"
+      : "idle";
+  const pageRotation = pageTurnDirection === "next"
+    ? -pageTurnProgress * 98
+    : pageTurnDirection === "previous"
+      ? pageTurnProgress * 98
+      : 0;
+  const pageTurnStyle = {
+    transform: `rotateY(${pageRotation}deg)`,
+    transformOrigin: pageTurnDirection === "next" ? "left center" : "right center",
+  } as CSSProperties;
+  const pageTurnViewportStyle = {
+    "--page-turn-progress": pageTurnProgress,
+    "--page-turn-duration": `${settleDurationMs}ms`,
+  } as CSSProperties;
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -518,115 +659,160 @@ export function DateTodosBoard({ dateKey, onShiftDate }: DateTodosBoardProps) {
     });
   };
 
+  /**
+   * 키보드 또는 손글씨 인식으로 만든 한 줄을 선택 날짜에 추가한다.
+   * 추가된 항목이 입력 공간 위에 렌더링된 뒤 목록 끝으로 이동해, 같은 자리에서 다음 할 일을 이어서 적을 수 있게 한다.
+   * 일회성 문구는 서버의 반복 사용 집계에 전달하며 30일 안에 서로 다른 3일 사용한 경우에만 관리 할 일 저장을 제안한다.
+   */
+  const handleInlineTodoAdd = async (label: string) => {
+    setPendingWriteAnimation({
+      existingIds: new Set(items.map((item) => item.id)),
+      label,
+    });
+    const added = await handleDateAddTasks([{ label, taskId: null }]);
+    if (!added) {
+      setPendingWriteAnimation(null);
+      return false;
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const scrollContainer = contentScrollRef.current;
+        scrollContainer?.scrollTo({
+          top: scrollContainer.scrollHeight,
+          behavior: "smooth",
+        });
+      });
+    });
+
+    await promptTaskSuggestion(label);
+    return true;
+  };
+
+  useEffect(() => {
+    contentScrollRef.current?.scrollTo({ top: 0 });
+  }, [dateKey]);
+
   return (
-    <div className="min-h-0 flex-1 rounded-xl border border-base-300/80 bg-base-100/65 p-2.5">
+    <div className="date-todos-board relative min-h-0 flex-1 overflow-hidden rounded-xl border border-base-300/80 bg-base-100/65 p-2.5">
       <div
         ref={viewportRef}
-        className="min-h-0 h-full overflow-hidden touch-pan-y"
+        className="sketchbook-page-turn-viewport min-h-0 h-full overflow-hidden touch-pan-y"
+        data-page-turn-direction={pageTurnDirection}
+        style={pageTurnViewportStyle}
         onTouchStartCapture={handleBoardSwipeTouchStart}
         onTouchMoveCapture={handleBoardSwipeTouchMove}
         onTouchEndCapture={handleBoardSwipeTouchEnd}
         onTouchCancelCapture={handleBoardSwipeTouchCancel}
       >
+        <div className="sketchbook-page-turn-underlay" aria-hidden="true">
+          <div className="no-scrollbar min-h-0 h-full overflow-y-hidden pr-0.5">
+            <PreviewTaskList
+              items={pageTurnDirection === "previous" ? previousItems : nextItems}
+              isLoading={
+                pageTurnDirection === "previous"
+                  ? previousQuery.isLoading
+                  : nextQuery.isLoading
+              }
+            />
+          </div>
+        </div>
+
         <div
-          className={`flex h-full w-[300%] ${isSettling ? "transition-transform duration-220 ease-out" : ""}`}
-          style={{
-            transform: `translateX(calc(${-33.3333 + settleDirection * 33.3333}% + ${dragX}px))`,
-          }}
+          className={`sketchbook-page-turn-sheet min-h-0 h-full ${isSettling ? "sketchbook-page-turn-sheet--settling" : ""}`}
+          style={pageTurnStyle}
           onTransitionEnd={(event) => {
-            if (event.currentTarget !== event.target) {
+            if (event.currentTarget !== event.target || event.propertyName !== "transform") {
               return;
             }
             if (!isSettling) {
               return;
             }
-            if (pendingShiftDays !== 0) {
-              onShiftDate(pendingShiftDays);
-            }
-            setPendingShiftDays(0);
-            setSettleDirection(0);
-            setIsSettling(false);
-            setDragX(0);
+            completePageTurn();
           }}
         >
-          <div className="min-h-0 h-full w-1/3 shrink-0 pr-1">
-            <div className="no-scrollbar min-h-0 h-full overflow-y-auto pr-0.5">
-              <PreviewTaskList items={previousItems} isLoading={previousQuery.isLoading} />
-            </div>
+          <div
+            ref={contentScrollRef}
+            className="date-todos-body-scroll no-scrollbar min-h-0 h-full space-y-2 overflow-y-auto overscroll-contain pr-0.5 touch-pan-y"
+          >
+            {isItemsHydrating ? (
+              <div className="space-y-2">
+                <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
+                <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
+                <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
+              </div>
+            ) : session.active === "rest" ? (
+              <RestCoffeeScene restMinutes={session.restMinutes} />
+            ) : items.length === 0 && isPastDate ? (
+              <DateTodosEmptyState
+                isPastDate={isPastDate}
+                isFutureDate={isFutureDate}
+                daysToToday={daysToToday}
+                onShiftDate={onShiftDate}
+                assignedWeekdayRoutineTemplate={
+                  assignedWeekdayRoutineTemplate?.id
+                    ? {
+                        id: assignedWeekdayRoutineTemplate.id,
+                        name: assignedWeekdayRoutineTemplate.name,
+                      }
+                    : null
+                }
+                weekdayRoutinePreviewItems={weekdayRoutinePreviewItems}
+                isApplyingWeekdayRoutine={isApplyingWeekdayRoutine}
+                isRoutineTemplatesLoading={isRoutineTemplatesLoading}
+                onApplyWeekdayRoutine={handleApplyWeekdayRoutine}
+                isToday={dateKey === todayDateKey}
+                yesterdayIncompleteCount={yesterdayIncompleteCount}
+                isApplyingCarryOver={isApplyingCarryOver}
+                isApplyingRoutineAndCarryOver={isApplyingRoutineAndCarryOver}
+                onApplyCarryOver={handleApplyCarryOver}
+                onApplyRoutineAndCarryOver={handleApplyRoutineAndCarryOver}
+                onOpenRoutineImport={openRoutineImport}
+              />
+            ) : items.length > 0 ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={(event) => setDraggingId(String(event.active.id))}
+                onDragEnd={handleDragEnd}
+                onDragCancel={clearDraggingState}
+              >
+                <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+                  <div className="todo-item-list space-y-2">
+                    {visibleOrderedItems.map((item) => (
+                      <SortableTaskRow
+                        key={item.id}
+                        item={item}
+                        onTaskAction={handleDateTaskAction}
+                        onTaskMenuAction={handleDateTaskMenuAction}
+                        onDeleteGesture={queueGestureDelete}
+                        disableActions={Boolean(draggingId)}
+                        canRunFocus={!isFutureDate}
+                        isLongPressActive={longPressActivatedId === item.id}
+                        isWriteAnimating={writeAnimatingTaskId === item.id}
+                        onWriteAnimationStarted={consumeWriteAnimation}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            ) : null}
+            {!isItemsHydrating && session.active !== "rest" && !isPastDate ? (
+              <InlineTodoHandwritingComposer onAdd={handleInlineTodoAdd} />
+            ) : null}
           </div>
-
-          <div className="min-h-0 h-full w-1/3 shrink-0">
-            <div className="no-scrollbar min-h-0 h-full space-y-2 overflow-y-auto pr-0.5">
-              {isItemsHydrating ? (
-                <div className="space-y-2">
-                  <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
-                  <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
-                  <div className="h-20 animate-pulse rounded-lg border border-base-300/70 bg-base-200/55" />
-                </div>
-              ) : session.active === "rest" ? (
-                <RestCoffeeScene restMinutes={session.restMinutes} />
-              ) : items.length === 0 ? (
-                <DateTodosEmptyState
-                  isPastDate={isPastDate}
-                  isFutureDate={isFutureDate}
-                  daysToToday={daysToToday}
-                  onShiftDate={onShiftDate}
-                  assignedWeekdayRoutineTemplate={
-                    assignedWeekdayRoutineTemplate?.id
-                      ? {
-                          id: assignedWeekdayRoutineTemplate.id,
-                          name: assignedWeekdayRoutineTemplate.name,
-                        }
-                      : null
-                  }
-                  weekdayRoutinePreviewItems={weekdayRoutinePreviewItems}
-                  isApplyingWeekdayRoutine={isApplyingWeekdayRoutine}
-                  isRoutineTemplatesLoading={isRoutineTemplatesLoading}
-                  onApplyWeekdayRoutine={handleApplyWeekdayRoutine}
-                  isToday={dateKey === todayDateKey}
-                  yesterdayIncompleteCount={yesterdayIncompleteCount}
-                  isApplyingCarryOver={isApplyingCarryOver}
-                  isApplyingRoutineAndCarryOver={isApplyingRoutineAndCarryOver}
-                  onApplyCarryOver={handleApplyCarryOver}
-                  onApplyRoutineAndCarryOver={handleApplyRoutineAndCarryOver}
-                  onOpenRoutineImport={openRoutineImport}
-                />
-              ) : (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragStart={(event) => setDraggingId(String(event.active.id))}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={clearDraggingState}
-                >
-                  <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2">
-                      {orderedItems.map((item) => (
-                        <SortableTaskRow
-                          key={item.id}
-                          item={item}
-                          onTaskAction={handleDateTaskAction}
-                          onEditActualFocus={handleEditActualFocus}
-                          onTaskMenuAction={handleDateTaskMenuAction}
-                          disableActions={Boolean(draggingId)}
-                          canRunFocus={!isFutureDate}
-                          isLongPressActive={longPressActivatedId === item.id}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              )}
-            </div>
-          </div>
-
-          <div className="min-h-0 h-full w-1/3 shrink-0 pl-1">
-            <div className="no-scrollbar min-h-0 h-full overflow-y-auto pr-0.5">
-              <PreviewTaskList items={nextItems} isLoading={nextQuery.isLoading} />
-            </div>
-          </div>
+          <div className="sketchbook-page-turn-sheet__back" aria-hidden="true" />
         </div>
       </div>
+      {pendingGestureDeletion ? (
+        <div className="todo-gesture-undo" data-disable-date-sheet-swipe="true" role="status">
+          <span>할 일 아이템을 삭제했습니다</span>
+          <button type="button" onClick={undoGestureDelete}>
+            <FiRotateCcw size={13} />
+            되돌리기
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

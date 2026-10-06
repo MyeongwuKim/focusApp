@@ -9,7 +9,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="[...unmatched]" />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
     </SafeAreaProvider>
   );
 }

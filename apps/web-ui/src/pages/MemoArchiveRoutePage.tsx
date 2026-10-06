@@ -6,6 +6,7 @@ import { SelectDropbox } from "../components/SelectDropbox";
 import { MemoEditorPanel } from "../features/memo/containers/MemoEditorPanel";
 import { useDailyLogsWithMemoQuery } from "../queries";
 import { useAppStore } from "../stores";
+import { CALENDAR_DATE_TASKS_PATH } from "../routes/route-config";
 
 type MemoArchiveItem = {
   id: string;
@@ -207,7 +208,7 @@ export function MemoArchiveRoutePage() {
       setViewMonth(new Date(year, month - 1, 1));
     }
     setSelectedMemo(null);
-    navigate(`/calendar?sheet=1&date=${encodeURIComponent(selectedMemo.dateKey)}`);
+    navigate(`${CALENDAR_DATE_TASKS_PATH}?date=${encodeURIComponent(selectedMemo.dateKey)}`);
   };
 
   return (
@@ -374,7 +375,7 @@ export function MemoArchiveRoutePage() {
 
       {selectedMemo ? (
         <div
-          className="fixed inset-0 z-[90] flex min-h-0 flex-col overflow-hidden bg-base-100 pb-[var(--app-safe-area-bottom)]"
+          className="sketchbook-memo-detail fixed inset-0 z-[90] flex min-h-0 flex-col overflow-hidden bg-base-100 pb-[var(--app-safe-area-bottom)]"
           role="dialog"
           aria-modal="true"
         >
@@ -401,7 +402,7 @@ export function MemoArchiveRoutePage() {
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
             <MemoEditorPanel
               dateKey={selectedMemo.dateKey}
-              className="h-full min-h-[22rem] rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
+              className="h-full min-h-[22rem]"
             />
           </div>
         </div>

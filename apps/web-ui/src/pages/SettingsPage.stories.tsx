@@ -30,12 +30,6 @@ type Story = StoryObj<typeof SettingsPage>;
 
 export const Home: Story = {};
 
-export const Theme: Story = {
-  args: {
-    forcedPathname: "/settings/theme",
-  },
-};
-
 export const Weather: Story = {
   args: {
     forcedPathname: "/settings/weather",

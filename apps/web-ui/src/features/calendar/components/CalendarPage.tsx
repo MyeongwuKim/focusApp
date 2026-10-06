@@ -7,7 +7,7 @@ import { formatDateKey } from "../../../utils/holidays";
 import useHolidaysByViewMonth from "../queries/useHolidaysByViewMonth";
 import { CalendarDateCell, type CalendarPreviewBar } from "./CalendarDateCell";
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
 type CalendarRangeDraft = {
   anchor: string;
@@ -40,7 +40,8 @@ type CalendarPageProps = {
       previewBars: CalendarPreviewBar[];
     }
   >;
-  onRequestOpenDateTasksSheet: () => void;
+  /** 날짜를 누르면 선택한 날짜 키를 전달해 전체 화면 일간 할 일 페이지를 연다. */
+  onOpenDateTasks: (dateKey: string) => void;
 };
 
 const RANGE_LONG_PRESS_MS = 420;
@@ -51,31 +52,28 @@ function getSelectedRowIndex(cells: ReturnType<typeof buildCalendarCells>, selec
     return null;
   }
 
-  const foundIndex = cells.findIndex((cell) => cell.inCurrentMonth && formatDateKey(cell.date) === selectedDateKey);
-  if (foundIndex < 0) {
-    return null;
-  }
-
-  return Math.floor(foundIndex / 7);
+  const selectedCellIndex = cells.findIndex(
+    (cell) => cell.inCurrentMonth && formatDateKey(cell.date) === selectedDateKey
+  );
+  return selectedCellIndex < 0 ? null : Math.floor(selectedCellIndex / 7);
 }
 
 function getCalendarRowCount(cells: ReturnType<typeof buildCalendarCells>) {
   return Math.max(1, Math.ceil(cells.length / 7));
 }
 
+/** 선택된 날짜가 속한 행만 넓히되 달력 전체 높이는 유지한다. */
 function buildRowTemplate(cells: ReturnType<typeof buildCalendarCells>, selectedRowIndex: number | null) {
   const rowCount = getCalendarRowCount(cells);
   if (selectedRowIndex === null) {
     return Array.from({ length: rowCount }, () => "minmax(0, 1fr)").join(" ");
   }
 
-  // 전체 높이는 유지하고, 선택된 행만 필요한 만큼 강조
   const selectedWeight = rowCount <= 5 ? 1.28 : 1.35;
   const otherWeight = rowCount > 1 ? (rowCount - selectedWeight) / (rowCount - 1) : 1;
-  const rows = Array.from({ length: rowCount }, (_, rowIndex) =>
-    rowIndex === selectedRowIndex ? selectedWeight : otherWeight
-  );
-  return rows.map((value) => `minmax(0, ${value}fr)`).join(" ");
+  return Array.from({ length: rowCount }, (_, rowIndex) =>
+    `minmax(0, ${rowIndex === selectedRowIndex ? selectedWeight : otherWeight}fr)`
+  ).join(" ");
 }
 
 function normalizeDateRange(first: string, second: string) {
@@ -104,7 +102,7 @@ function toMonthPanelKey(month: Date) {
 
 export function CalendarPage({
   logsByDate,
-  onRequestOpenDateTasksSheet,
+  onOpenDateTasks,
 }: CalendarPageProps) {
   const navigate = useNavigate();
   const viewMonth = useAppStore((state) => state.viewMonth);
@@ -172,31 +170,25 @@ export function CalendarPage({
       { month: viewMonth, cells: currentCells },
       { month: nextMonth, cells: nextCells },
     ];
-    const currentExpandedRowIndex = getSelectedRowIndex(currentCells, selectedDateKey);
-    const currentMonthTemplate = buildRowTemplate(currentCells, currentExpandedRowIndex);
+    const currentMonthTemplate = buildRowTemplate(
+      currentCells,
+      getSelectedRowIndex(currentCells, selectedDateKey)
+    );
 
     return panelInputs.map(({ month, cells }, panelIndex) => {
       const baseTemplate = buildRowTemplate(cells, null);
-      const expandedRowIndex = isMonthSwipeActive
-        ? panelIndex === 1
-          ? currentExpandedRowIndex
-          : null
-        : getSelectedRowIndex(cells, selectedDateKey);
       if (isMonthSwipeActive) {
         return {
           key: toMonthPanelKey(month),
           cells,
-          // 스와이프 중에는 현재 달(가운데)만 선택 행 확장, 좌우 달은 기본 높이 유지
           rowTemplate: panelIndex === 1 ? currentMonthTemplate : baseTemplate,
-          expandedRowIndex,
         };
       }
 
       return {
         key: toMonthPanelKey(month),
         cells,
-        rowTemplate: buildRowTemplate(cells, expandedRowIndex),
-        expandedRowIndex,
+        rowTemplate: buildRowTemplate(cells, getSelectedRowIndex(cells, selectedDateKey)),
       };
     });
   }, [currentCells, isMonthSwipeActive, nextCells, nextMonth, prevCells, prevMonth, selectedDateKey, viewMonth]);
@@ -312,7 +304,7 @@ export function CalendarPage({
         });
       }, RANGE_LONG_PRESS_MS);
     },
-    [clearLongPressTimer, isReleasing]
+    [clearLongPressTimer, isReleasing, resetMonthSwipeGesture]
   );
 
   const handleTrackTransitionEnd = () => {
@@ -493,10 +485,10 @@ export function CalendarPage({
   }, [navigate, rangePopup, resetRangeSelectionMode]);
 
   return (
-    <section className="relative flex min-h-0 flex-1 flex-col">
+    <section className="sketchbook-calendar-board relative flex min-h-0 flex-1 flex-col">
       {isRangeSelectionMode ? (
         <div className="pointer-events-none fixed inset-x-0 top-3 z-[90] flex justify-center px-4">
-          <div className="pointer-events-auto w-full max-w-lg rounded-2xl border border-info/45 bg-base-100/95 px-3 py-2 shadow-[0_14px_36px_rgba(2,6,23,0.28)] backdrop-blur">
+          <div className="sketchbook-floating-surface pointer-events-auto w-full max-w-lg rounded-2xl border border-info/45 px-3 py-2 shadow-[0_14px_36px_rgba(2,6,23,0.28)]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="m-0 text-sm font-semibold text-info">날짜 범위 선택 모드</p>
@@ -514,7 +506,7 @@ export function CalendarPage({
         <div className="pointer-events-none fixed inset-0 z-[91]">
           <div
             ref={rangePopupRef}
-            className="pointer-events-auto absolute w-[12.875rem] -translate-x-1/2 rounded-xl border border-base-300/85 bg-base-100/96 p-2 shadow-[0_16px_36px_rgba(2,6,23,0.22)] backdrop-blur"
+            className="sketchbook-floating-surface pointer-events-auto absolute w-[12.875rem] -translate-x-1/2 rounded-xl border border-base-300/85 p-2 shadow-[0_16px_36px_rgba(2,6,23,0.22)]"
             style={rangePopupStyle}
           >
             <p className="m-0 mb-2 text-[11px] text-base-content/66">
@@ -541,7 +533,7 @@ export function CalendarPage({
         onTouchEnd={handleMonthSwipeTouchEnd}
         onTouchCancel={handleMonthSwipeTouchCancel}
       >
-        <div className="mb-1 grid grid-cols-7 gap-0 text-center text-[11px] font-semibold text-base-content/55">
+        <div className="sketchbook-calendar-weekdays mb-1 grid grid-cols-7 gap-0 text-center text-[11px] font-semibold text-base-content/55">
           {WEEKDAYS.map((weekday) => (
             <div key={weekday} className="py-1.5">
               {weekday}
@@ -549,7 +541,7 @@ export function CalendarPage({
           ))}
         </div>
 
-        <div className="flex-1 overflow-hidden rounded-2xl border border-base-300/80 bg-base-200/40 p-1">
+        <div className="sketchbook-calendar-grid flex-1 overflow-hidden rounded-2xl border border-base-300/80 bg-base-200/40 p-1">
           <div
             className={`flex h-full w-[300%] ${
               isReleasing ? "transition-transform duration-300 ease-out" : ""
@@ -562,7 +554,7 @@ export function CalendarPage({
             {calendarPanels.map((panel) => (
               <div key={panel.key} className="h-full w-1/3 shrink-0">
                 <div
-                  className={`grid h-full grid-cols-7 gap-1 ${
+                  className={`sketchbook-calendar-panel grid h-full grid-cols-7 gap-1 ${
                     suppressRowTemplateTransition
                       ? ""
                       : "transition-[grid-template-rows] duration-220 ease-out"
@@ -571,7 +563,7 @@ export function CalendarPage({
                     gridTemplateRows: panel.rowTemplate,
                   }}
                 >
-                  {panel.cells.map((cell, cellIndex) => {
+                  {panel.cells.map((cell) => {
                     const dateKey = formatDateKey(cell.date);
                     const previewBars = logsByDate[dateKey]?.previewBars ?? [];
                     const isAllDone = logsByDate[dateKey]?.allDone ?? false;
@@ -597,7 +589,7 @@ export function CalendarPage({
                         inCurrentMonth={cell.inCurrentMonth}
                         isToday={isToday}
                         isSelected={isSelected}
-                        isRowExpanded={panel.expandedRowIndex === Math.floor(cellIndex / 7)}
+                        isRowExpanded={isSelected}
                         isRangeSelected={isRangeSelected}
                         isRangeBoundary={isRangeBoundary}
                         holidayName={holidayName}
@@ -624,11 +616,11 @@ export function CalendarPage({
                             setDragX(0);
                             return;
                           }
+
                           if (selectedDateKey === dateKey) {
-                            onRequestOpenDateTasksSheet();
+                            onOpenDateTasks(dateKey);
                             return;
                           }
-
                           setSelectedDateKey(dateKey);
                         }}
                       />

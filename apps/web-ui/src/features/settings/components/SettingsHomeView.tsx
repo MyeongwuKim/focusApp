@@ -1,4 +1,4 @@
-import { FiBell, FiCloud, FiSun } from "react-icons/fi";
+import { FiBell, FiCloud } from "react-icons/fi";
 import type { IconType } from "react-icons";
 import type { SettingsSection } from "../types";
 import { SettingsMenuItem } from "./SettingsMenuItem";
@@ -15,12 +15,6 @@ type SettingsMenu = {
 };
 
 const SETTINGS_MENUS: SettingsMenu[] = [
-  {
-    key: "theme",
-    icon: FiSun,
-    title: "테마",
-    description: "스타일과 라이트/다크 모드",
-  },
   {
     key: "weather",
     icon: FiCloud,

@@ -104,7 +104,7 @@ export function TodoCustomTaskModal({
   return (
     <div
       className={[
-        "absolute inset-0 z-50 flex items-center justify-center bg-transparent p-4 transition-opacity duration-200",
+        "sketchbook-floating-overlay absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-200",
         isOpen ? "opacity-100" : "pointer-events-none opacity-0",
       ].join(" ")}
       onClick={handleClose}
@@ -114,7 +114,7 @@ export function TodoCustomTaskModal({
         aria-modal="true"
         aria-labelledby="todo-custom-task-modal-title"
         className={[
-          "w-full max-w-sm rounded-2xl border border-base-300/80 bg-base-100 p-4 transition-transform duration-200",
+          "sketchbook-floating-surface w-full max-w-sm rounded-2xl border border-base-300/80 p-4 transition-transform duration-200",
           isOpen ? "translate-y-0" : "translate-y-2",
         ].join(" ")}
         onClick={(event) => event.stopPropagation()}

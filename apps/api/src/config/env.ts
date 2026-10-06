@@ -66,6 +66,7 @@ const envSchema = z.object({
     ),
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
+  OPENAI_HANDWRITING_MODEL: z.string().min(1).default("gpt-4.1"),
   BATCH_API_SECRET: z.string().min(1).optional(),
   NOTIFICATION_BATCH_ENABLED: z
     .enum(["true", "false"])

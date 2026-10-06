@@ -7,10 +7,20 @@ type TouchPoint = {
   y: number;
 };
 
+type TimedTouchPoint = TouchPoint & {
+  time: number;
+};
+
 export type SwipeCoreSummary = {
   axis: SwipeAxis;
   deltaX: number;
   deltaY: number;
+  /** 손가락이 닿은 시점부터 떨어질 때까지의 시간이다. */
+  durationMs: number;
+  /** 마지막 이동 구간의 가로 속도다. 양수는 오른쪽, 음수는 왼쪽이며 단위는 px/ms다. */
+  velocityX: number;
+  /** 마지막 이동 구간의 세로 속도다. 양수는 아래쪽, 음수는 위쪽이며 단위는 px/ms다. */
+  velocityY: number;
   start: TouchPoint;
   end: TouchPoint;
 };
@@ -43,10 +53,16 @@ export function useSwipeCore({
   onCancel,
 }: UseSwipeCoreOptions) {
   const touchStartRef = useRef<TouchPoint | null>(null);
+  const touchStartTimeRef = useRef(0);
+  const previousTouchPointRef = useRef<TimedTouchPoint | null>(null);
+  const latestTouchPointRef = useRef<TimedTouchPoint | null>(null);
   const swipeAxisRef = useRef<SwipeAxis>(null);
 
   const reset = useCallback(() => {
     touchStartRef.current = null;
+    touchStartTimeRef.current = 0;
+    previousTouchPointRef.current = null;
+    latestTouchPointRef.current = null;
     swipeAxisRef.current = null;
   }, []);
 
@@ -62,6 +78,12 @@ export function useSwipeCore({
       touchStartRef.current = {
         x: touch.clientX,
         y: touch.clientY,
+      };
+      touchStartTimeRef.current = event.timeStamp;
+      latestTouchPointRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: event.timeStamp,
       };
       swipeAxisRef.current = null;
       onStart?.(event);
@@ -79,6 +101,13 @@ export function useSwipeCore({
       const touch = event.touches[0];
       const deltaX = touch.clientX - start.x;
       const deltaY = touch.clientY - start.y;
+
+      previousTouchPointRef.current = latestTouchPointRef.current;
+      latestTouchPointRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: event.timeStamp,
+      };
 
       if (!swipeAxisRef.current) {
         if (Math.abs(deltaX) < axisThreshold && Math.abs(deltaY) < axisThreshold) {
@@ -105,15 +134,37 @@ export function useSwipeCore({
       }
 
       const touch = event.changedTouches[0];
+      const end = {
+        x: touch.clientX,
+        y: touch.clientY,
+      };
+      const durationMs = Math.max(event.timeStamp - touchStartTimeRef.current, 1);
+      const latestPoint = latestTouchPointRef.current;
+      const previousPoint = previousTouchPointRef.current;
+      const velocityBase = latestPoint && (
+        Math.abs(end.x - latestPoint.x) > 0.5 ||
+        Math.abs(end.y - latestPoint.y) > 0.5
+      )
+        ? latestPoint
+        : previousPoint ?? latestPoint;
+      const recentDurationMs = velocityBase
+        ? Math.max(event.timeStamp - velocityBase.time, 1)
+        : durationMs;
+      const velocityX = velocityBase
+        ? (end.x - velocityBase.x) / recentDurationMs
+        : (end.x - start.x) / durationMs;
+      const velocityY = velocityBase
+        ? (end.y - velocityBase.y) / recentDurationMs
+        : (end.y - start.y) / durationMs;
       const summary: SwipeCoreSummary = {
         axis: swipeAxisRef.current,
-        deltaX: touch.clientX - start.x,
-        deltaY: touch.clientY - start.y,
+        deltaX: end.x - start.x,
+        deltaY: end.y - start.y,
+        durationMs,
+        velocityX,
+        velocityY,
         start,
-        end: {
-          x: touch.clientX,
-          y: touch.clientY,
-        },
+        end,
       };
 
       reset();

@@ -96,7 +96,7 @@ export function DateTodosOverlays({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
               <MemoEditorPanel
                 dateKey={resolvedMemoDateKey}
-                className="h-full min-h-[22rem] rounded-xl border-base-300/70 bg-base-200/35 p-2.5"
+                className="h-full min-h-[22rem]"
               />
             </div>
           </div>
@@ -106,6 +106,7 @@ export function DateTodosOverlays({
       <TodoCompletedAtModal
         isOpen={Boolean(editingActualFocus)}
         initialMinutes={editingActualFocus?.initialMinutes ?? 0}
+        mode={editingActualFocus?.source ?? "edit"}
         onClose={closeEditingActualFocus}
         onSave={handleSaveActualFocus}
       />

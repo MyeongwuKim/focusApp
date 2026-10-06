@@ -3,7 +3,6 @@ export type RouteKey =
   | "tasks"
   | "dateTasks"
   | "stats"
-  | "achievements"
   | "memo"
   | "settings"
   | "routine";

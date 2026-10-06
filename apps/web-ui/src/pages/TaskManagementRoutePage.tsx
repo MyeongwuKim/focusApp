@@ -444,7 +444,7 @@ function TaskManagementRouteContent({
             : "translate-x-0 opacity-100 pointer-events-auto",
         ].join(" ")}
       >
-        <section className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4">
+        <section className="sketchbook-task-management relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-200/40 p-4">
           {isInitialCollectionsLoading ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-base-content/65">
               <span className="loading loading-spinner loading-sm" />
@@ -489,7 +489,7 @@ function TaskManagementRouteContent({
               >
                 <TaskManagementBody />
 
-                <div className="flex min-h-0 flex-col gap-3 border-t border-base-300/65 pb-[calc(0.75rem+var(--app-safe-area-bottom))] pt-3">
+                <div className="task-management-controls flex min-h-0 flex-col gap-3 border-t border-base-300/65 pb-[calc(0.75rem+var(--app-safe-area-bottom))] pt-3">
                   <TaskManagementActions />
                   <TaskManagementFooter className="min-h-0 flex-1" />
                 </div>

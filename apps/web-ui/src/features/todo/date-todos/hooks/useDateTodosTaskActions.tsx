@@ -3,8 +3,8 @@ import { FiCheckCircle, FiClock, FiRotateCcw, FiTarget, FiTrash2 } from "react-i
 import { actionSheet, confirm, toast } from "../../../../stores";
 import { getUserFacingErrorMessage } from "../../../../utils/errorMessage";
 import { formatDateKey } from "../../../../utils/holidays";
+import { cancelNativeTodoNotifications } from "../../../../utils/notifications";
 import {
-  endAllNativeFocusLiveActivities,
   endNativeFocusLiveActivity,
   startNativeFocusLiveActivity,
   updateNativeFocusLiveActivity,
@@ -68,6 +68,10 @@ function buildFocusLiveActivityPayload(
   };
 }
 
+/**
+ * 서버가 반환한 할 일 상태를 iOS 실시간 현황에 반영한다.
+ * 진행 중이거나 일시정지된 할 일은 같은 카드를 갱신하고, 삭제·완료된 할 일만 카드를 종료한다.
+ */
 function syncNativeFocusLiveActivityFromLog(
   dateKey: string,
   nextLog: DailyLogWithTodos,
@@ -100,8 +104,10 @@ type UseDateTodosTaskActionsParams = {
   applyDailyLog: (nextLog: DailyLogWithTodos) => void;
   stopRestSessionRef: MutableRefObject<(input: { dateKey: string }) => Promise<DailyLogWithTodos>>;
   setActiveRestDurationMin: (value: number | null) => void;
-  editingActualFocus: { taskId: string; initialMinutes: number } | null;
-  setEditingActualFocus: (value: { taskId: string; initialMinutes: number } | null) => void;
+  editingActualFocus: { taskId: string; initialMinutes: number; source: "completion" | "edit" } | null;
+  setEditingActualFocus: (
+    value: { taskId: string; initialMinutes: number; source: "completion" | "edit" } | null
+  ) => void;
   editingScheduledStart: { taskId: string; initialTime: string } | null;
   setEditingScheduledStart: (value: { taskId: string; initialTime: string } | null) => void;
   editingTargetFocus: { taskId: string; initialMinutes: number } | null;
@@ -220,7 +226,7 @@ export function useDateTodosTaskActions({
         try {
           const nextLog = await pauseTodo({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
-          endAllNativeFocusLiveActivities();
+          syncNativeFocusLiveActivityFromLog(dateKey, nextLog, taskId);
         } catch (error) {
           const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
           toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
@@ -277,8 +283,14 @@ export function useDateTodosTaskActions({
 
         if (action === "complete") {
           const nextLog = await completeTodo({ dateKey, todoId: taskId });
+          cancelNativeTodoNotifications({ dateKey, todoId: taskId });
           applyDailyLog(nextLog);
           endNativeFocusLiveActivity({ dateKey, todoId: taskId });
+          const completedTodo = nextLog?.todos.find((todo) => todo.id === taskId);
+          const actualFocusSeconds = Math.max(completedTodo?.actualFocusSeconds ?? 0, 0);
+          if (actualFocusSeconds === 0) {
+            setEditingActualFocus({ taskId, initialMinutes: 0, source: "completion" });
+          }
         }
       } catch (error) {
         const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
@@ -298,7 +310,7 @@ export function useDateTodosTaskActions({
     }
 
     const initialMinutes = Math.max(Math.round((target.completedDurationMs ?? target.accumulatedMs) / 60000), 0);
-    setEditingActualFocus({ taskId, initialMinutes });
+    setEditingActualFocus({ taskId, initialMinutes, source: "edit" });
   };
 
   const handleSaveActualFocus = async (minutes: number) => {
@@ -483,7 +495,7 @@ export function useDateTodosTaskActions({
     nextItems: Array<{ label: string; taskId?: string | null; scheduledStartAt?: string | null }>
   ) => {
     if (!dateKey || nextItems.length === 0) {
-      return;
+      return false;
     }
 
     try {
@@ -510,7 +522,7 @@ export function useDateTodosTaskActions({
           message: "같은 할일은 하루에 한 번만 추가할 수 있어요.",
           duration: 2200,
         });
-        return;
+        return false;
       }
 
       if (skippedCount > 0) {
@@ -521,6 +533,7 @@ export function useDateTodosTaskActions({
           duration: 1800,
         });
       }
+      return addedCount > 0;
     } catch (error) {
       console.error(error);
       toast.show({
@@ -529,6 +542,7 @@ export function useDateTodosTaskActions({
         message: "할일을 추가하지 못했어요. 잠시 후 다시 시도해 주세요.",
         duration: 2200,
       });
+      return false;
     }
   };
 
@@ -550,6 +564,10 @@ export function useDateTodosTaskActions({
     const canClearSchedule = Boolean(target.scheduledStartAt);
     const canSetTargetFocus = target.status !== "done" && target.status !== "overdue";
     const canClearTargetFocus = canSetTargetFocus && Boolean(target.targetFocusMinutes);
+    const actualFocusMinutes = Math.max(
+      Math.round((target.completedDurationMs ?? target.accumulatedMs) / 60000),
+      0
+    );
     const resetLabel = "초기화";
     const resetDescription =
       target.status === "done" ? "시작 전 상태로 되돌려요." : "진행 기록을 초기화하고 시작 전 상태로 되돌려요.";
@@ -577,6 +595,17 @@ export function useDateTodosTaskActions({
                 tone: "muted" as const,
                 icon: <FiRotateCcw size={14} />,
                 description: resetDescription,
+              },
+            ]
+          : []),
+        ...(target.status === "done"
+          ? [
+              {
+                label: "집중시간 수정",
+                value: "actual_focus",
+                tone: "primary" as const,
+                icon: <FiClock size={14} />,
+                description: `현재 ${actualFocusMinutes}분으로 기록되어 있어요.`,
               },
             ]
           : []),
@@ -667,6 +696,11 @@ export function useDateTodosTaskActions({
         const message = getUserFacingErrorMessage(error, "할일 상태 업데이트 중 오류가 발생했어요.");
         toast.show({ type: "error", title: "업데이트 실패", message, duration: 2200 });
       }
+      return;
+    }
+
+    if (result === "actual_focus") {
+      handleEditActualFocus(taskId);
       return;
     }
 
@@ -782,6 +816,7 @@ export function useDateTodosTaskActions({
 
       try {
         const nextLog = await deleteTodo({ dateKey, todoId: taskId });
+        cancelNativeTodoNotifications({ dateKey, todoId: taskId });
         applyDailyLog(nextLog);
         endNativeFocusLiveActivity({ dateKey, todoId: taskId });
         toast.show({
@@ -843,14 +878,36 @@ export function useDateTodosTaskActions({
     }
   };
 
+  /**
+   * 항목 너비의 절반을 넘는 가로선을 그린 뒤 되돌리기 대기 시간이 끝나면 해당 할 일을 삭제한다.
+   * 화면에서 제공하는 되돌리기 대기 중에는 호출되지 않으며, 삭제 실패 시 false를 반환해 항목을 복원하게 한다.
+   */
+  const handleDateTaskGestureDelete = async (taskId: string) => {
+    if (!dateKey || !items.some((item) => item.id === taskId)) {
+      return false;
+    }
+
+    try {
+      const nextLog = await deleteTodo({ dateKey, todoId: taskId });
+      cancelNativeTodoNotifications({ dateKey, todoId: taskId });
+      applyDailyLog(nextLog);
+      endNativeFocusLiveActivity({ dateKey, todoId: taskId });
+      return true;
+    } catch (error) {
+      const message = getUserFacingErrorMessage(error, "할일 삭제 중 오류가 발생했어요.");
+      toast.show({ type: "error", title: "삭제 실패", message, duration: 2200 });
+      return false;
+    }
+  };
+
   return {
     handleDateTaskAction,
-    handleEditActualFocus,
     handleEditTargetFocus,
     handleSaveActualFocus,
     handleSaveTargetFocus,
     handleSaveScheduledStart,
     handleDateAddTasks,
     handleDateTaskMenuAction,
+    handleDateTaskGestureDelete,
   };
 }

@@ -53,7 +53,7 @@ export function TaskManagementActions() {
   };
 
   return (
-    <div className="flex w-full shrink-0 items-center justify-end gap-2.5 select-none">
+    <div className="task-management-actions flex w-full shrink-0 items-center justify-end gap-2.5 select-none">
       <PillActionButton
         className="h-12 min-h-12 px-3.5 text-sm"
         icon={<FiBarChart2 size={16} />}

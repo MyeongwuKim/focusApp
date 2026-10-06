@@ -63,13 +63,6 @@ export const Stats: Story = {
   },
 };
 
-export const Achievements: Story = {
-  args: {
-    route: "achievements",
-    forcedPathname: "/achievements",
-  },
-};
-
 export const Memo: Story = {
   args: {
     route: "memo",

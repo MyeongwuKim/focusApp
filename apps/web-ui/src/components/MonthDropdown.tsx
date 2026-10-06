@@ -55,7 +55,7 @@ export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
   }, []);
 
   return (
-    <details ref={detailsRef} className="dropdown dropdown-bottom flex w-full justify-center">
+    <details ref={detailsRef} className="dropdown dropdown-bottom !static flex justify-center">
       <summary className="btn btn-sm btn-ghost rounded-xl px-3.5 text-base font-semibold normal-case">
         <span className="inline-flex items-center gap-2.5">
           <span>{monthLabel}</span>
@@ -64,7 +64,7 @@ export function MonthDropdown({ month, onChange }: MonthDropdownProps) {
       </summary>
 
       <div
-        className="dropdown-content left-1/2 z-30 mt-2 max-h-[58svh] -translate-x-1/2 overflow-auto rounded-2xl border border-base-300 bg-base-100 p-3 shadow-xl"
+        className="sketchbook-floating-surface dropdown-content left-1/2 z-[100] mt-2 max-h-[58svh] -translate-x-1/2 overflow-auto rounded-2xl border border-base-300 p-3 shadow-xl"
         style={{
           width: "calc(100vw - 1.25rem)",
           maxWidth: "calc(460px * var(--ui-scale) - 0.7rem)",

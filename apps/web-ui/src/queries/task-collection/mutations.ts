@@ -1,14 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  acceptTaskSuggestion,
   addTask,
   addTaskCollection,
   deleteTask,
   deleteTaskCollection,
+  dismissTaskSuggestion,
   moveTaskToCollection,
   renameTask,
   renameTaskCollection,
   reorderTaskCollections,
   reorderTasks,
+  recordTaskSuggestionUsage,
   setTaskFavorite,
 } from "../../api/taskApi";
 import { taskCollectionsQueryKey } from "./queries";
@@ -104,5 +107,28 @@ export function useTaskCollectionMutation() {
     renameTaskMutation,
     renameTaskCollectionMutation,
     setTaskFavoriteMutation,
+  };
+}
+
+/** 반복 입력 집계와 저장 제안 수락·거절만 제공해 일일 할 일 화면이 관리 페이지용 mutation을 만들지 않게 한다. */
+export function useTaskSuggestionMutation() {
+  const queryClient = useQueryClient();
+  const recordTaskSuggestionUsageMutation = useMutation({
+    mutationFn: recordTaskSuggestionUsage,
+  });
+  const dismissTaskSuggestionMutation = useMutation({
+    mutationFn: dismissTaskSuggestion,
+  });
+  const acceptTaskSuggestionMutation = useMutation({
+    mutationFn: acceptTaskSuggestion,
+    onSuccess: async () => {
+      await invalidateTaskCollections(queryClient);
+    },
+  });
+
+  return {
+    recordTaskSuggestionUsageMutation,
+    dismissTaskSuggestionMutation,
+    acceptTaskSuggestionMutation,
   };
 }

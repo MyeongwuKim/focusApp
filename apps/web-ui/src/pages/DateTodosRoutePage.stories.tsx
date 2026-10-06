@@ -36,6 +36,11 @@ export const TaskPickerRoute: Story = {
     forcedPathname: "/date-tasks/add",
     forcedSearch: `?date=${pageStoryDateKeys.today}`,
   },
+  render: (args) => (
+    <div className="sketchbook-page sketchbook-page--tasks relative flex min-h-0 flex-1 flex-col">
+      <DateTodosRoutePage {...args} />
+    </div>
+  ),
 };
 
 export const MemoRoute: Story = {

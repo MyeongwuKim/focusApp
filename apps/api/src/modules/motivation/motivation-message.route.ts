@@ -6,7 +6,9 @@ import { env } from "../../config/env.js";
 import {
   hasConsistentHaeyoSpeechLevel,
   hasRestSuggestion,
-  pickEmptyPlanFallback,
+  pickMotivationFallback,
+  resolveMotivationMessageState,
+  type MotivationMessageState,
 } from "./motivation-message.utils.js";
 
 type ServiceErrorCode = "OPENAI_KEY_MISSING" | "OPENAI_REQUEST_FAILED" | "OPENAI_EMPTY_RESPONSE";
@@ -19,41 +21,26 @@ type MotivationTodo = {
   startedAt?: Date | null;
   pausedAt?: Date | null;
   completedAt?: Date | null;
-  scheduledStartAt?: Date | null;
-  actualFocusSeconds?: number | null;
 };
 
 type MotivationLog = {
   dateKey: string;
   todoCount: number;
   doneCount: number;
-  memo?: string | null;
-  restAccumulatedSeconds?: number | null;
   todos: MotivationTodo[];
 };
 
 type MotivationContext = {
   dateKey: string;
   partOfDay: string;
+  state: MotivationMessageState;
   today: {
     todoCount: number;
     doneCount: number;
     openCount: number;
-    focusMinutes: number;
     openTodoLabels: string[];
     inProgressTodoLabel: string | null;
-    scheduledCount: number;
-    hasMemo: boolean;
-  };
-  yesterday: {
-    todoCount: number;
-    openCount: number;
-  } | null;
-  recent: {
-    activeDays: number;
-    doneCount: number;
-    openCount: number;
-    focusMinutes: number;
+    hasInProgressTodo: boolean;
   };
 };
 
@@ -79,8 +66,18 @@ const UNNATURAL_MOTIVATION_PATTERNS = [
   /작게라도/,
   /멋진\s*하루/,
   /(?:무거|흐름|첫\s*단추)/,
+  /(?:여백|첫\s*장|첫걸음|방향을\s*잡|채워\s*가)/,
+  /(?:메모|최근\s*기록|어제)/,
   /\d+\s*분(?:만|이면|부터)/,
 ];
+
+const INVALID_PATTERNS_BY_STATE: Record<MotivationMessageState, readonly RegExp[]> = {
+  EMPTY: [/할\s*일(?:이|은)?.*(?:없|비어)/, /(?:적어|추가|등록)(?:두|해|하)/],
+  NOT_STARTED: [/(?:다|모두|전부).*(?:끝|마쳤|완료)/, /(?:끝냈|마쳤)네요/],
+  IN_PROGRESS: [/(?:다|모두|전부).*(?:끝|마쳤|완료)/, /새(?:로운)?\s*할\s*일/],
+  PARTIAL_DONE: [/(?:다|모두|전부).*(?:끝|마쳤|완료)/],
+  ALL_DONE: [/(?:시작|이어가|다음|남은\s*일|골라|적어|추가)/],
+};
 
 function getZonedNow(now: Date, timezone: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -127,12 +124,6 @@ function normalizeDateKey(value: unknown) {
   return DATE_KEY_PATTERN.test(trimmed) ? trimmed : null;
 }
 
-function shiftDateKey(dateKey: string, days: number) {
-  const [yearText, monthText, dayText] = dateKey.split("-");
-  const date = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText) + days));
-  return date.toISOString().slice(0, 10);
-}
-
 function isDoneTodo(todo: MotivationTodo) {
   return Boolean(todo.done || todo.completedAt);
 }
@@ -159,11 +150,6 @@ function getTodoLabel(todo: MotivationTodo) {
   return content ? compactTodoLabel(content) : null;
 }
 
-function getFocusMinutes(todos: MotivationTodo[]) {
-  const totalSeconds = todos.reduce((sum, todo) => sum + Math.max(todo.actualFocusSeconds ?? 0, 0), 0);
-  return Math.round(totalSeconds / 60);
-}
-
 function summarizeLog(log: MotivationLog | null | undefined) {
   const todos = log?.todos ?? [];
   const openTodos = todos
@@ -175,139 +161,108 @@ function summarizeLog(log: MotivationLog | null | undefined) {
     todoCount: log?.todoCount ?? todos.length,
     doneCount: log?.doneCount ?? todos.filter(isDoneTodo).length,
     openCount: openTodos.length,
-    focusMinutes: getFocusMinutes(todos),
     openTodoLabels: openTodos.map(getTodoLabel).filter((label): label is string => Boolean(label)).slice(0, 3),
     inProgressTodoLabel: getTodoLabel(openTodos.find(isInProgressTodo) ?? {}) ?? null,
-    scheduledCount: openTodos.filter((todo) => Boolean(todo.scheduledStartAt)).length,
-    hasMemo: Boolean(log?.memo?.trim()),
+    hasInProgressTodo: openTodos.some(isInProgressTodo),
   };
 }
 
+/** 오늘 로그만 조회해 할 일 없음·시작 전·진행 중·일부 완료·전체 완료 상태를 판정한다. */
 async function buildMotivationContext(input: {
   userId: string;
   dateKey: string;
   now: Date;
 }): Promise<MotivationContext> {
-  const fromDateKey = shiftDateKey(input.dateKey, -6);
-  const yesterdayDateKey = shiftDateKey(input.dateKey, -1);
-  const [todayLog, recentLogs] = await Promise.all([
-    prisma.dailyLog.findUnique({
-      where: {
-        userId_dateKey: {
-          userId: input.userId,
-          dateKey: input.dateKey,
-        },
-      },
-      select: {
-        dateKey: true,
-        todoCount: true,
-        doneCount: true,
-        memo: true,
-        todos: true,
-      },
-    }),
-    prisma.dailyLog.findMany({
-      where: {
+  const todayLog = await prisma.dailyLog.findUnique({
+    where: {
+      userId_dateKey: {
         userId: input.userId,
-        dateKey: {
-          gte: fromDateKey,
-          lte: input.dateKey,
-        },
+        dateKey: input.dateKey,
       },
-      orderBy: {
-        dateKey: "desc",
-      },
-      take: 7,
-      select: {
-        dateKey: true,
-        todoCount: true,
-        doneCount: true,
-        memo: true,
-        todos: true,
-      },
-    }),
-  ]);
+    },
+    select: {
+      dateKey: true,
+      todoCount: true,
+      doneCount: true,
+      todos: true,
+    },
+  });
 
   const today = summarizeLog(todayLog);
-  const yesterdayLog = recentLogs.find((log) => log.dateKey === yesterdayDateKey);
-  const yesterdaySummary = yesterdayLog ? summarizeLog(yesterdayLog) : null;
-  const recentSummaries = recentLogs.map(summarizeLog);
+  const state = resolveMotivationMessageState({
+    todoCount: today.todoCount,
+    doneCount: today.doneCount,
+    openCount: today.openCount,
+    hasInProgressTodo: today.hasInProgressTodo,
+  });
   const zonedNow = getZonedNow(input.now, DEFAULT_TIMEZONE);
 
   return {
     dateKey: input.dateKey,
     partOfDay: resolvePartOfDay(zonedNow.hour),
+    state,
     today,
-    yesterday: yesterdaySummary
-      ? {
-          todoCount: yesterdaySummary.todoCount,
-          openCount: yesterdaySummary.openCount,
-        }
-      : null,
-    recent: {
-      activeDays: recentSummaries.filter((summary) => summary.todoCount > 0 || summary.focusMinutes > 0).length,
-      doneCount: recentSummaries.reduce((sum, summary) => sum + summary.doneCount, 0),
-      openCount: recentSummaries.reduce((sum, summary) => sum + summary.openCount, 0),
-      focusMinutes: recentSummaries.reduce((sum, summary) => sum + summary.focusMinutes, 0),
-    },
   };
 }
 
 function buildContextLines(context: MotivationContext) {
-  const lines = [
-    `날짜: ${context.dateKey}`,
+  return [
+    `현재 상태: ${context.state}`,
     `시간대: ${context.partOfDay}`,
     `오늘 할 일: ${context.today.todoCount}개`,
     `오늘 완료: ${context.today.doneCount}개`,
     `오늘 남은 할 일: ${context.today.openCount}개`,
-    `오늘 집중: ${context.today.focusMinutes}분`,
     `진행 중인 할 일: ${context.today.inProgressTodoLabel ?? "없음"}`,
     `남은 할 일 예시: ${context.today.openTodoLabels.length > 0 ? context.today.openTodoLabels.join(", ") : "없음"}`,
-    `예약된 할 일: ${context.today.scheduledCount}개`,
-    `오늘 메모: ${context.today.hasMemo ? "있음" : "없음"}`,
-    `최근 7일 기록일: ${context.recent.activeDays}일`,
-    `최근 7일 완료: ${context.recent.doneCount}개`,
-    `최근 7일 미완료: ${context.recent.openCount}개`,
-    `최근 7일 집중: ${context.recent.focusMinutes}분`,
   ];
+}
 
-  if (context.yesterday) {
-    lines.push(`어제 할 일: ${context.yesterday.todoCount}개`, `어제 남은 할 일: ${context.yesterday.openCount}개`);
+/** 상태마다 허용할 격려 방향과 금지할 제안을 분리해 서로 모순되는 문장이 생성되지 않도록 한다. */
+function getStatePromptGuide(state: MotivationMessageState) {
+  switch (state) {
+    case "EMPTY":
+      return [
+        "현재 상태는 오늘 등록된 할 일이 없는 상태다.",
+        "할 일이 없다는 사실을 직접 말하거나 할 일을 적기, 추가하기, 등록하기를 권하지 않는다.",
+        "오늘은 지금부터 시작할 수 있다는 식으로 부담 없이 행동할 마음만 당겨준다.",
+      ];
+    case "NOT_STARTED":
+      return [
+        "현재 상태는 할 일은 있지만 아직 시작하지 않은 상태다.",
+        "남은 할 일 중 하나를 자연스럽게 언급해 가볍게 시작하도록 돕는다.",
+      ];
+    case "IN_PROGRESS":
+      return [
+        "현재 상태는 한 가지 할 일을 진행 중인 상태다.",
+        "새로운 일을 제안하지 말고 지금 하던 일에 집중하거나 마무리하도록 응원한다.",
+      ];
+    case "PARTIAL_DONE":
+      return [
+        "현재 상태는 일부 할 일을 끝냈고 남은 일이 있는 상태다.",
+        "끝낸 일을 짧게 인정하고 남은 일 하나를 차분히 이어가도록 말한다.",
+      ];
+    case "ALL_DONE":
+      return [
+        "현재 상태는 오늘 할 일을 모두 끝낸 상태다.",
+        "새 일을 시작하거나 다음 일을 찾으라고 하지 말고, 완료한 사실만 자연스럽게 인정하며 끝낸다.",
+      ];
   }
-
-  return lines;
 }
 
 function buildPrompt(context: MotivationContext) {
-  const emptyPlanGuide =
-    context.today.todoCount === 0
-      ? [
-          "오늘 할 일이 0개여도 쉬는 날이나 휴식이 필요하다고 추측하지 않는다.",
-          "일정을 가볍게 확인하거나 필요한 할 일 하나를 고르는 방향으로 말한다.",
-        ]
-      : [];
   return [
-    "너는 할 일 앱에서 사용자의 다음 한 걸음을 돕는 따뜻한 페이스메이커다.",
-    "반드시 한국어 한 문장만 출력한다.",
-    "길이는 22~55자 사이로 유지한다.",
-    "캐릭터는 매번 동일하다: 다정하지만 늘어지지 않고, 부담을 키우지 않으면서 행동을 당긴다.",
-    "반드시 부드러운 해요체 존댓말만 쓰고, 반말과 합니다체는 쓰지 않는다.",
-    "상태를 짧게 짚은 뒤 오늘 할 일에 바로 손댈 수 있는 말을 건넨다.",
-    "과거의 미완료를 지적하거나 사용자가 죄책감을 느낄 표현은 쓰지 않는다.",
-    "할 일이 모두 끝난 경우에도 휴식을 권하지 말고, 완료한 일을 짧게 인정하며 마무리한다.",
-    "쉬다, 쉬어도 된다, 휴식, 아무것도 하지 않아도 된다는 표현은 어떤 경우에도 사용하지 않는다.",
-    "사용자 기록을 보고 말하되, 분석 리포트처럼 보이지 않게 쓴다.",
-    "숫자는 문장에 꼭 자연스러울 때만 최대 1개 사용한다.",
-    "참고 상태에 없는 시간이나 분량을 임의로 정해서 제안하지 않는다.",
-    "할 일 제목은 필요할 때만 자연스럽게 1개까지 언급한다.",
-    "명언, 유명인, 과장된 응원, 뻔한 자기계발 문구 금지.",
-    "따옴표, 번호, 줄바꿈, 이모지, 느낌표 사용 금지.",
-    "허위 출처나 사실 주장 금지.",
-    "금지 표현: 동기부여, 생산성, 데이터, 분석, 확인했어요, 패턴, 목표를 향해, 성공, 파이팅, 화이팅, 할 수 있어요, 오늘도, 해보세요, 하세요, 괜찮아, 힘내, 하자, 시작이 무겁다, 흐름, 첫 단추.",
-    "좋은 예시 톤: 가장 가까운 일부터 시작해봐요, 하나 끝내고 다음을 보면 돼요.",
-    "좋은 예시 톤: 벌써 하나 끝냈네요, 다음은 가장 가까운 일부터 이어가봐요.",
-    "좋은 예시 톤: 오늘 할 일은 다 끝냈네요, 계획한 만큼 제대로 해냈어요.",
-    ...emptyPlanGuide,
+    "너는 할 일 앱에서 지금 상태에 맞는 짧은 한마디를 건네는 안내자다.",
+    "반드시 자연스러운 한국어 한 문장만 출력한다.",
+    "길이는 18~50자 사이로 유지한다.",
+    "부드러운 해요체 존댓말만 쓰고, 반말과 합니다체는 쓰지 않는다.",
+    "직접적이고 이해하기 쉬운 말로 쓰며 추상적인 비유나 감성 문구는 쓰지 않는다.",
+    "메모, 과거 기록, 최근 통계, 어제 상태를 언급하거나 추측하지 않는다.",
+    "쉬다, 휴식, 아무것도 하지 않아도 된다는 표현은 사용하지 않는다.",
+    "상태에 없는 시간이나 분량을 임의로 정하지 않는다.",
+    "숫자는 꼭 자연스러울 때만 최대 1개 사용하고, 할 일 제목도 최대 1개만 언급한다.",
+    "명언, 과장된 응원, 자기계발 문구, 이모지, 느낌표, 따옴표, 줄바꿈은 쓰지 않는다.",
+    "금지 표현: 동기부여, 생산성, 데이터, 분석, 확인했어요, 패턴, 목표를 향해, 성공, 파이팅, 화이팅, 할 수 있어요, 오늘도, 여백, 첫 장, 첫걸음, 흐름, 방향, 채워가다.",
+    ...getStatePromptGuide(context.state),
     "",
     "참고 상태:",
     ...buildContextLines(context),
@@ -329,31 +284,13 @@ function isNaturalMotivationMessage(text: string, context: MotivationContext) {
   if (hasRestSuggestion(text) || !hasConsistentHaeyoSpeechLevel(text)) {
     return false;
   }
-  return !UNNATURAL_MOTIVATION_PATTERNS.some((pattern) => pattern.test(text));
+  return ![...UNNATURAL_MOTIVATION_PATTERNS, ...INVALID_PATTERNS_BY_STATE[context.state]].some(
+    (pattern) => pattern.test(text)
+  );
 }
 
 function buildFallbackMotivationMessage(context: MotivationContext) {
-  const firstOpenTodo = context.today.openTodoLabels[0];
-
-  if (context.today.todoCount === 0) {
-    return pickEmptyPlanFallback(context.dateKey);
-  }
-
-  if (context.today.openCount === 0) {
-    return "오늘 할 일은 다 끝냈네요, 계획한 만큼 제대로 해냈어요.";
-  }
-
-  if (context.today.doneCount > 0) {
-    return firstOpenTodo
-      ? `벌써 ${context.today.doneCount}개 끝냈네요, 다음은 ${firstOpenTodo}부터 이어가봐요.`
-      : `벌써 ${context.today.doneCount}개 끝냈네요, 다음은 가장 가까운 일부터 이어가봐요.`;
-  }
-
-  if (firstOpenTodo) {
-    return `${firstOpenTodo}부터 시작해봐요, 하나 끝내고 다음을 보면 돼요.`;
-  }
-
-  return "가장 가까운 일부터 시작해봐요, 하나 끝내고 다음을 보면 돼요.";
+  return pickMotivationFallback(context.state, context.dateKey);
 }
 
 async function requestMotivationMessage(context: MotivationContext) {
@@ -439,7 +376,7 @@ export async function registerMotivationMessageRoute(app: FastifyInstance) {
       const message = await requestMotivationMessage(context);
       return reply.send({
         message,
-        ttlSeconds: 60 * 60 * 3,
+        ttlSeconds: 60,
       });
     } catch (error) {
       request.log.error(error);

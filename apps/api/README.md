@@ -143,7 +143,8 @@ pnpm -C apps/api dev
 | `NAVER_CLIENT_SECRET` | 없음 | 네이버 Client Secret입니다. |
 | `NAVER_REDIRECT_URI` | 없음 | 네이버 OAuth callback URI입니다. |
 | `APPLE_CLIENT_IDS` | `com.myeongwu.focushybrid,com.myeongwu.focushybrid.t` | Apple identity token audience 목록입니다. |
-| `OPENAI_API_KEY` | 없음 | 통계 코멘터리와 동기부여 메시지 생성에 사용하는 API 키입니다. |
+| `OPENAI_API_KEY` | 없음 | 통계 코멘터리, 동기부여 메시지, 손글씨 인식에 사용하는 API 키입니다. |
+| `OPENAI_HANDWRITING_MODEL` | `gpt-4.1` | 손글씨 이미지에서 글자를 그대로 전사할 때 사용하는 인식 전용 모델입니다. |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI 요청에 사용할 모델 이름입니다. |
 | `BATCH_API_SECRET` | 없음 | Cloud Scheduler와 수동 배치 요청의 `x-batch-secret` 검증에 사용하는 secret입니다. |
 | `NOTIFICATION_BATCH_ENABLED` | `false` | API 프로세스 내부 scheduler 활성화 여부입니다. Cloud Scheduler를 사용하는 운영 환경에서는 중복 실행을 피하기 위해 비활성화합니다. |

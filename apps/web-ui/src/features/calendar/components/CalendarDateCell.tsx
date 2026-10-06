@@ -67,8 +67,10 @@ export const CalendarDateCell = memo(function CalendarDateCell({
       onPointerDown={onPointerDown}
       data-calendar-date-key={dateKey}
       data-calendar-current-month={inCurrentMonth ? "true" : "false"}
+      data-calendar-today={isToday ? "true" : "false"}
+      data-calendar-selected={isSelected ? "true" : "false"}
       className={[
-        "calendar-date-cell relative z-0 flex h-full min-h-0 flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition-[border-color,box-shadow] duration-220 ease-out",
+        "calendar-date-cell relative z-0 flex h-full w-full max-w-full min-h-0 min-w-0 flex-col gap-0.5 rounded-[9px] border border-transparent px-1.5 pt-1 pb-1 text-left transition-[border-color,box-shadow] duration-220 ease-out",
         outOfMonthCellClass,
         rangeSelectedClass,
         rangeBoundaryClass,
@@ -91,7 +93,7 @@ export const CalendarDateCell = memo(function CalendarDateCell({
           {isToday ? (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute -bottom-[1px] left-0 right-0 mx-auto h-[2px] w-[0.95rem] rounded-full bg-primary/80"
+              className="calendar-today-mark pointer-events-none absolute -bottom-[1px] left-0 right-0 mx-auto h-[2px] w-[0.95rem] rounded-full bg-primary/80"
             />
           ) : null}
         </div>
@@ -123,11 +125,13 @@ export const CalendarDateCell = memo(function CalendarDateCell({
         </div>
       ) : null}
 
-      <div className={`flex flex-1 flex-col overflow-hidden ${previewGapClass}`}>
+      <div
+        className={`calendar-date-preview flex w-full max-w-full min-w-0 flex-1 self-stretch flex-col overflow-hidden ${previewGapClass}`}
+      >
         {visibleBars.map((bar) => (
           <div
             key={bar.id}
-            className={`calendar-date-bar w-full shrink-0 truncate rounded-[6px] bg-primary/20 px-1.5 text-primary ${previewBarClass}`}
+            className={`calendar-date-bar w-full max-w-full min-w-0 shrink-0 truncate rounded-[6px] bg-primary/20 px-1 text-primary ${previewBarClass}`}
             title={bar.label}
           >
             {bar.label}

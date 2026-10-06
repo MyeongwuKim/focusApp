@@ -1,15 +1,14 @@
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { FiBell, FiCloud, FiSun, FiUser } from "react-icons/fi";
+import { FiBell, FiCloud, FiUser } from "react-icons/fi";
 import { SettingsNotificationsView } from "../features/settings/components/SettingsNotificationsView";
 import { SettingsMenuItem } from "../features/settings/components/SettingsMenuItem";
-import { SettingsThemeView } from "../features/settings/components/SettingsThemeView";
 import { SettingsWeatherView } from "../features/settings/components/SettingsWeatherView";
 import { SettingsAccountView } from "../features/settings/components/SettingsAccountView";
 import type { IconType } from "react-icons";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 
-type SettingsSection = "home" | "theme" | "weather" | "notifications" | "account";
+type SettingsSection = "home" | "weather" | "notifications" | "account";
 
 type SettingsMenu = {
   key: Exclude<SettingsSection, "home">;
@@ -19,12 +18,6 @@ type SettingsMenu = {
 };
 
 const SETTINGS_MENUS: SettingsMenu[] = [
-  {
-    key: "theme",
-    icon: FiSun,
-    title: "테마",
-    description: "스타일과 라이트/다크 모드",
-  },
   {
     key: "weather",
     icon: FiCloud,
@@ -52,7 +45,6 @@ function resolveSettingsSection(pathname: string): SettingsSection {
 
   const subPath = pathname.replace(/^\/settings\/?/, "").split("/")[0];
   if (
-    subPath === "theme" ||
     subPath === "weather" ||
     subPath === "notifications" ||
     subPath === "account"
@@ -81,9 +73,9 @@ export function SettingsPage({ forcedPathname }: SettingsPageProps) {
   };
 
   return (
-    <div className="min-h-0 h-full overflow-y-auto px-0.5 pt-1 pb-2">
+    <div className="sketchbook-settings-page min-h-0 h-full overflow-y-auto px-0.5 pt-1 pb-2">
       {section === "home" ? (
-        <section className="space-y-5 rounded-2xl border border-base-300 bg-base-200/50 p-4">
+        <section className="sketchbook-settings-home space-y-5 rounded-2xl border border-base-300 bg-base-200/50 p-4">
           <div className="space-y-2.5">
             {SETTINGS_MENUS.map((menu) => (
               <SettingsMenuItem
@@ -97,7 +89,6 @@ export function SettingsPage({ forcedPathname }: SettingsPageProps) {
           </div>
         </section>
       ) : null}
-      {section === "theme" ? <SettingsThemeView /> : null}
       {section === "weather" ? <SettingsWeatherView /> : null}
       {section === "notifications" ? <SettingsNotificationsView /> : null}
       {section === "account" ? <SettingsAccountView /> : null}

@@ -27,7 +27,7 @@ export function TaskManagementFooter({ className }: { className?: string }) {
   return (
     <footer
       className={[
-        "flex rounded-xl border border-base-300/80 bg-base-100/85 px-4 py-3.5 select-none",
+        "task-management-footer flex rounded-xl border border-base-300/80 bg-base-100/85 px-4 py-3.5 select-none",
         className ?? "",
       ].join(" ")}
     >

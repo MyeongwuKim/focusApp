@@ -10,14 +10,14 @@ export function notifyRestFinished(dateKey: string) {
   }
 
   const notification = new Notification("휴식 종료", {
-    body: "설정한 휴식 시간이 끝났어요. 눌러서 오늘 할일로 이동하세요.",
+    body: "설정한 휴식 시간이 끝났어요. 눌러서 오늘 할 일로 이동하세요.",
     tag: `rest-finished-${dateKey}`,
   });
 
   notification.onclick = () => {
     notification.close();
     window.focus();
-    window.location.hash = `#/calendar?sheet=1&date=${dateKey}&restFinished=1`;
+    window.location.hash = `#/date-tasks?date=${dateKey}&restFinished=1`;
   };
 
   return true;
@@ -194,8 +194,8 @@ export function scheduleNativeRestNotification(input: {
   return postRestNotificationBridgeMessage("REST_NOTIFICATION_SCHEDULE", {
     key: `rest-finished-${input.dateKey}`,
     title: input.title ?? "휴식 시간 종료",
-    body: input.body ?? "설정한 휴식 시간이 끝났어요. 눌러서 오늘 할일로 이동하세요.",
-    targetPath: `/calendar?sheet=1&date=${input.dateKey}&restFinished=1`,
+    body: input.body ?? "설정한 휴식 시간이 끝났어요. 눌러서 오늘 할 일로 이동하세요.",
+    targetPath: `/date-tasks?date=${input.dateKey}&restFinished=1`,
     seconds,
   });
 }
@@ -228,7 +228,7 @@ export function scheduleNativeTargetFocusNotification(input: {
     key: buildFocusTargetElapsedNotificationKey(input.dateKey, input.todoId),
     title: "목표 집중시간 도달",
     body: `${bodyBase}. 이어가기 또는 완료를 선택해 주세요.`,
-    targetPath: `/calendar?sheet=1&date=${input.dateKey}&focusTargetElapsed=1&todoId=${encodeURIComponent(input.todoId)}`,
+    targetPath: `/date-tasks?date=${input.dateKey}&focusTargetElapsed=1&todoId=${encodeURIComponent(input.todoId)}`,
     seconds,
   });
 }
@@ -255,7 +255,7 @@ export function scheduleNativeTodoStartNotification(input: {
     key: buildTodoStartNotificationKey(input.dateKey, input.todoId),
     title: "할일 시작 시간",
     body: `${label}, 설정한 시작 시간이 됐어요.`,
-    targetPath: `/calendar?sheet=1&date=${input.dateKey}&startTodoPrompt=1&startTodoPromptSource=scheduled&todoId=${encodeURIComponent(input.todoId)}`,
+    targetPath: `/date-tasks?date=${input.dateKey}&startTodoPrompt=1&startTodoPromptSource=scheduled&todoId=${encodeURIComponent(input.todoId)}`,
     seconds,
   });
 }
@@ -264,4 +264,14 @@ export function cancelNativeTodoStartNotification(input: { dateKey: string; todo
   return postRestNotificationBridgeMessage("REST_NOTIFICATION_CANCEL", {
     key: buildTodoStartNotificationKey(input.dateKey, input.todoId),
   });
+}
+
+/**
+ * 삭제·완료된 할 일에 더 이상 도착하면 안 되는 시작 시간 알림과 목표 집중시간 알림을 함께 취소한다.
+ * 서버의 일반 리마인드는 현재 할 일 목록을 기준으로 발송하므로 이 함수에서 처리하지 않는다.
+ */
+export function cancelNativeTodoNotifications(input: { dateKey: string; todoId: string }) {
+  const didCancelStartNotification = cancelNativeTodoStartNotification(input);
+  const didCancelTargetFocusNotification = cancelNativeTargetFocusNotification(input);
+  return didCancelStartNotification || didCancelTargetFocusNotification;
 }

@@ -135,13 +135,8 @@ export function TaskManagementStatsView({ forcedSearch, isActive = true }: TaskM
             ) : (
               <TaskStatsTrendTab
                 focusMinutes={trendTask.time.totalFocus}
-                resumeCount={trendTask.count.resumeCount}
-                taskLabel={taskLabel}
-                averageResumesPerTask={trendTask.focusResume.averageResumesPerTask}
-                averageFocusSegmentMinutes={trendTask.focusResume.averageFocusSegmentMinutes}
                 useMonthlyBar={trendTask.time.useMonthlyBar}
                 timeData={trendTask.time.data}
-                focusResumeData={trendTask.focusResume.data}
               />
             )}
           </>

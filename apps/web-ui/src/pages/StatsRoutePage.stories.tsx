@@ -54,6 +54,6 @@ export const ThirtyDays: Story = {
 
 export const OneYear: Story = {
   parameters: {
-    initialEntry: "/stats?preset=1y&start=2025-05-14&end=2026-05-13",
+    initialEntry: "/stats?preset=1y&start=2025-06-01&end=2026-05-13",
   },
 };

@@ -28,9 +28,7 @@ function SettingsRouteFallback({ pathname = "/settings" }: { pathname?: string }
   const detailCardCount =
     normalizedPathname === "/settings/weather"
       ? 5
-      : normalizedPathname === "/settings/theme"
-        ? 3
-        : 1;
+      : 1;
 
   return (
     <div
@@ -43,7 +41,7 @@ function SettingsRouteFallback({ pathname = "/settings" }: { pathname?: string }
       {isHome ? (
         <section className="space-y-5 rounded-2xl border border-base-300 bg-base-200/50 p-4">
           <div className="space-y-2.5">
-            {Array.from({ length: 4 }, (_, index) => (
+            {Array.from({ length: 3 }, (_, index) => (
               <div
                 key={index}
                 className="flex h-[61px] items-center gap-3 rounded-xl border border-base-300/80 bg-base-100/75 px-3 py-3.5"
@@ -93,7 +91,7 @@ function RoutineRouteFallback({ pathname = "/routines" }: { pathname?: string })
       role="status"
       aria-busy="true"
     >
-      <LoadingStatus label="루틴" />
+      <LoadingStatus label="할 일 묶음" />
       <section className="flex h-full min-h-0 flex-col rounded-2xl border border-base-300 bg-base-200/50 px-1.5 pt-1.5 pb-0">
         {isEditorRoute ? (
           <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-base-300/80 bg-base-100/75 p-3">
@@ -234,40 +232,6 @@ function StatsRouteFallback() {
   );
 }
 
-function AchievementsRouteFallback() {
-  return (
-    <section
-      className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-base-300 bg-base-100/80 p-4 md:p-5"
-      data-route-fallback="achievements"
-      role="status"
-      aria-busy="true"
-    >
-      <LoadingStatus label="업적" />
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-base-300/80 bg-base-200/35 p-1">
-          <SkeletonBlock className="h-8 w-full" />
-          <SkeletonBlock className="h-8 w-full" />
-        </div>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
-          <SkeletonBlock className="h-20 w-full" />
-          <SkeletonBlock className="h-20 w-full" />
-          <SkeletonBlock className="h-20 w-full" />
-          <SkeletonBlock className="h-20 w-full" />
-        </div>
-        <SkeletonBlock className="h-40 w-full rounded-xl" />
-        <div className="flex gap-1.5">
-          <SkeletonBlock className="h-7 w-12 rounded-full" />
-          <SkeletonBlock className="h-7 w-12 rounded-full" />
-          <SkeletonBlock className="h-7 w-12 rounded-full" />
-          <SkeletonBlock className="h-7 w-12 rounded-full" />
-        </div>
-        <SkeletonBlock className="h-28 w-full rounded-xl" />
-        <SkeletonBlock className="h-28 w-full rounded-xl" />
-      </div>
-    </section>
-  );
-}
-
 function MemoRouteFallback() {
   return (
     <section
@@ -306,8 +270,6 @@ export function RoutePageFallback({ route, forcedPathname }: RoutePageFallbackPr
       return <TaskManagementRouteFallback pathname={forcedPathname} />;
     case "stats":
       return <StatsRouteFallback />;
-    case "achievements":
-      return <AchievementsRouteFallback />;
     case "memo":
       return <MemoRouteFallback />;
     case "dateTasks":

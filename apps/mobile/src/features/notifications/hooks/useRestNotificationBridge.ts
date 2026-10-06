@@ -68,13 +68,16 @@ function normalizeTargetPath(path: string) {
   }
 
   const [pathname, rawSearch = ""] = path.split("?", 2);
-  if (pathname !== "/date-tasks") {
+  if (pathname !== "/calendar") {
     return path;
   }
 
   const params = new URLSearchParams(rawSearch);
+  if (params.get("sheet") !== "1") {
+    return path;
+  }
+
   const next = new URLSearchParams();
-  next.set("sheet", "1");
   const date = params.get("date");
   if (date) {
     next.set("date", date);
@@ -97,7 +100,7 @@ function normalizeTargetPath(path: string) {
     next.set("todoId", todoId);
   }
 
-  return `/calendar?${next.toString()}`;
+  return `/date-tasks?${next.toString()}`;
 }
 
 function getNotificationTargetPath(notification: Notifications.Notification) {
@@ -107,6 +110,50 @@ function getNotificationTargetPath(notification: Notifications.Notification) {
     return null;
   }
   return normalizeTargetPath(rawTargetPath);
+}
+
+/**
+ * 예약 데이터에 저장된 키를 우선 사용하고, 이전 앱 버전의 예약은 이동 경로에서 같은 키를 복원한다.
+ * 앱 재실행으로 메모리의 알림 ID가 사라져도 삭제·완료된 할 일의 예약을 찾는 데 사용한다.
+ */
+function getScheduledNotificationKey(notification: Notifications.NotificationRequest) {
+  const data = asRecord(notification.content.data);
+  const storedKey = asString(data?.notificationKey)?.trim();
+  if (storedKey) {
+    return storedKey;
+  }
+
+  const targetPath = asString(data?.targetPath);
+  if (!targetPath) {
+    return null;
+  }
+
+  const rawSearch = targetPath.split("?", 2)[1] ?? "";
+  const params = new URLSearchParams(rawSearch);
+  const dateKey = params.get("date");
+  if (!dateKey) {
+    return null;
+  }
+
+  if (params.get("restFinished") === "1") {
+    return `rest-finished-${dateKey}`;
+  }
+
+  const todoId = params.get("todoId");
+  if (!todoId) {
+    return null;
+  }
+  if (params.get("focusTargetElapsed") === "1") {
+    return `focus-target-elapsed-${dateKey}-${todoId}`;
+  }
+  if (
+    params.get("startTodoPrompt") === "1" &&
+    params.get("startTodoPromptSource") === "scheduled"
+  ) {
+    return `todo-start-${dateKey}-${todoId}`;
+  }
+
+  return null;
 }
 
 function withPromptNonce(targetPath: string, promptType: "start_todo" | "focus_target_elapsed") {
@@ -192,6 +239,8 @@ export function useRestNotificationBridge({
   shouldInlineTodoPromptInForeground,
 }: UseRestNotificationBridgeInput) {
   const notificationIdByKeyRef = useRef<Map<string, string>>(new Map());
+  /** 예약 도중 취소된 키를 보관해, iOS 예약 등록이 늦게 끝나더라도 생성 직후 다시 취소한다. */
+  const cancelledNotificationKeySetRef = useRef<Set<string>>(new Set());
   const handledResponseEventKeySetRef = useRef<Set<string>>(new Set());
   const handledReceivedEventKeySetRef = useRef<Set<string>>(new Set());
 
@@ -325,15 +374,33 @@ export function useRestNotificationBridge({
     const parsedDateKey = extractDateKeyFromNotificationKey(key);
     const targetPath =
       normalizeTargetPath(asString(payload.targetPath) ?? "") ??
-      (parsedDateKey ? `/calendar?sheet=1&date=${parsedDateKey}&restFinished=1` : "/calendar?sheet=1");
+      (parsedDateKey ? `/date-tasks?date=${parsedDateKey}&restFinished=1` : "/date-tasks?restFinished=1");
 
     if (key) {
+      cancelledNotificationKeySetRef.current.delete(key);
+      const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync().catch(
+        (error) => {
+          console.log("Failed to read scheduled notifications before replacement:", error);
+          return [];
+        }
+      );
+      const existingNotificationIds = new Set<string>();
       const existingNotificationId = notificationIdByKeyRef.current.get(key);
       if (existingNotificationId) {
-        await Notifications.cancelScheduledNotificationAsync(existingNotificationId).catch((error) => {
-          console.log("Failed to cancel existing rest notification:", error);
-        });
+        existingNotificationIds.add(existingNotificationId);
       }
+      for (const notification of scheduledNotifications) {
+        if (getScheduledNotificationKey(notification) === key) {
+          existingNotificationIds.add(notification.identifier);
+        }
+      }
+      await Promise.all(
+        Array.from(existingNotificationIds).map((id) =>
+          Notifications.cancelScheduledNotificationAsync(id).catch((error) => {
+            console.log("Failed to cancel existing scheduled notification:", error);
+          })
+        )
+      );
     }
 
     const notificationId = await Notifications.scheduleNotificationAsync({
@@ -342,6 +409,7 @@ export function useRestNotificationBridge({
         body,
         data: {
           targetPath,
+          notificationKey: key,
         },
         sound: true,
       },
@@ -352,6 +420,12 @@ export function useRestNotificationBridge({
     });
 
     if (key) {
+      if (cancelledNotificationKeySetRef.current.has(key)) {
+        await Notifications.cancelScheduledNotificationAsync(notificationId).catch((error) => {
+          console.log("Failed to cancel notification scheduled after cancellation:", error);
+        });
+        return null;
+      }
       notificationIdByKeyRef.current.set(key, notificationId);
     }
 
@@ -360,26 +434,40 @@ export function useRestNotificationBridge({
 
   const cancelRestNotification = useCallback(async (key?: string) => {
     if (!key) {
-      const ids = Array.from(notificationIdByKeyRef.current.values());
-      await Promise.all(
-        ids.map((id) =>
-          Notifications.cancelScheduledNotificationAsync(id).catch((error) => {
-            console.log("Failed to cancel rest notification:", error);
-          })
-        )
-      );
+      notificationIdByKeyRef.current.forEach((_id, notificationKey) => {
+        cancelledNotificationKeySetRef.current.add(notificationKey);
+      });
+      await Notifications.cancelAllScheduledNotificationsAsync().catch((error) => {
+        console.log("Failed to cancel scheduled notifications:", error);
+      });
       notificationIdByKeyRef.current.clear();
       return;
     }
 
-    const id = notificationIdByKeyRef.current.get(key);
-    if (!id) {
-      return;
+    cancelledNotificationKeySetRef.current.add(key);
+    const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync().catch(
+      (error) => {
+        console.log("Failed to read scheduled notifications before cancellation:", error);
+        return [];
+      }
+    );
+    const notificationIds = new Set<string>();
+    const inMemoryId = notificationIdByKeyRef.current.get(key);
+    if (inMemoryId) {
+      notificationIds.add(inMemoryId);
     }
-
-    await Notifications.cancelScheduledNotificationAsync(id).catch((error) => {
-      console.log("Failed to cancel rest notification by key:", error);
-    });
+    for (const notification of scheduledNotifications) {
+      if (getScheduledNotificationKey(notification) === key) {
+        notificationIds.add(notification.identifier);
+      }
+    }
+    await Promise.all(
+      Array.from(notificationIds).map((id) =>
+        Notifications.cancelScheduledNotificationAsync(id).catch((error) => {
+          console.log("Failed to cancel scheduled notification by key:", error);
+        })
+      )
+    );
     notificationIdByKeyRef.current.delete(key);
   }, []);
 

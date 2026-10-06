@@ -40,8 +40,8 @@ export function StatsPeriodFilter() {
   };
 
   return (
-    <>
-      <div className="grid grid-cols-3 gap-2">
+    <div className="stats-period-filter">
+      <div className="stats-period-filter__tabs">
         <Button size="sm" variant={matchedPreset === "7d" ? "primary" : "default"} onClick={() => applyPreset("7d")}>
           7일
         </Button>
@@ -53,16 +53,14 @@ export function StatsPeriodFilter() {
           30일
         </Button>
         <Button size="sm" variant={matchedPreset === "1y" ? "primary" : "default"} onClick={() => applyPreset("1y")}>
-          1년
+          12개월
         </Button>
       </div>
 
-      <div className="rounded-xl border border-base-300/80 bg-base-200/40 p-3">
-        {isCustomRange ? (
-          <p className="mt-0 mb-1 text-[11px] font-semibold tracking-tight text-primary">직접 선택 범위</p>
-        ) : null}
-        <p className="m-0 text-xs text-base-content/65">{guideText}</p>
-      </div>
-    </>
+      <p className="stats-period-filter__caption">
+        {isCustomRange ? <b>직접 선택 · </b> : null}
+        {guideText}
+      </p>
+    </div>
   );
 }
