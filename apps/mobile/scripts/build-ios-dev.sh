@@ -4,8 +4,11 @@ set -euo pipefail
 
 export APP_VARIANT=dev
 export APP_PLATFORM=ios
+export MOBILE_ENV_PROFILE=development
 
 MOBILE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="$(cd "${MOBILE_ROOT}/../.." && pwd)"
+source "${PROJECT_ROOT}/scripts/terminal-progress.sh"
 BUILD_STAMP="$(date +%Y%m%d-%H%M%S)"
 OUTPUT_ROOT="${MOBILE_ROOT}/dist"
 ARCHIVE_PATH="${OUTPUT_ROOT}/ios-dev-${BUILD_STAMP}.xcarchive"
@@ -37,8 +40,12 @@ print_failure() {
   printf '전체 로그: %s\n' "${LOG_PATH}" >&2
 }
 
-printf '[ 45%%] iOS 앱 아카이브 생성 중...\n'
-if ! xcodebuild \
+if ! terminal_progress_run \
+  45 \
+  90 \
+  'iOS 앱 아카이브 생성' \
+  "${LOG_PATH}" \
+  node "${MOBILE_ROOT}/scripts/run-with-mobile-env.js" dev xcodebuild \
   -workspace "${MOBILE_ROOT}/ios/dailoT.xcworkspace" \
   -scheme dailoT \
   -configuration Release \
@@ -46,31 +53,34 @@ if ! xcodebuild \
   -destination "generic/platform=iOS" \
   -archivePath "${ARCHIVE_PATH}" \
   -allowProvisioningUpdates \
-  archive >> "${LOG_PATH}" 2>&1; then
+  archive; then
   print_failure 'iOS 앱 아카이브 생성'
   exit 1
 fi
-printf '[ 90%%] iOS 앱 아카이브 생성 완료\n'
 
-printf '[ 92%%] IPA 파일 내보내는 중...\n'
-if ! xcodebuild \
+if ! terminal_progress_run \
+  92 \
+  98 \
+  'IPA 파일 내보내기' \
+  "${LOG_PATH}" \
+  node "${MOBILE_ROOT}/scripts/run-with-mobile-env.js" dev xcodebuild \
   -exportArchive \
   -archivePath "${ARCHIVE_PATH}" \
   -exportPath "${EXPORT_PATH}" \
   -exportOptionsPlist "${EXPORT_OPTIONS_PATH}" \
-  -allowProvisioningUpdates >> "${LOG_PATH}" 2>&1; then
+  -allowProvisioningUpdates; then
   print_failure 'IPA 파일 내보내기'
   exit 1
 fi
-printf '[ 98%%] IPA 파일 내보내기 완료\n'
 
 IPA_PATH="$(find "${EXPORT_PATH}" -maxdepth 1 -type f -name '*.ipa' -print -quit)"
 if [[ -z "${IPA_PATH}" ]]; then
+  terminal_progress_newline
   echo "iOS IPA export failed: no IPA found in ${EXPORT_PATH}" >&2
   exit 1
 fi
 
-printf '[100%%] iOS 개발 빌드 완료\n'
+terminal_progress_finish 'iOS 개발 빌드 완료'
 printf '아카이브: %s\n' "${ARCHIVE_PATH}"
 printf 'IPA: %s\n' "${IPA_PATH}"
 printf '빌드 로그: %s\n' "${LOG_PATH}"

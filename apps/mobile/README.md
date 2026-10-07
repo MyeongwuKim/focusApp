@@ -92,14 +92,14 @@ pnpm native:sync:web
 | 3 | `pnpm native:ios:dev` | 로컬 Xcode archive와 수동 TestFlight 업로드 | Cloud Run API 주소 |
 | 4 | `pnpm native:prod` | Expo EAS production 원격 빌드 및 App Store Connect 자동 제출 | EAS production 환경변수 |
 
-로컬 테스트용 값은 커밋되지 않는 `apps/mobile/.env.test.local`에 두는 것을 권장합니다. `EXPO_PUBLIC_API_ORIGIN`에는 `/graphql`을 붙이지 않고 API origin만 입력합니다.
+`native:ios:local`과 `native:ios:device`는 `apps/mobile/.env`를, `native:ios:dev`는 `apps/mobile/.env.development`를 사용합니다. `EXPO_PUBLIC_API_ORIGIN`에는 `/graphql`을 붙이지 않고 API origin만 입력합니다.
 
 ### 1. 시뮬레이터 테스트: `native:ios:local`
 
 iOS 시뮬레이터에서 test variant를 먼저 확인합니다. 시뮬레이터는 Mac의 `localhost`에 접근할 수 있으므로 `EXPO_PUBLIC_API_ORIGIN`을 로컬 API 주소로 설정합니다.
 
 ```bash
-# apps/mobile/.env.test.local
+# apps/mobile/.env
 EXPO_PUBLIC_API_ORIGIN=http://localhost:4000
 ```
 
@@ -123,7 +123,7 @@ pnpm native:ios:install
 현재 Mac에 연결된 iPhone에서 Dev Client와 Metro를 사용해 테스트할 때 실행합니다. 실제 iPhone에서 `localhost`는 iPhone 자신을 가리키므로, `EXPO_PUBLIC_API_ORIGIN`에는 iPhone에서 접근 가능한 Mac의 LAN 주소를 입력합니다.
 
 ```bash
-# apps/mobile/.env.test.local
+# apps/mobile/.env
 EXPO_PUBLIC_API_ORIGIN=http://<Mac의-LAN-IP>:4000
 ```
 
@@ -141,7 +141,7 @@ Web UI만 수정한 경우에는 Metro가 실행 중인 상태에서 `pnpm nativ
 Xcode 프로젝트를 기준으로 archive를 만들고 직접 TestFlight에 올려 확인할 때 사용합니다. 로컬 API가 아닌 Cloud Run에 배포된 API 주소를 넣고 빌드합니다.
 
 ```bash
-# apps/mobile/.env.test.local
+# apps/mobile/.env.development
 EXPO_PUBLIC_API_ORIGIN=https://<Cloud-Run-API-도메인>
 ```
 
@@ -149,7 +149,9 @@ EXPO_PUBLIC_API_ORIGIN=https://<Cloud-Run-API-도메인>
 pnpm native:ios:dev
 ```
 
-이 명령은 Web UI 임베드와 test 네이티브 설정 동기화 후 `apps/mobile/ios/T.xcworkspace`를 사용해 Xcode archive와 IPA를 생성합니다. archive는 `apps/mobile/dist/ios-dev-<빌드 시각>.xcarchive`, IPA는 `apps/mobile/dist/ios-dev-<빌드 시각>/`에 생성됩니다.
+이 명령은 Web UI 임베드와 test 네이티브 설정 동기화 후 `apps/mobile/ios/dailoT.xcworkspace`를 사용해 Xcode archive와 IPA를 생성합니다. archive는 `apps/mobile/dist/ios-dev-<빌드 시각>.xcarchive`, IPA는 `apps/mobile/dist/ios-dev-<빌드 시각>/`에 생성됩니다.
+
+동기화 과정에서 `.xcode.env`에 환경별 Expo 실행기를 연결하므로, 이후 Xcode에서 직접 Archive해도 `.env.development`로 번들링합니다. 환경값 자체는 이 파일에 저장하지 않습니다. 개발 아카이브에 필요한 `.env.development`가 없으면 빌드를 중단합니다. Expo prebuild로 프로젝트를 다시 생성할 때도 플러그인이 실행기를 복원합니다.
 
 Expo/EAS에는 업로드하지 않으므로 TestFlight 배포는 생성된 archive를 Xcode Organizer에서 열어 App Store Connect에 직접 업로드합니다.
 
@@ -174,7 +176,7 @@ pnpm native:prod
 3. `APP_VARIANT`에 맞는 variant env
 4. variant env의 `.local` 파일
 
-`APP_VARIANT` 기본값은 `test`입니다. `prod` 또는 `production`에서는 `.env.production`, `.env.prod`를 읽고, `dev` 또는 `test`에서는 `.env.test`를 읽습니다. `dev`에서는 `.env.dev`가 있으면 추가로 읽습니다. variant env와 variant local env는 기존 값보다 우선합니다.
+`APP_VARIANT` 기본값은 `test`입니다. `prod` 또는 `production`에서는 `.env.production`, `.env.prod`를, `dev`에서는 `.env.development`를, `test`에서는 `.env.test`를 읽습니다. variant env와 variant local env는 기존 값보다 우선합니다. `MOBILE_ENV_PROFILE=base`인 local·device 명령은 위 순서 대신 `.env`만 읽습니다. 빌드 실행기는 Expo의 자동 dotenv 로딩을 막아 선택한 파일이 Release 번들에도 적용되도록 합니다.
 
 ## 환경변수
 
@@ -223,7 +225,7 @@ pnpm native:prod
 
 `minimum-app-version.json`은 dev/prod 환경별 iOS·Android 최소 앱 버전 정책을 한곳에서 관리합니다. 각 플랫폼은 `enabled`, `minimumVersion`, `storeUrl`을 가지며, `enabled`가 `true`일 때만 강제 업데이트를 적용합니다. `develop`에서는 `dev` 항목만 개발용 R2로, `master`에서는 `prod` 항목만 운영용 R2의 `native/latest.json`으로 업로드됩니다. 이전 앱이 기존 경로를 계속 조회하므로 동일한 정책을 `native/minimum-app-version.json`에도 함께 업로드합니다. develop에서 prod 항목을 수정해도 운영용 R2에는 반영되지 않으며 해당 변경이 master에 병합된 뒤 배포됩니다.
 
-`native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 빌드 번호 설정을 관리합니다. dev iOS 프로젝트는 Xcode에서 `dailoT`로 표시되고, 기기 홈 화면에서는 테스트 앱을 구분할 수 있도록 `데일로(T)`를 사용합니다.
+`native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 Android versionCode 설정을 관리합니다. dev iOS 프로젝트는 Xcode에서 `dailoT`로 표시되고, 기기 홈 화면에서는 테스트 앱을 구분할 수 있도록 `데일로(T)`를 사용합니다. 로컬 iOS 빌드 번호는 Xcode 프로젝트의 Build 값을 사용하며, 설정 동기화 시 덮어쓰지 않습니다.
 
 네이티브 빌드 명령을 실행하면 Web UI 빌드나 네이티브 설정 변경 전에 환경, 플랫폼, 앱 버전을 확인합니다. `y` 또는 `yes`를 입력해야 계속 진행하며, 그 외 입력은 전체 명령을 중단합니다.
 
@@ -246,7 +248,8 @@ pnpm -C apps/mobile native:sync:prod -- --yes
 | dev/test 사용자 표시 버전 | `app-version.json`의 `dev.ios`, `dev.android`를 사용합니다. |
 | prod 사용자 표시 버전 | `app-version.json`의 `prod.ios`, `prod.android`를 사용합니다. |
 | prod iOS buildNumber, Android versionCode | EAS remote와 `production.autoIncrement`를 사용합니다. |
-| test buildNumber, versionCode | `native.config.json`의 `test.ios`, `test.android` 값을 사용합니다. |
+| 로컬 iOS buildNumber | Xcode 프로젝트의 Build 값을 사용하며 설정 동기화 시 유지합니다. |
+| test Android versionCode | `native.config.json`의 `test.android.versionCode` 값을 사용합니다. |
 | dev 최소 앱 버전 정책 | `minimum-app-version.json`의 `dev` 설정을 사용합니다. |
 | prod 최소 앱 버전 정책 | `minimum-app-version.json`의 `prod` 설정을 사용합니다. |
 

@@ -1,6 +1,8 @@
+/* global __dirname */
 const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline/promises");
+const { syncXcodeBuildEnv } = require("./sync-xcode-build-env");
 
 const appRoot = path.resolve(__dirname, "..");
 const variant = (process.argv[2] || process.env.APP_VARIANT || "test").trim().toLowerCase();
@@ -10,7 +12,7 @@ const appVersionPath = path.join(appRoot, "app-version.json");
 const envFileNamesByVariant = {
   prod: [".env.production", ".env.prod"],
   production: [".env.production", ".env.prod"],
-  dev: [".env.test", ".env.dev"],
+  dev: [".env.development"],
   test: [".env.test"],
 };
 
@@ -75,13 +77,19 @@ function loadEnvFileIfExists(filePath, loadedKeys, options = {}) {
   }
 }
 
-function loadMobileEnvFiles() {
+/** targetVariant의 환경값을 process.env에 적용한다. dev는 development 파일을 우선하고, base 프로필은 .env만 적용한다. */
+function loadMobileEnvFiles(targetVariant = variant) {
   const loadedKeys = new Set();
+
+  if (process.env.MOBILE_ENV_PROFILE === "base") {
+    loadEnvFileIfExists(path.join(appRoot, ".env"), loadedKeys, { overrideExisting: true });
+    return;
+  }
 
   loadEnvFileIfExists(path.join(appRoot, ".env"), loadedKeys);
   loadEnvFileIfExists(path.join(appRoot, ".env.local"), loadedKeys, { overrideLoaded: true });
 
-  const variantEnvFileNames = envFileNamesByVariant[variant] || [`.env.${variant}`];
+  const variantEnvFileNames = envFileNamesByVariant[targetVariant] || [`.env.${targetVariant}`];
   for (const fileName of variantEnvFileNames) {
     loadEnvFileIfExists(path.join(appRoot, fileName), loadedKeys, { overrideExisting: true });
   }
@@ -440,6 +448,7 @@ function resolveProviderIdentity() {
   };
 }
 
+/** 앱 버전·식별자·로그인 설정을 iOS 프로젝트에 반영하며, Xcode의 빌드 번호는 변경하지 않는다. */
 function syncIos(input) {
   const iosProjectFiles = resolveIosProjectFiles();
   if (!iosProjectFiles) {
@@ -447,7 +456,6 @@ function syncIos(input) {
     return;
   }
 
-  const buildNumber = input.iosConfig?.buildNumber;
   let projectContent = fs.readFileSync(iosProjectFiles.projectPath, "utf8");
   projectContent = replaceRequired(
     projectContent,
@@ -456,15 +464,8 @@ function syncIos(input) {
     "iOS MARKETING_VERSION"
   );
   projectContent = replaceIosBundleIdentifiers(projectContent, input.bundleIdentifier);
-  if (buildNumber) {
-    projectContent = replaceRequired(
-      projectContent,
-      /CURRENT_PROJECT_VERSION = [^;]+;/g,
-      `CURRENT_PROJECT_VERSION = ${buildNumber};`,
-      "iOS CURRENT_PROJECT_VERSION"
-    );
-  }
   const didUpdateProject = writeIfChanged(iosProjectFiles.projectPath, projectContent);
+  const didUpdateBuildEnv = syncXcodeBuildEnv(path.join(appRoot, "ios"), variant);
   const didUpdateWidgetTargetMembership = syncFocusLiveActivityTargetMembership(
     iosProjectFiles.projectPath
   );
@@ -525,14 +526,6 @@ function syncIos(input) {
     `$1${escapedKakaoAppKey}$2`,
     "iOS Kakao app key"
   );
-  if (buildNumber) {
-    plistContent = replaceRequired(
-      plistContent,
-      /(<key>CFBundleVersion<\/key>\s*<string>)[^<]+(<\/string>)/,
-      "$1$(CURRENT_PROJECT_VERSION)$2",
-      "iOS CFBundleVersion"
-    );
-  }
   const didUpdatePlist = writeIfChanged(iosProjectFiles.plistPath, plistContent);
 
   let appDelegateContent = fs.readFileSync(iosProjectFiles.appDelegatePath, "utf8");
@@ -556,6 +549,7 @@ function syncIos(input) {
   console.log(
     `[native-sync] iOS ${
       didUpdateProject ||
+      didUpdateBuildEnv ||
       didUpdateWidgetTargetMembership ||
       didUpdatePlist ||
       didUpdateAppDelegate ||
@@ -565,9 +559,7 @@ function syncIos(input) {
         : "already synced"
     } (${iosProjectFiles.projectName}): ${
       input.bundleIdentifier
-    }, ${input.appScheme}, ${input.naverUrlScheme}, ${input.version}${
-      buildNumber ? ` (${buildNumber})` : ""
-    }`
+    }, ${input.appScheme}, ${input.naverUrlScheme}, ${input.version}`
   );
 }
 
@@ -656,10 +648,15 @@ async function main() {
     return;
   }
 
+  // 진행 바를 사용하는 빌드는 터미널에서 버전 확인만 먼저 받은 뒤 설정 동기화를 별도로 실행한다.
+  // 이 단계에서는 iOS·Android 프로젝트 파일을 변경하지 않는다.
+  if (process.argv.includes("--confirm-only")) {
+    return;
+  }
+
   if (!targetPlatform || targetPlatform === "ios") {
     syncIos({
       version: iosVersion,
-      iosConfig: variantConfig.ios,
       appName: identity.appName,
       appScheme: identity.appScheme,
       bundleIdentifier: identity.iosBundleIdentifier,
@@ -679,7 +676,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`[native-sync] ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-});
+// 빌드 명령 실행기에서도 같은 환경 로딩 순서를 사용하며, 모듈을 읽을 때 설정 동기화는 실행하지 않는다.
+module.exports = { loadMobileEnvFiles };
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`[native-sync] ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
+}

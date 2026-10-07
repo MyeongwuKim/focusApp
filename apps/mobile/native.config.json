@@ -4,8 +4,7 @@
     "appName": "데일로(T)",
     "appScheme": "mobile-test",
     "ios": {
-      "bundleIdentifier": "com.myeongwu.focushybrid.t",
-      "buildNumber": "25"
+      "bundleIdentifier": "com.myeongwu.focushybrid.t"
     },
     "android": {
       "package": "com.myeongwu.focushybrid.t",
@@ -17,8 +16,7 @@
     "appName": "데일로",
     "appScheme": "mobile",
     "ios": {
-      "bundleIdentifier": "com.myeongwu.focushybrid",
-      "buildNumberSource": "eas-remote"
+      "bundleIdentifier": "com.myeongwu.focushybrid"
     },
     "android": {
       "package": "com.myeongwu.focushybrid",

@@ -1,0 +1,61 @@
+/* 종이 배경과 z-index: 1인 화면 콘텐츠 사이에만 비·눈·안개를 표시한다. */
+.sketchbook-page > .paper-weather-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  contain: paint;
+}
+
+.paper-fog-puff {
+  position: absolute;
+  left: 0;
+  opacity: 0;
+  animation: paper-fog-drift var(--fog-duration) linear var(--fog-delay) infinite;
+  will-change: transform;
+}
+
+.paper-fog-puff img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: rotate(var(--fog-tilt));
+}
+
+@keyframes paper-fog-drift {
+  0% { transform: translateX(var(--fog-from)); opacity: 0; }
+  6% { opacity: var(--fog-alpha); }
+  94% { opacity: var(--fog-alpha); }
+  100% { transform: translateX(var(--fog-to)); opacity: 0; }
+}
+
+/* 종이 영역 안에서만 낙하하므로 상태바에는 입자가 나타나지 않는다. */
+.paper-falling-mark {
+  position: absolute;
+  top: -24px;
+  opacity: 0;
+  animation: paper-mark-fall var(--fall-duration) linear var(--fall-delay) infinite;
+  will-change: transform;
+}
+
+.paper-falling-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(var(--fall-rotation));
+}
+
+@keyframes paper-mark-fall {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  8% { opacity: var(--fall-alpha); }
+  50% { transform: translate3d(var(--fall-sway), calc(var(--fall-distance) * 0.5), 0); }
+  90% { opacity: var(--fall-alpha); }
+  100% { transform: translate3d(var(--fall-drift), var(--fall-distance), 0); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-fog-puff, .paper-falling-mark { animation: none; }
+}

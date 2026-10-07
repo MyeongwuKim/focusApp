@@ -27,6 +27,8 @@ export type SyncBridgeHandlerDeps = {
   handleTodoViewSync: (payload: TodoViewSyncPayload) => void;
   applyWeatherSettingsSync: (payload: WeatherSettingsRawPayload) => void;
   refreshNativeWeatherSnapshot: () => Promise<void>;
+  /** 웹의 종이 화면이 마운트되거나 다시 로드될 때 현재 비·눈·안개의 표시 상태를 다시 전달한다. */
+  dispatchCurrentWeatherVisualState: () => boolean;
   syncFocusLiveActivityAuth: (payload: AuthStateSyncPayload) => Promise<unknown>;
 };
 
@@ -63,6 +65,11 @@ export async function handleSyncBridgeMessage(
 
   if (messageType === "REST_WEATHER_SNAPSHOT_REQUEST") {
     await deps.refreshNativeWeatherSnapshot();
+    return true;
+  }
+
+  if (messageType === "REST_PAPER_WEATHER_STATE_REQUEST") {
+    deps.dispatchCurrentWeatherVisualState();
     return true;
   }
 

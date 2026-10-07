@@ -594,7 +594,7 @@ function applyDailyLogMutationCacheSync(
     void queryClient.invalidateQueries({
       queryKey: dailyLogsByMonthQueryKey(monthKey),
       exact: false,
-      refetchType: "active",
+      refetchType: "all",
     });
   }
 }

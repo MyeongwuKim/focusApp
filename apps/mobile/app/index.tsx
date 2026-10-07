@@ -51,6 +51,7 @@ import {
   type NativeWeatherSnapshot,
 } from "../src/features/weather/nativeWeather";
 import { routeWebViewBridgeMessage } from "../src/features/bridge/routeWebViewBridgeMessage";
+import { useWebWeatherBridge } from "../src/features/weather/hooks/useWebWeatherBridge";
 import type { RouteWebViewBridgeDeps } from "../src/features/bridge/routeWebViewBridgeMessage";
 import type { TodoViewSyncPayload } from "../src/features/bridge/handlers/syncBridgeHandlers";
 import {
@@ -190,6 +191,7 @@ export default function WebViewScreen() {
     },
     []
   );
+  const { dispatchCurrentWeatherVisualState, handleWeatherVisualStateChange } = useWebWeatherBridge(dispatchNativeBridgeEvent);
   const dispatchPendingFocusLiveActivityControlEvent = useCallback(() => {
     const pendingEvent = pendingFocusLiveActivityControlEventRef.current;
     if (!pendingEvent) {
@@ -888,6 +890,7 @@ export default function WebViewScreen() {
         handleTodoViewSync,
         applyWeatherSettingsSync,
         refreshNativeWeatherSnapshot,
+        dispatchCurrentWeatherVisualState,
         syncFocusLiveActivityAuth: (payload) =>
           callFocusLiveActivityModule("configure", payload),
       },
@@ -924,6 +927,7 @@ export default function WebViewScreen() {
       hybridApiOrigin,
       nativePlatform,
       refreshNativeWeatherSnapshot,
+      dispatchCurrentWeatherVisualState,
       requestRestNotificationPermission,
       sendBridgeResult,
       webUiReleaseChannel,
@@ -1002,7 +1006,7 @@ export default function WebViewScreen() {
           <View
             pointerEvents="none"
             style={styles.weatherLayer}>
-            <NativeWeatherLayer />
+            <NativeWeatherLayer renderWeatherInWeb onWeatherVisualStateChange={handleWeatherVisualStateChange} />
           </View>
 	          <WebView
             ref={webViewRef}
@@ -1069,6 +1073,7 @@ export default function WebViewScreen() {
                 webViewRef.current.injectJavaScript(applyScaleScript);
               }
               dispatchPendingWeatherSnapshot();
+              dispatchCurrentWeatherVisualState();
               void consumeAndDispatchPendingFocusLiveActivityControlEvent();
               void dispatchCurrentFocusLiveActivitySnapshot({ force: true });
               const pendingTargetPath = pendingNotificationPathRef.current;

@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from "react";
 import { getApiOrigin } from "../api/graphqlEndpoint";
 import { FaApple } from "react-icons/fa";
 import { SiKakaotalk, SiNaver } from "react-icons/si";
+import { NativePaperWeatherLayer } from "../features/weather/components/NativePaperWeatherLayer";
 import {
   getNativeAppScheme,
   getNativePlatform,
@@ -294,6 +295,7 @@ export function LoginPage() {
     <main className="app-root">
       <section className="app-shell mx-auto flex h-full w-full overflow-hidden">
         <div className="sketchbook-page sketchbook-login-page relative flex h-full min-h-0 w-full flex-col">
+          <NativePaperWeatherLayer />
           <header className="sketchbook-page-header sketchbook-header relative flex h-12 shrink-0 items-center justify-center px-2">
             <h1 className="sketchbook-page-header__title m-0">로그인</h1>
           </header>

@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ExpoLocation from 'expo-location';
 import {
   Animated,
   AppState,
   type AppStateStatus,
   Easing,
-  Pressable,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { SkiaWeatherOverlay } from '../SkiaWeatherOverlay';
+import { PAPER_FOG_HEIGHT_RATIO, PAPER_FOG_Y_RATIOS, PAPER_WEATHER_COLORS } from '../paperWeatherArtwork';
+import { PaperRainMark, PaperSnowMark } from './PaperWeatherMarks';
+import { PaperFogMark } from './PaperFogMarks';
+import { usePaperFogDrift } from '../hooks/usePaperFogDrift';
+import { PAPER_FOG_TRAVEL_MARGIN } from '../paperFogMotion';
+import type { WebWeatherVisualState } from '../hooks/useWebWeatherBridge';
 
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 const FOOTER_IMPACT_OFFSET = 52;
@@ -21,37 +25,22 @@ const SEOUL_WEATHER_URL =
 
 type WeatherEffect = 'rain' | 'snow' | 'thunder' | 'fog' | null;
 type WeatherMood = 'dreamy' | 'cinematic';
-type WeatherEffectOverride = 'auto' | WeatherEffect;
 type WeatherRenderer = 'legacy' | 'skia';
 
 type WeatherControlState = {
-  manualEffect: WeatherEffectOverride;
   weatherEnabled: boolean;
   weatherMood: WeatherMood;
   weatherParticleClarity: number;
 };
 
-type WeatherLiveState = {
-  weatherEffect: WeatherEffect;
-  weatherRenderer: WeatherRenderer;
-};
-
 const DEFAULT_WEATHER_CONTROL_STATE: WeatherControlState = {
-  manualEffect: 'auto',
   weatherEnabled: true,
   weatherMood: 'dreamy',
   weatherParticleClarity: 70,
 };
 
-const DEFAULT_WEATHER_LIVE_STATE: WeatherLiveState = {
-  weatherEffect: null,
-  weatherRenderer: 'legacy',
-};
-
 let weatherControlState: WeatherControlState = DEFAULT_WEATHER_CONTROL_STATE;
-let weatherLiveState: WeatherLiveState = DEFAULT_WEATHER_LIVE_STATE;
 const weatherControlListeners = new Set<(state: WeatherControlState) => void>();
-const weatherLiveListeners = new Set<(state: WeatherLiveState) => void>();
 
 function updateWeatherControlState(patch: Partial<WeatherControlState>) {
   weatherControlState = {
@@ -59,14 +48,6 @@ function updateWeatherControlState(patch: Partial<WeatherControlState>) {
     ...patch,
   };
   weatherControlListeners.forEach((listener) => listener(weatherControlState));
-}
-
-function updateWeatherLiveState(patch: Partial<WeatherLiveState>) {
-  weatherLiveState = {
-    ...weatherLiveState,
-    ...patch,
-  };
-  weatherLiveListeners.forEach((listener) => listener(weatherLiveState));
 }
 
 function useWeatherControlState() {
@@ -79,16 +60,10 @@ function useWeatherControlState() {
     };
   }, []);
 
-  const setManualEffect = useCallback((manualEffect: WeatherEffectOverride) => {
-    updateWeatherControlState({ manualEffect });
-  }, []);
-
   return {
-    manualEffect: state.manualEffect,
     weatherEnabled: state.weatherEnabled,
     weatherMood: state.weatherMood,
     weatherParticleClarity: state.weatherParticleClarity,
-    setManualEffect,
   };
 }
 
@@ -116,19 +91,6 @@ export function applyNativeWeatherSettings(input: {
   }
 }
 
-function useWeatherLiveState() {
-  const [state, setState] = useState<WeatherLiveState>(weatherLiveState);
-
-  useEffect(() => {
-    weatherLiveListeners.add(setState);
-    return () => {
-      weatherLiveListeners.delete(setState);
-    };
-  }, []);
-
-  return state;
-}
-
 type Particle = {
   left: number;
   top?: number;
@@ -138,8 +100,12 @@ type Particle = {
   opacity: number;
   drift: number;
   width?: number;
-  travel?: number;
+  /** 안개 입자에만 사용한다. true이면 작은 진한 안개 덩어리로 표시한다. */
+  foreground?: boolean;
+  /** 안개가 다음에 진입할 높이를 결정하는 난수 시드다. */
   seed?: number;
+  /** 안개 첫 통과의 시작 위치(0~1). 띠별 진입 시점을 분산한다. */
+  initialPhase?: number;
 };
 
 const EMPTY_PARTICLES: Particle[] = [];
@@ -148,11 +114,6 @@ const particleCache = new Map<string, Particle[]>();
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function noise01(seed: number) {
-  const value = Math.sin(seed * 12.9898) * 43758.5453;
-  return value - Math.floor(value);
 }
 
 function getCachedParticles(key: string, builder: () => Particle[]) {
@@ -226,6 +187,7 @@ async function fetchWeatherSnapshot(): Promise<{
   return { effect: weatherCodeToEffect(weatherCode) };
 }
 
+/** 종이 물방울을 화면 아래로 이동한다. 지연 후 반복하며 해제 시 예약과 애니메이션을 멈춘다. */
 function AnimatedRainDrop({
   left,
   delay,
@@ -233,7 +195,6 @@ function AnimatedRainDrop({
   size,
   opacity: baseOpacity,
   drift,
-  width: customWidth,
   viewportHeight,
 }: Particle & { viewportHeight: number }) {
   const progress = useRef(new Animated.Value(0)).current;
@@ -268,7 +229,7 @@ function AnimatedRainDrop({
     inputRange: [0, 0.3, 0.7, 1],
     outputRange: [0, drift * 0.35, drift, drift * 1.2],
   });
-  const rotate = `${clamp(10 + drift * 0.08, 8, 13)}deg`;
+  const rotate = '-7deg';
   const opacity = progress.interpolate({
     inputRange: [0, 0.06, 0.88, 1],
     outputRange: [0, baseOpacity, baseOpacity * 0.9, 0],
@@ -281,15 +242,17 @@ function AnimatedRainDrop({
         {
           left,
           height: size,
-          width: customWidth ?? Math.max(1.2, size * 0.055),
+          width: size,
           opacity,
           transform: [{ translateY }, { translateX }, { rotate }],
         },
-      ]}
-    />
+      ]}>
+      <PaperRainMark size={size} />
+    </Animated.View>
   );
 }
 
+/** 종이 눈 입자를 좌우로 흔들며 낙하시킨다. size가 큰 입자는 여섯 갈래 모양으로 표시한다. */
 function AnimatedSnowFlake({
   left,
   delay,
@@ -352,12 +315,12 @@ function AnimatedSnowFlake({
           left,
           width: size,
           height: size,
-          borderRadius: size / 2,
           opacity: animatedOpacity,
           transform: [{ translateY }, { translateX }, { rotate }, { scale }],
         },
-      ]}
-    />
+      ]}>
+      <PaperSnowMark size={size} />
+    </Animated.View>
   );
 }
 
@@ -615,82 +578,31 @@ function AnimatedRainSpray({
   );
 }
 
+/** Skia 실패 시 안개 그림을 표시한다. 화면 통과와 다음 그림의 높이 변경은 usePaperFogDrift에 맡긴다. */
 function AnimatedFogPatch({
-  left,
   top = 0,
   delay,
   duration,
-  size,
   opacity: baseOpacity,
-  drift,
   width: customWidth,
-  mood,
-  travel,
-  seed,
+  seed = 0,
+  initialPhase = 0,
+  foreground = false,
   viewportWidth,
-}: Particle & { mood: WeatherMood; viewportWidth: number }) {
-  const progress = useRef(new Animated.Value(0)).current;
-  const loopRef = useRef<Animated.CompositeAnimation | null>(null);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      progress.setValue(0);
-      loopRef.current = Animated.loop(
-        Animated.timing(progress, {
-          toValue: 1,
-          duration,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      );
-      loopRef.current.start();
-    }, delay);
-
-    return () => {
-      clearTimeout(timeoutId);
-      loopRef.current?.stop();
-      progress.setValue(0);
-    };
-  }, [delay, duration, progress]);
-
-  const fogWidth = customWidth ?? size * 2.1;
-  const fogHeight = size * 1.25;
-  const travelDistance = travel ?? viewportWidth + fogWidth + 180;
-  const translateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, travelDistance],
-  });
-  const translateY = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, -4, 0],
-  });
-  const scaleX = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.94, 1.08, 0.98],
-  });
-  const scaleY = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.92, 1.02, 0.96],
-  });
-  const opacity = progress.interpolate({
-    inputRange: [0, 0.08, 0.88, 1],
-    outputRange: [0, baseOpacity, baseOpacity * 0.9, 0],
-  });
-  const fogSeedBase = seed ?? left * 0.011 + top * 0.017 + size * 0.007;
-  const blobCount = mood === 'cinematic' ? 6 : 8;
-  const blobs = Array.from({ length: blobCount }, (_, index) => {
-    const seed1 = fogSeedBase + index * 1.37;
-    const seed2 = fogSeedBase + index * 2.11 + 0.4;
-    const seed3 = fogSeedBase + index * 2.79 + 0.9;
-    const blobWidth = fogWidth * (0.18 + noise01(seed1) * 0.22);
-    const blobHeight = fogHeight * (0.22 + noise01(seed2) * 0.3);
-    return {
-      left: fogWidth * (0.04 + noise01(seed1 + 2.1) * 0.82),
-      top: fogHeight * (0.08 + noise01(seed2 + 3.3) * 0.74),
-      width: blobWidth,
-      height: blobHeight,
-      opacity: 0.28 + noise01(seed3) * 0.5,
-    };
+  viewportHeight,
+}: Particle & { viewportWidth: number; viewportHeight: number }) {
+  const fogWidth = customWidth ?? viewportWidth * 1.5;
+  const fogHeight = fogWidth * PAPER_FOG_HEIGHT_RATIO;
+  const { translateX, translateY, opacity, top: animatedTop } = usePaperFogDrift({
+    width: fogWidth,
+    viewportWidth,
+    viewportHeight,
+    baseYRatio: (top + fogHeight * 0.5) / Math.max(1, viewportHeight),
+    seed,
+    initialPhase,
+    duration,
+    delay,
+    alpha: baseOpacity,
   });
 
   return (
@@ -698,38 +610,21 @@ function AnimatedFogPatch({
       style={[
         styles.fogPatchWrap,
         {
-          left,
-          top,
+          left: 0,
+          top: animatedTop,
           height: fogHeight,
           width: fogWidth,
-          transform: [{ translateX }, { translateY }, { scaleX }, { scaleY }],
+          opacity,
+          transform: [{ translateX }, { translateY }],
         },
       ]}
     >
-      {blobs.map((blob, index) => (
-        <Animated.View
-          key={`fog-blob-${blob.left.toFixed(1)}-${blob.top.toFixed(1)}-${index}`}
-          style={[
-            styles.fogBlob,
-            mood === 'cinematic' ? styles.fogBlobCinematic : styles.fogBlobDreamy,
-            {
-              left: blob.left,
-              top: blob.top,
-              width: blob.width,
-              height: blob.height,
-              borderRadius: Math.max(blob.width, blob.height),
-              opacity: opacity.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, blob.opacity],
-              }),
-            },
-          ]}
-        />
-      ))}
+      <PaperFogMark width={fogWidth} foreground={foreground} />
     </Animated.View>
   );
 }
 
+/** 무드·선명도에 맞춰 날씨 입자를 구성하고, Skia 렌더링 실패 시 기본 애니메이션으로 표시한다. */
 function WeatherOverlay({
   effect,
   mood,
@@ -763,24 +658,21 @@ function WeatherOverlay({
     if (effect !== 'rain' && effect !== 'thunder') {
       return EMPTY_PARTICLES;
     }
-    return getCachedParticles(`${profileBaseKey}:rain-streak`, () => {
-      const baseCount = isCinematic ? 30 : 58;
+    return getCachedParticles(`${profileBaseKey}:paper-rain`, () => {
+      const baseCount = isCinematic ? 16 : 24;
       const count = Math.max(8, Math.round(baseCount * clarityCountScale));
       return Array.from({ length: count }, () => ({
         left: Math.random() * width,
         delay: Math.random() * 2200,
         duration:
-          ((isCinematic ? 620 : 980) + Math.random() * (isCinematic ? 520 : 920)) / claritySpeedScale,
-        size: (isCinematic ? 28 : 18) + Math.random() * (isCinematic ? 24 : 20),
+          ((isCinematic ? 3200 : 4200) + Math.random() * 1800) / claritySpeedScale,
+        size: ((isCinematic ? 9 : 10) + Math.random() * 5) * clarityThicknessScale,
         opacity: clamp(
-          ((isCinematic ? 0.11 : 0.2) + Math.random() * (isCinematic ? 0.08 : 0.13)) * clarityAlphaScale,
+          ((isCinematic ? 0.2 : 0.28) + Math.random() * 0.14) * clarityAlphaScale,
           0.03,
           0.95
         ),
         drift: (isCinematic ? 8.5 : 11.5) + (Math.random() - 0.5) * (isCinematic ? 1.8 : 2.6),
-        width:
-          ((isCinematic ? 1.2 : 0.8) + Math.random() * (isCinematic ? 1.0 : 0.6)) *
-          clarityThicknessScale,
       }));
     });
   }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, clarityThicknessScale, effect, isCinematic, profileBaseKey, width]);
@@ -789,7 +681,7 @@ function WeatherOverlay({
       return EMPTY_PARTICLES;
     }
     return getCachedParticles(`${profileBaseKey}:snow-far`, () => {
-      const baseCount = isCinematic ? 12 : 32;
+      const baseCount = isCinematic ? 8 : 12;
       const count = Math.max(6, Math.round(baseCount * clarityCountScale));
       return Array.from({ length: count }, () => ({
         left: Math.random() * width,
@@ -811,16 +703,16 @@ function WeatherOverlay({
       return EMPTY_PARTICLES;
     }
     return getCachedParticles(`${profileBaseKey}:snow-near`, () => {
-      const baseCount = isCinematic ? 16 : 40;
+      const baseCount = isCinematic ? 10 : 16;
       const count = Math.max(8, Math.round(baseCount * clarityCountScale));
       return Array.from({ length: count }, () => ({
         left: Math.random() * width,
         delay: Math.random() * 2200,
         duration:
-          ((isCinematic ? 3400 : 5200) + Math.random() * (isCinematic ? 2200 : 3200)) / claritySpeedScale,
-        size: (isCinematic ? 2.8 : 4.5) + Math.random() * (isCinematic ? 4.2 : 7.6),
+          ((isCinematic ? 10000 : 13000) + Math.random() * 5000) / claritySpeedScale,
+        size: (isCinematic ? 8 : 9) + Math.random() * 5,
         opacity: clamp(
-          ((isCinematic ? 0.1 : 0.24) + Math.random() * (isCinematic ? 0.1 : 0.24)) * clarityAlphaScale,
+          ((isCinematic ? 0.24 : 0.32) + Math.random() * 0.14) * clarityAlphaScale,
           0.04,
           0.95
         ),
@@ -833,7 +725,7 @@ function WeatherOverlay({
       return EMPTY_PARTICLES;
     }
     return getCachedParticles(`${profileBaseKey}:snow-puff`, () => {
-      const baseCount = isCinematic ? 8 : 18;
+      const baseCount = isCinematic ? 4 : 7;
       const count = Math.max(3, Math.round(baseCount * clarityCountScale));
       return Array.from({ length: count }, () => ({
         left: Math.random() * width,
@@ -855,7 +747,7 @@ function WeatherOverlay({
       return EMPTY_PARTICLES;
     }
     return getCachedParticles(`${profileBaseKey}:rain-splash`, () => {
-      const baseCount = isCinematic ? 8 : 20;
+      const baseCount = isCinematic ? 4 : 7;
       const count = Math.max(4, Math.round(baseCount * clarityCountScale));
       return Array.from({ length: count }, () => ({
         left: Math.random() * width,
@@ -877,7 +769,7 @@ function WeatherOverlay({
       return EMPTY_PARTICLES;
     }
     return getCachedParticles(`${profileBaseKey}:rain-spray`, () => {
-      const baseCount = isCinematic ? 6 : 12;
+      const baseCount = isCinematic ? 3 : 5;
       const count = Math.max(4, Math.round(baseCount * clarityCountScale));
       return Array.from({ length: count }, () => ({
         left: Math.random() * width,
@@ -895,40 +787,39 @@ function WeatherOverlay({
     });
   }, [clarityAlphaScale, clarityCountScale, claritySpeedScale, effect, isCinematic, profileBaseKey, width]);
   const fogPatches = useMemo<Particle[]>(() => {
-    if (effect !== 'fog' || useSkiaRenderer) {
+    if (effect !== 'fog' || (useSkiaRenderer && !skiaFailed)) {
       return EMPTY_PARTICLES;
     }
-    return getCachedParticles(`${profileBaseKey}:fog-patch`, () => {
-      const baseCount = isCinematic ? 5 : 7;
-      const count = Math.max(4, Math.round(baseCount * clarityCountScale));
-      const fogAlphaScale = 0.58 + clarityRatio * 0.42;
-      return Array.from({ length: count }, () => {
-        const size = (isCinematic ? 62 : 78) + Math.random() * (isCinematic ? 72 : 92);
-        const fogWidth = size * (1.7 + Math.random() * 1.2);
-        const startOffset = 110;
-        const travelDistance = width + fogWidth + startOffset * 2;
+    return getCachedParticles(`${profileBaseKey}:${Math.round(height)}:paper-puff-fog`, () => {
+      const count = PAPER_FOG_Y_RATIOS.length;
+      const fogAlphaScale = 0.7 + clarityRatio * 0.55;
+      return Array.from({ length: count }, (_, index) => {
+        const foreground = index % 2 === 1;
+        const fogWidth = width * (foreground ? 0.3 + Math.random() * 0.09 : 0.4 + Math.random() * 0.12);
+        const speed = (foreground ? 18 : isCinematic ? 11 : 13) + Math.random() * 5;
+        const alphaBase = foreground
+          ? (isCinematic ? 0.48 : 0.56) + Math.random() * 0.08
+          : (isCinematic ? 0.3 : 0.36) + Math.random() * 0.055;
         return {
-          left: -fogWidth - startOffset + Math.random() * travelDistance,
-          top: height * (isCinematic ? 0.6 : 0.56) + Math.random() * height * 0.32,
-          delay: Math.random() * 3200,
-          duration:
-            ((isCinematic ? 32000 : 26000) + Math.random() * (isCinematic ? 22000 : 18000)) /
-            Math.max(claritySpeedScale * 0.6, 0.25),
-          size,
+          left: 0,
+          top: height * (PAPER_FOG_Y_RATIOS[index] + (Math.random() - 0.5) * 0.035) - fogWidth * PAPER_FOG_HEIGHT_RATIO * 0.5,
+          delay: Math.random() * 800,
+          duration: (width + fogWidth + PAPER_FOG_TRAVEL_MARGIN * 2) / speed * 1000,
+          size: fogWidth * PAPER_FOG_HEIGHT_RATIO,
           opacity: clamp(
-            ((isCinematic ? 0.09 : 0.15) + Math.random() * (isCinematic ? 0.06 : 0.09)) *
-              fogAlphaScale,
-            0.03,
-            0.55
+            alphaBase * fogAlphaScale,
+            0.08,
+            foreground ? 0.74 : 0.5
           ),
-          drift: (isCinematic ? 8 : 12) + Math.random() * (isCinematic ? 10 : 14),
+          drift: 0,
           width: fogWidth,
-          travel: travelDistance,
-          seed: Math.random() * 10000,
+          foreground,
+          seed: (index + 1) * 17.71,
+          initialPhase: (index + Math.random() * 0.4) / count,
         };
       });
     });
-  }, [clarityCountScale, clarityRatio, claritySpeedScale, effect, height, isCinematic, profileBaseKey, useSkiaRenderer, width]);
+  }, [clarityRatio, effect, height, isCinematic, profileBaseKey, skiaFailed, useSkiaRenderer, width]);
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const afterGlowOpacity = useRef(new Animated.Value(0)).current;
   const thunderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1102,7 +993,7 @@ function WeatherOverlay({
         ))}
       {effect === 'fog' &&
         fogPatches.map((particle, index) => (
-          <AnimatedFogPatch key={`fog-${index}`} {...particle} mood={mood} viewportWidth={width} />
+          <AnimatedFogPatch key={`fog-${index}`} {...particle} viewportWidth={width} viewportHeight={height} />
         ))}
       {effect === 'thunder' ? (
         <Animated.View
@@ -1127,53 +1018,17 @@ function WeatherOverlay({
   );
 }
 
-type WeatherDebugPanelProps = {
-  manualEffect: WeatherEffectOverride;
-  weatherEffect: WeatherEffect;
-  weatherRenderer: WeatherRenderer;
-  onSetManualEffect: (value: WeatherEffectOverride) => void;
-};
-
-function WeatherDebugPanel({
-  manualEffect,
-  weatherEffect,
-  weatherRenderer,
-  onSetManualEffect,
-}: WeatherDebugPanelProps) {
-  return (
-    <View style={styles.debugPanel}>
-      <Text style={styles.debugTitle}>날씨 테스트</Text>
-      <Text style={styles.debugSubtitle}>
-        현재: {manualEffect === 'auto' ? `자동(${weatherEffect ?? 'clear'})` : manualEffect ?? 'clear'}
-      </Text>
-      <Text style={styles.debugSubtitle}>렌더러: {weatherRenderer}</Text>
-      <View style={styles.debugButtonRow}>
-        {([
-          ['auto', '자동'],
-          [null, '맑음'],
-          ['rain', '비'],
-          ['snow', '눈'],
-          ['fog', '안개'],
-          ['thunder', '천둥'],
-        ] as const).map(([value, label]) => {
-          const isActive = manualEffect === value;
-          return (
-            <Pressable
-              key={label}
-              onPress={() => onSetManualEffect(value)}
-              style={[styles.debugButton, isActive ? styles.debugButtonActive : null]}>
-              <Text style={[styles.debugButtonText, isActive ? styles.debugButtonTextActive : null]}>
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-export function NativeWeatherLayer() {
+/**
+ * 위치 날씨와 앱 설정으로 효과를 결정한다. renderWeatherInWeb이면 비·눈·안개는 직접 그리지 않고
+ * onWeatherVisualStateChange로 결과를 전달해 웹의 종이 배경과 콘텐츠 사이에서 표시하게 한다.
+ */
+export function NativeWeatherLayer({
+  renderWeatherInWeb = false,
+  onWeatherVisualStateChange,
+}: {
+  renderWeatherInWeb?: boolean;
+  onWeatherVisualStateChange?: (state: WebWeatherVisualState) => void;
+}) {
   const { width, height } = useWindowDimensions();
   const [weatherEffect, setWeatherEffect] = useState<WeatherEffect>(null);
   const [overlayResetKey, setOverlayResetKey] = useState(0);
@@ -1181,15 +1036,11 @@ export function NativeWeatherLayer() {
   const [isAppActive, setIsAppActive] = useState(appStateRef.current === 'active');
   const overlayOpacity = useRef(new Animated.Value(appStateRef.current === 'active' ? 1 : 0)).current;
   const overlayFadeAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const { manualEffect, weatherEnabled, weatherMood, weatherParticleClarity } = useWeatherControlState();
+  const { weatherEnabled, weatherMood, weatherParticleClarity } = useWeatherControlState();
   const rendererOverride = process.env.EXPO_PUBLIC_WEATHER_RENDERER;
   const weatherRenderer: WeatherRenderer =
     rendererOverride === 'skia' || rendererOverride === 'legacy' ? rendererOverride : 'legacy';
-  const resolvedEffect = weatherEnabled && isAppActive
-    ? manualEffect === 'auto'
-      ? weatherEffect
-      : manualEffect
-    : null;
+  const resolvedEffect = weatherEnabled && isAppActive ? weatherEffect : null;
   const effectiveRenderer: WeatherRenderer =
     resolvedEffect === 'fog' || resolvedEffect === 'snow' ? 'skia' : weatherRenderer;
 
@@ -1269,12 +1120,17 @@ export function NativeWeatherLayer() {
     };
   }, [isAppActive, weatherEnabled]);
 
+  const webEffect = resolvedEffect === 'fog' || resolvedEffect === 'rain' || resolvedEffect === 'snow' ? resolvedEffect : null;
+  // 설정과 앱 활성 상태를 반영한 최종 효과만 웹 배경에 전달한다.
   useEffect(() => {
-    updateWeatherLiveState({
-      weatherEffect,
-      weatherRenderer: effectiveRenderer,
+    onWeatherVisualStateChange?.({
+      effect: webEffect,
+      mood: weatherMood,
+      particleClarity: weatherParticleClarity,
     });
-  }, [effectiveRenderer, weatherEffect]);
+  }, [onWeatherVisualStateChange, webEffect, weatherMood, weatherParticleClarity]);
+
+  if (renderWeatherInWeb && webEffect !== null) return null;
 
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: overlayOpacity }]}>
@@ -1291,84 +1147,15 @@ export function NativeWeatherLayer() {
   );
 }
 
-export function NativeWeatherDebugPanel() {
-  const { manualEffect, setManualEffect } = useWeatherControlState();
-  const { weatherEffect, weatherRenderer } = useWeatherLiveState();
-
-  if (!__DEV__) {
-    return null;
-  }
-
-  return (
-    <WeatherDebugPanel
-      manualEffect={manualEffect}
-      weatherEffect={weatherEffect}
-      weatherRenderer={weatherRenderer}
-      onSetManualEffect={setManualEffect}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
-  debugPanel: {
-    position: 'absolute',
-    top: 58,
-    right: 12,
-    zIndex: 40,
-    width: 252,
-    borderRadius: 12,
-    padding: 10,
-    gap: 6,
-    backgroundColor: 'rgba(16, 22, 31, 0.76)',
-  },
-  debugTitle: {
-    color: '#f1f6ff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  debugSubtitle: {
-    color: 'rgba(222, 234, 249, 0.9)',
-    fontSize: 11,
-  },
-  debugButtonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  debugButton: {
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(167, 188, 214, 0.35)',
-    backgroundColor: 'rgba(112, 134, 160, 0.22)',
-  },
-  debugButtonActive: {
-    borderColor: 'rgba(178, 219, 255, 0.9)',
-    backgroundColor: 'rgba(87, 171, 255, 0.35)',
-  },
-  debugButtonText: {
-    color: '#dde9f7',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  debugButtonTextActive: {
-    color: '#f4f9ff',
-  },
   rainDrop: {
     position: 'absolute',
     top: -120,
-    width: 2.2,
-    borderRadius: 2.6,
-    backgroundColor: 'rgba(176, 216, 255, 0.86)',
+    justifyContent: 'center',
   },
   snowFlake: {
     position: 'absolute',
     top: -32,
-    backgroundColor: 'rgba(246, 251, 255, 0.98)',
-    shadowColor: '#ffffff',
-    shadowOpacity: 0.75,
-    shadowRadius: 2,
   },
   thunderFlash: {
     backgroundColor: 'rgba(222, 235, 251, 0.44)',
@@ -1383,51 +1170,33 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   moodTintDreamy: {
-    backgroundColor: 'rgba(122, 174, 238, 0.08)',
+    backgroundColor: 'rgba(237, 216, 167, 0.015)',
   },
   moodTintCinematic: {
-    backgroundColor: 'rgba(20, 31, 48, 0.16)',
+    backgroundColor: 'rgba(99, 91, 76, 0.035)',
   },
   snowLandingPuff: {
     position: 'absolute',
     bottom: 14,
-    backgroundColor: 'rgba(244, 251, 255, 0.92)',
+    backgroundColor: PAPER_WEATHER_COLORS.snow,
     borderWidth: 0.9,
-    borderColor: 'rgba(236, 247, 255, 0.82)',
-    shadowColor: '#f3f9ff',
-    shadowOpacity: 0.52,
-    shadowRadius: 3.4,
+    borderColor: PAPER_WEATHER_COLORS.snowInk,
   },
   snowLandingSpeck: {
     position: 'absolute',
-    backgroundColor: 'rgba(246, 252, 255, 0.95)',
-    shadowColor: '#f6fbff',
-    shadowOpacity: 0.58,
-    shadowRadius: 2.2,
+    backgroundColor: PAPER_WEATHER_COLORS.snow,
   },
   rainSplash: {
     position: 'absolute',
     height: 2.4,
-    backgroundColor: 'rgba(196, 225, 255, 0.88)',
+    backgroundColor: PAPER_WEATHER_COLORS.rainInk,
   },
   rainSprayDrop: {
     position: 'absolute',
-    backgroundColor: 'rgba(203, 230, 255, 0.9)',
+    backgroundColor: PAPER_WEATHER_COLORS.rainInk,
   },
   fogPatchWrap: {
     position: 'absolute',
-  },
-  fogBlob: {
-    position: 'absolute',
-    shadowColor: '#dbe9f8',
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
-  },
-  fogBlobDreamy: {
-    backgroundColor: 'rgba(232, 241, 251, 0.62)',
-  },
-  fogBlobCinematic: {
-    backgroundColor: 'rgba(182, 199, 219, 0.48)',
   },
   thunderAfterglow: {
     backgroundColor: 'rgba(166, 195, 231, 0.18)',

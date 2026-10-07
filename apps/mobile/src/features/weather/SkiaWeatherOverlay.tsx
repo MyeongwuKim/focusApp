@@ -1,6 +1,10 @@
-import { Component, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { Component, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Canvas, Circle, Group, Image, Line, Rect, useImage } from '@shopify/react-native-skia';
+import { Canvas, Circle, Group } from '@shopify/react-native-skia';
+import { SkiaPaperRainMark, SkiaPaperSnowMark } from './components/PaperWeatherMarks';
+import { SkiaPaperFogMark } from './components/PaperFogMarks';
+import { PAPER_FOG_Y_RATIOS, PAPER_WEATHER_COLORS } from './paperWeatherArtwork';
+import { getPaperFogFrame } from './paperFogMotion';
 
 type WeatherEffect = 'rain' | 'snow' | 'thunder' | 'fog' | null;
 type WeatherMood = 'dreamy' | 'cinematic';
@@ -10,8 +14,8 @@ type RainParticle = {
   x: number;
   seed: number;
   speed: number;
+  /** 낙하 입자에서는 물방울 높이, 바닥 입자에서는 퍼지는 물결의 크기다. */
   length: number;
-  width: number;
   sway: number;
   alpha: number;
 };
@@ -27,14 +31,16 @@ type SnowParticle = {
 };
 
 type FogSprite = {
-  textureIndex: number;
+  /** 첫 통과의 시작 위치(0~1). 띠마다 진입 시점을 다르게 한다. */
   xPhase: number;
-  direction: 1 | -1;
+  /** 매 통과마다 다음 높이를 결정하는 난수 시드다. */
+  seed: number;
   yRatio: number;
   scale: number;
   speed: number;
-  sway: number;
   alpha: number;
+  /** true이면 작은 진한 안개 덩어리이며, 큰 옅은 덩어리보다 조금 빠르게 이동한다. */
+  foreground: boolean;
 };
 
 function wrap(value: number, max: number) {
@@ -73,6 +79,7 @@ class SkiaErrorBoundary extends Component<
   }
 }
 
+/** 비·눈의 낙하와 안개 띠의 가로 이동을 갱신해 스케치북에 맞춘 종이 모양으로 표시한다. */
 export function SkiaWeatherOverlay({
   effect,
   mood,
@@ -92,11 +99,13 @@ export function SkiaWeatherOverlay({
 }) {
   const [timeMs, setTimeMs] = useState(0);
   const [perfTier, setPerfTier] = useState<PerfTier>('high');
-  const fogTexture01 = useImage(require('./assets/fog/fog_tex_01.png'));
-  const fogTexture02 = useImage(require('./assets/fog/fog_tex_02.png'));
-  const fogTexture03 = useImage(require('./assets/fog/fog_tex_03.png'));
-  const fogTextures = [fogTexture01, fogTexture02, fogTexture03];
-  const isFogTexturesReady = fogTextures.every(Boolean);
+  /** 안개를 켠 뒤 첫 프레임의 시각. 성능 단계가 바뀌어도 경과 시간의 기준을 유지한다. */
+  const fogTimeOriginRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    fogTimeOriginRef.current = null;
+    if (effect === 'fog') setTimeMs(0);
+  }, [effect]);
 
   useEffect(() => {
     const tierScale =
@@ -146,7 +155,12 @@ export function SkiaWeatherOverlay({
       }
 
       if (!last || timestamp - last >= frameIntervalMs) {
-        setTimeMs(timestamp);
+        if (effect === 'fog') {
+          fogTimeOriginRef.current ??= timestamp;
+          setTimeMs(timestamp - fogTimeOriginRef.current);
+        } else {
+          setTimeMs(timestamp);
+        }
         last = timestamp;
       }
       rafId = requestAnimationFrame(loop);
@@ -167,33 +181,31 @@ export function SkiaWeatherOverlay({
 
   const rainParticles = useMemo<RainParticle[]>(() => {
     const isCinematic = mood === 'cinematic';
-    const baseCount = isCinematic ? 30 : 58;
+    const baseCount = isCinematic ? 16 : 24;
     const count = Math.max(8, Math.round(baseCount * rainClarityCountScale));
     return Array.from({ length: count }, () => ({
       x: Math.random() * width,
       seed: Math.random() * 1000,
-      speed: ((isCinematic ? 430 : 310) + Math.random() * (isCinematic ? 210 : 180)) * claritySpeedScale,
-      length: (isCinematic ? 26 : 18) + Math.random() * (isCinematic ? 24 : 20),
-      width: ((isCinematic ? 1.0 : 0.7) + Math.random() * (isCinematic ? 1.0 : 0.6)) * clarityThicknessScale,
+      speed: ((isCinematic ? 190 : 145) + Math.random() * 95) * claritySpeedScale,
+      length: (isCinematic ? 9 : 10) + Math.random() * 5,
       sway: (isCinematic ? 0.6 : 0.8) + Math.random() * (isCinematic ? 1.2 : 1.8),
       alpha: clamp(
-        ((isCinematic ? 0.1 : 0.2) + Math.random() * (isCinematic ? 0.08 : 0.14)) * clarityAlphaScale,
+        ((isCinematic ? 0.2 : 0.28) + Math.random() * 0.14) * clarityAlphaScale,
         0.03,
         0.95
       ),
     }));
-  }, [clarityAlphaScale, rainClarityCountScale, claritySpeedScale, clarityThicknessScale, mood, width]);
+  }, [clarityAlphaScale, rainClarityCountScale, claritySpeedScale, mood, width]);
 
   const rainSplashes = useMemo<RainParticle[]>(() => {
     const isCinematic = mood === 'cinematic';
-    const baseCount = isCinematic ? 8 : 20;
+    const baseCount = isCinematic ? 4 : 7;
     const count = Math.max(4, Math.round(baseCount * rainClarityCountScale));
     return Array.from({ length: count }, () => ({
       x: Math.random() * width,
       seed: Math.random() * 1000,
       speed: ((isCinematic ? 1.4 : 1.0) + Math.random() * (isCinematic ? 1.9 : 2.4)) * claritySpeedScale,
       length: (isCinematic ? 7 : 10) + Math.random() * (isCinematic ? 8 : 12),
-      width: 1,
       sway: (isCinematic ? 3 : 5) + Math.random() * (isCinematic ? 7 : 12),
       alpha: clamp(
         ((isCinematic ? 0.07 : 0.14) + Math.random() * (isCinematic ? 0.08 : 0.14)) * clarityAlphaScale,
@@ -205,8 +217,8 @@ export function SkiaWeatherOverlay({
 
   const snowParticles = useMemo<SnowParticle[]>(() => {
     const isCinematic = mood === 'cinematic';
-    const farBaseCount = isCinematic ? 8 : 16;
-    const nearBaseCount = isCinematic ? 12 : 20;
+    const farBaseCount = isCinematic ? 8 : 12;
+    const nearBaseCount = isCinematic ? 10 : 16;
     const farCount = Math.max(6, Math.round(farBaseCount * snowClarityCountScale));
     const nearCount = Math.max(8, Math.round(nearBaseCount * snowClarityCountScale));
     const far = Array.from({ length: farCount }, (_, index) => {
@@ -243,10 +255,10 @@ export function SkiaWeatherOverlay({
         x: r1 * width,
         seed: r2 * 1000,
         speed: ((isCinematic ? 44 : 38) + r3 * (isCinematic ? 20 : 18)) * claritySpeedScale,
-        radius: (isCinematic ? 1.7 : 2.4) + r4 * (isCinematic ? 2.2 : 2.8),
-        sway: (isCinematic ? 3.6 : 5.0) + r5 * (isCinematic ? 4.4 : 6.2),
+        radius: (isCinematic ? 4 : 4.5) + r4 * 2.5,
+        sway: (isCinematic ? 8 : 12) + r5 * 10,
         alpha: clamp(
-          ((isCinematic ? 0.09 : 0.19) + r6 * (isCinematic ? 0.08 : 0.12)) * clarityAlphaScale,
+          ((isCinematic ? 0.24 : 0.32) + r6 * 0.14) * clarityAlphaScale,
           0.04,
           0.82
         ),
@@ -258,38 +270,35 @@ export function SkiaWeatherOverlay({
 
   const fogSprites = useMemo<FogSprite[]>(() => {
     const isCinematic = mood === 'cinematic';
-    const fogAlphaScale = 0.86 + clarityRatio * 0.5;
-    const spriteCount = isCinematic ? 14 : 18;
-    const span = Math.max(width, 360) * 3.2 + 1800;
+    const fogAlphaScale = 0.7 + clarityRatio * 0.55;
+    const spriteCount = PAPER_FOG_Y_RATIOS.length;
 
     return Array.from({ length: spriteCount }, (_, index) => {
       const seed = (index + 1) * 17.71;
       const r1 = seededNoise(seed + 0.13);
-      const r2 = seededNoise(seed + 0.91);
       const r3 = seededNoise(seed + 1.77);
-      const r4 = seededNoise(seed + 2.66);
       const r5 = seededNoise(seed + 3.44);
       const r6 = seededNoise(seed + 4.21);
       const r7 = seededNoise(seed + 5.08);
-      const r8 = seededNoise(seed + 6.14);
 
-      const yRatio = 0.07 + r1 * 0.86;
-      const centerWeight = 1 - Math.min(1, Math.abs(yRatio - 0.5) * 1.35);
-      const alphaBase = (isCinematic ? 0.13 : 0.18) + r5 * (isCinematic ? 0.08 : 0.11);
-      const alpha = clamp(alphaBase * fogAlphaScale * (0.86 + centerWeight * 0.34), 0.06, 0.3);
+      const yRatio = PAPER_FOG_Y_RATIOS[index] + (r1 - 0.5) * 0.035;
+      const foreground = index % 2 === 1;
+      const alphaBase = foreground
+        ? (isCinematic ? 0.48 : 0.56) + r5 * 0.08
+        : (isCinematic ? 0.3 : 0.36) + r5 * 0.055;
+      const alpha = clamp(alphaBase * fogAlphaScale, 0.08, foreground ? 0.74 : 0.5);
 
       return {
-        textureIndex: Math.min(2, Math.floor(r2 * 3)),
-        xPhase: r3 * span,
-        direction: r4 > 0.5 ? 1 : -1,
+        xPhase: (index + r3 * 0.4) / spriteCount,
+        seed,
         yRatio,
-        scale: (isCinematic ? 0.78 : 0.9) + r6 * (isCinematic ? 0.56 : 0.72),
-        speed: (isCinematic ? 0.9 : 1.1) + r7 * (isCinematic ? 1.8 : 2.2),
-        sway: (isCinematic ? 4 : 5.5) + r8 * (isCinematic ? 8 : 11),
+        scale: foreground ? 0.3 + r6 * 0.09 : 0.4 + r6 * 0.12,
+        speed: (foreground ? 18 : isCinematic ? 11 : 13) + r7 * 5,
         alpha,
+        foreground,
       };
     });
-  }, [clarityRatio, mood, width]);
+  }, [clarityRatio, mood]);
 
   if (!effect) {
     return null;
@@ -311,19 +320,14 @@ export function SkiaWeatherOverlay({
                   particle.x +
                   Math.sin(t * 1.7 + particle.seed) * particle.sway +
                   y * wind;
-                const p1 = { x, y };
-                const p2 = { x: x + particle.length * 0.18, y: y + particle.length };
                 return (
-                  <Line
-                    key={`rain-streak-${index}`}
-                    p1={p1}
-                    p2={p2}
-                    color={
-                      mood === 'cinematic'
-                        ? `rgba(168,206,244,${particle.alpha})`
-                        : `rgba(196,229,255,${particle.alpha})`
-                    }
-                    strokeWidth={particle.width}
+                  <SkiaPaperRainMark
+                    key={`rain-drop-${index}`}
+                    x={x}
+                    y={y}
+                    size={particle.length * clarityThicknessScale}
+                    opacity={particle.alpha}
+                    rotation={-0.12}
                   />
                 );
               })
@@ -343,35 +347,22 @@ export function SkiaWeatherOverlay({
                 const baseX = particle.x + Math.sin(t * 1.3 + particle.seed) * 6;
                 return (
                   <Group key={`rain-splash-${index}`}>
-                    <Circle
-                      cx={baseX}
-                      cy={baseY}
-                      r={ringRadius}
-                      color={
-                        mood === 'cinematic'
-                          ? `rgba(171,209,245,${opacity})`
-                          : `rgba(198,231,255,${opacity})`
-                      }
-                    />
+                    <Group transform={[{ translateX: baseX }, { translateY: baseY }, { scaleY: 0.28 }]} opacity={opacity}>
+                      <Circle r={ringRadius} color={PAPER_WEATHER_COLORS.rainInk} style="stroke" strokeWidth={1.2} />
+                    </Group>
                     <Circle
                       cx={baseX - particle.sway * pulse}
                       cy={baseY - sprayLift}
                       r={Math.max(0.8, particle.length * 0.08)}
-                      color={
-                        mood === 'cinematic'
-                          ? `rgba(176,208,234,${opacity * 0.86})`
-                          : `rgba(211,236,255,${opacity * 0.86})`
-                      }
+                      color={PAPER_WEATHER_COLORS.rainInk}
+                      opacity={opacity * 0.86}
                     />
                     <Circle
                       cx={baseX + particle.sway * pulse}
                       cy={baseY - sprayLift * 0.9}
                       r={Math.max(0.8, particle.length * 0.08)}
-                      color={
-                        mood === 'cinematic'
-                          ? `rgba(176,208,234,${opacity * 0.86})`
-                          : `rgba(211,236,255,${opacity * 0.86})`
-                      }
+                      color={PAPER_WEATHER_COLORS.rainInk}
+                      opacity={opacity * 0.86}
                     />
                   </Group>
                 );
@@ -393,57 +384,39 @@ export function SkiaWeatherOverlay({
                   particle.sway;
                 const x = particle.x + driftWave;
                 return (
-                  <Circle
+                  <SkiaPaperSnowMark
                     key={`snow-${index}`}
-                    cx={x}
-                    cy={y}
-                    r={particle.radius}
-                    color={
-                      mood === 'cinematic'
-                        ? `rgba(224,237,248,${finalAlpha})`
-                        : `rgba(246,251,255,${finalAlpha})`
-                    }
+                    x={x}
+                    y={y}
+                    size={particle.radius * 2}
+                    opacity={finalAlpha}
+                    rotation={Math.sin(t * 0.65 + particle.seed) * 0.35}
+                    flake={particle.depth === 'near'}
                   />
                 );
               })
             : null}
 
-          {effect === 'fog' && isFogTexturesReady ? (
-            <>
-              <Rect
-                x={0}
-                y={0}
-                width={width}
-                height={height}
-                color={mood === 'cinematic' ? 'rgba(188,205,224,0.06)' : 'rgba(222,234,248,0.085)'}
-              />
-              {fogSprites.map((sprite, index) => {
-                const texture = fogTextures[sprite.textureIndex];
-                if (!texture) {
-                  return null;
-                }
-                const texW = texture.width();
-                const texH = texture.height();
-                if (texW <= 0 || texH <= 0) {
-                  return null;
-                }
-
+          {effect === 'fog'
+            ? fogSprites.map((sprite, index) => {
                 const drawW = width * sprite.scale;
-                const drawH = drawW * (texH / texW);
-                const travel = width + drawW * 2.4;
-                const progress = wrap(t * sprite.speed + sprite.xPhase, travel);
-                const x = sprite.direction === 1 ? progress - drawW * 1.2 : width - progress - drawW * 1.2;
-                const yBase = height * sprite.yRatio - drawH * 0.5;
-                const y = yBase + Math.sin(t * 0.24 + sprite.xPhase * 0.013) * sprite.sway;
+                const { x, y, opacity } = getPaperFogFrame({
+                  elapsedSeconds: t,
+                  width: drawW,
+                  viewportWidth: width,
+                  viewportHeight: height,
+                  initialPhase: sprite.xPhase,
+                  speed: sprite.speed,
+                  yRatio: sprite.yRatio,
+                  seed: sprite.seed,
+                  alpha: sprite.alpha,
+                });
 
                 return (
-                  <Group key={`fog-sprite-${index}`} opacity={sprite.alpha}>
-                    <Image image={texture} x={x} y={y} width={drawW} height={drawH} fit="fill" />
-                  </Group>
+                  <SkiaPaperFogMark key={`fog-strip-${index}`} x={x} y={y} width={drawW} opacity={opacity} foreground={sprite.foreground} />
                 );
-              })}
-            </>
-          ) : null}
+              })
+            : null}
         </Canvas>
       </SkiaErrorBoundary>
     </View>

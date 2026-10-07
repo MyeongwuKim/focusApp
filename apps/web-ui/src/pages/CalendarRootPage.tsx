@@ -51,7 +51,14 @@ export function CalendarRootPage({ showHeader = true }: CalendarRootPageProps) {
     },
     [viewMonth]
   );
-  const { monthlyLogsQuery } = useDailyLogQuery({ monthKeys });
+  const { monthlyLogsQuery } = useDailyLogQuery({
+    monthKeys,
+    monthlyLogsOptions: {
+      staleTime: 0,
+      refetchOnMount: "always",
+      refetchOnWindowFocus: true,
+    },
+  });
   const { monthlyLogs } = monthlyLogsQuery;
 
   const logsByDate = useMemo(() => {

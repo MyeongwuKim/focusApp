@@ -23,7 +23,7 @@ type MonthlyLogsQueryOptions = {
   enabled?: boolean;
   staleTime?: number;
   gcTime?: number;
-  refetchOnMount?: boolean;
+  refetchOnMount?: boolean | "always";
   refetchOnWindowFocus?: boolean;
 };
 

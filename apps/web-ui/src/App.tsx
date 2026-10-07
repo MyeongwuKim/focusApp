@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DateTodosRoutePage } from "./pages/DateTodosRoutePage";
 import { TodayTasksRootPage } from "./pages/TodayTasksRootPage";
+import { NativePaperWeatherLayer } from "./features/weather/components/NativePaperWeatherLayer";
 import { LoginPage } from "./pages/LoginPage";
 import { DrawerMenu } from "./components/DrawerMenu";
 import { PageHeader } from "./components/PageHeader";
@@ -654,6 +655,9 @@ function App() {
 	                    style={getOverlayEntryStyle(isActiveEntry)}
 	                    {...getOverlayTouchHandlers(entry, isActiveEntry)}
 	                  >
+                    {entry.route === "calendar" || isCalendarDateTasksEntry || isSavedTasksEntry ? (
+                      <NativePaperWeatherLayer />
+                    ) : null}
                     <PageHeader
                       route={entry.route}
                       forcedPathname={entry.pathname}

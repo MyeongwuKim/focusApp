@@ -18,6 +18,7 @@ import { useHorizontalSwipeGesture } from "../hooks/useHorizontalSwipeGesture";
 import { useAppNavigation } from "../providers/AppNavigationProvider";
 import { formatDateKey } from "../utils/holidays";
 import { DateTodosRoutePage } from "./DateTodosRoutePage";
+import { NativePaperWeatherLayer } from "../features/weather/components/NativePaperWeatherLayer";
 
 type TodayTasksRootPageProps = {
   isActive: boolean;
@@ -242,6 +243,7 @@ export function TodayTasksRootPage({ isActive, search }: TodayTasksRootPageProps
           aria-hidden="true"
         >
           <div className="sketchbook-page sketchbook-page--tasks relative flex h-full min-h-0 flex-1 flex-col px-1.5 py-1.5">
+            <NativePaperWeatherLayer />
             <PageHeader
               route="dateTasks"
               forcedPathname="/date-tasks"
@@ -270,6 +272,7 @@ export function TodayTasksRootPage({ isActive, search }: TodayTasksRootPageProps
           completePageTurn();
         }}
       >
+        <NativePaperWeatherLayer />
         <PageHeader
           route="dateTasks"
           forcedPathname="/date-tasks"

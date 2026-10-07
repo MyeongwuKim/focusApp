@@ -19,13 +19,11 @@ const APP_VERSION_FILE = join(APP_ROOT, "app-version.json");
 const ENV_FILE_NAMES_BY_VARIANT: Record<string, string[]> = {
   prod: [".env.production", ".env.prod"],
   production: [".env.production", ".env.prod"],
-  dev: [".env.test", ".env.dev"],
+  dev: [".env.development"],
   test: [".env.test"],
 };
 
 type NativePlatformConfig = {
-  buildNumberSource?: string;
-  buildNumber?: string;
   versionCodeSource?: string;
   versionCode?: number;
   bundleIdentifier?: string;
@@ -118,6 +116,12 @@ function resolveAppVariant() {
 function loadMobileEnvFiles() {
   const loadedKeys = new Set<string>();
 
+  // local·device 명령은 앱의 dev 식별자를 유지하면서 .env 값만 빌드·실행에 사용한다.
+  if (process.env.MOBILE_ENV_PROFILE === "base") {
+    loadEnvFileIfExists(join(APP_ROOT, ".env"), loadedKeys, { overrideExisting: true });
+    return;
+  }
+
   loadEnvFileIfExists(join(APP_ROOT, ".env"), loadedKeys);
   loadEnvFileIfExists(join(APP_ROOT, ".env.local"), loadedKeys, { overrideLoaded: true });
 
@@ -171,6 +175,33 @@ function resolveVersionEnvironment(appVariant: string): AppVersionEnvironment {
   throw new Error(`[mobile] Unknown APP_VARIANT: ${appVariant}`);
 }
 
+/**
+ * 명시한 Expo/EAS 플랫폼을 우선하고, Xcode에서 직접 빌드할 때는 iPhone SDK 환경값으로 iOS를 판정한다.
+ * 어느 플랫폼인지 확인할 수 없으면 null을 반환해 서로 다른 플랫폼 버전을 임의로 선택하지 않는다.
+ */
+function resolveBuildPlatform(): "ios" | "android" | null {
+  const explicitPlatform = (
+    process.env.EAS_BUILD_PLATFORM?.trim() || process.env.APP_PLATFORM?.trim() || ""
+  ).toLowerCase();
+  if (explicitPlatform === "ios" || explicitPlatform === "android") {
+    return explicitPlatform;
+  }
+
+  const xcodePlatform = [
+    process.env.PLATFORM_NAME,
+    process.env.EFFECTIVE_PLATFORM_NAME,
+    process.env.SDK_NAME,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  if (xcodePlatform.includes("iphoneos") || xcodePlatform.includes("iphonesimulator")) {
+    return "ios";
+  }
+
+  return null;
+}
+
 function resolveExpoVersion(appVersionConfig: AppVersionConfig, environment: AppVersionEnvironment) {
   const iosVersion = readConfigString(appVersionConfig[environment]?.ios);
   const androidVersion = readConfigString(appVersionConfig[environment]?.android);
@@ -182,9 +213,7 @@ function resolveExpoVersion(appVersionConfig: AppVersionConfig, environment: App
     );
   }
 
-  const buildPlatform = (
-    process.env.EAS_BUILD_PLATFORM?.trim() || process.env.APP_PLATFORM?.trim() || ""
-  ).toLowerCase();
+  const buildPlatform = resolveBuildPlatform();
   if (buildPlatform === "ios") {
     return iosVersion;
   }
@@ -254,7 +283,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     (isTestVariant ? TEST_APP_SCHEME : PROD_APP_SCHEME);
   const appVersion = resolveExpoVersion(appVersionConfig, versionEnvironment);
   const testVersionConfig = isTestVariant ? nativeConfig.test : undefined;
-  const testIosBuildNumber = testVersionConfig?.ios?.buildNumber?.trim();
   const testAndroidVersionCode = testVersionConfig?.android?.versionCode;
 
   if (!kakaoAppKey) {
@@ -306,6 +334,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         displayName: appName,
       },
     ]);
+  }
+
+  if (!hasPlugin(plugins, "./plugins/with-xcode-build-env")) {
+    plugins.push(["./plugins/with-xcode-build-env", { variant: appVariant }]);
   }
 
   const expoBuildPropertiesPluginIndex = plugins.findIndex((plugin) => {
@@ -371,7 +403,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         ...(config.ios?.infoPlist ?? {}),
         NSSupportsLiveActivities: true,
       },
-      ...(testIosBuildNumber ? { buildNumber: testIosBuildNumber } : {}),
     },
     android: {
       ...(config.android ?? {}),

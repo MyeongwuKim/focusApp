@@ -306,6 +306,54 @@ describe("daily-log mutations optimistic cache flow", () => {
     expect(hasTaskCollectionsInvalidation).toBe(true);
   });
 
+  it("할 일 추가 성공 시 비활성 월간 캐시도 갱신하고 다시 조회한다", async () => {
+    const dateKey = "2026-04-25";
+    const monthKey = "2026-04";
+    const initialLog = buildDailyLogDetail({ dateKey });
+    const successLog = buildDailyLogDetail({
+      dateKey,
+      todo: {
+        id: "todo-2",
+        content: "캘린더에 표시할 할 일",
+      },
+    });
+
+    vi.mocked(dailyLogApi.addTodosToDailyLog).mockResolvedValueOnce(successLog);
+
+    const queryClient = createQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    queryClient.setQueryData(dailyLogByDateQueryKey(dateKey), initialLog);
+    queryClient.setQueryData(dailyLogsByMonthQueryKey(monthKey), [toMonthlySnapshot(initialLog)]);
+
+    const { result } = renderHook(() => useAddTodosToDailyLogMutation(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await result.current.mutateAsync({
+      dateKey,
+      items: [{ content: "캘린더에 표시할 할 일" }],
+    });
+
+    const monthCache = queryClient.getQueryData<MonthlyLogSnapshot[]>(
+      dailyLogsByMonthQueryKey(monthKey)
+    );
+    expect(monthCache?.[0]?.todoCount).toBe(1);
+    expect(monthCache?.[0]?.todos[0]?.content).toBe("캘린더에 표시할 할 일");
+
+    const hasInactiveMonthRefetch = invalidateSpy.mock.calls.some(([arg]) => {
+      if (!arg || typeof arg !== "object") {
+        return false;
+      }
+      const target = arg as { queryKey?: readonly unknown[]; refetchType?: string; exact?: boolean };
+      return (
+        JSON.stringify(target.queryKey) === JSON.stringify(dailyLogsByMonthQueryKey(monthKey)) &&
+        target.refetchType === "all" &&
+        target.exact === false
+      );
+    });
+    expect(hasInactiveMonthRefetch).toBe(true);
+  });
+
   it("시작 처리 시 서버 응답 전에도 낙관적 캐시를 반영한다", async () => {
     const dateKey = "2026-04-25";
     const monthKey = "2026-04";

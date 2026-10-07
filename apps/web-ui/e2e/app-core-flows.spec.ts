@@ -503,7 +503,9 @@ async function setupAuthenticatedMockedApp(page: Page, options?: SetupOptions) {
 
   await page.addInitScript(
     ([key, value, permission]) => {
-      window.localStorage.setItem(key, value);
+      const auth = JSON.parse(value);
+      auth.state.apiOrigin = window.location.origin;
+      window.localStorage.setItem(key, JSON.stringify(auth));
 
       function MockNotification(this: { onclick: (() => void) | null }) {
         this.onclick = null;
@@ -526,6 +528,93 @@ async function setupAuthenticatedMockedApp(page: Page, options?: SetupOptions) {
 }
 
 test.describe("core app flow", () => {
+  for (const [effect, label] of [["fog", "안개"], ["rain", "비"], ["snow", "눈"]] as const) {
+    test(`배경 ${label} 효과를 켜도 할일과 캘린더를 조작할 수 있고 끄면 제거됨`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const { todayKey } = await setupAuthenticatedMockedApp(page);
+      // 로그인 안내 요청도 샘플 응답으로 처리해 실제 API의 인증 만료 응답이 테스트에 섞이지 않게 한다.
+      await page.route("**/api/motivation/message**", (route) => route.fulfill({
+        json: { message: "테스트 안내", ttlSeconds: 60 },
+      }));
+      await page.route("**/graphql", async (route) => {
+        const query = String(route.request().postDataJSON()?.query ?? "");
+        const emptyLists = ["RoutineTemplateWeekdayAssignments", "RoutineTemplates", "TaskCollections"];
+        if (emptyLists.some((name) => query.includes(`query ${name}`))) {
+          await route.fulfill({ json: { data: {
+            routineTemplateWeekdayAssignments: [], routineTemplates: [], taskCollections: [],
+          } } });
+        } else {
+          await route.fallback();
+        }
+      });
+      const closeToasts = async () => {
+        const closeButtons = page.getByRole("button", { name: "토스트 닫기", exact: true });
+        // 자동으로 사라지는 알림도 있으므로 현재 표시된 닫기 버튼만 한 번에 눌러 촬영 화면을 정리한다.
+        await closeButtons.evaluateAll((buttons) => buttons.forEach((button) => (button as HTMLButtonElement).click()));
+      };
+      const setWeather = async (effect: "fog" | "rain" | "snow" | null) => {
+        await page.evaluate((nextEffect) => {
+          window.dispatchEvent(new CustomEvent("focus-hybrid-native-bridge", {
+            detail: { type: "RN_PAPER_WEATHER_STATE", payload: { effect: nextEffect, mood: "dreamy", particleClarity: 70 } },
+          }));
+        }, effect);
+      };
+
+      await page.goto(`/#/date-tasks?date=${todayKey}`);
+      const startButton = page.getByRole("button", { name: "집중 시작", exact: true });
+      await expect(startButton).toBeVisible();
+      await setWeather(effect);
+      const weatherLayer = page.locator(".sketchbook-root-page-turn-sheet > .paper-weather-layer");
+      const marks = weatherLayer.locator(effect === "fog" ? "img" : ".paper-falling-mark");
+      if (effect === "fog") await expect(marks).toHaveCount(3);
+      else await expect.poll(() => marks.count()).toBeGreaterThanOrEqual(10);
+      await expect(weatherLayer).toHaveCSS("pointer-events", "none");
+      await expect(weatherLayer).toHaveCSS("z-index", "0");
+      const movingMark = marks.first();
+      const initialBox = await movingMark.boundingBox();
+      if (!initialBox) throw new Error("날씨 입자의 표시 영역이 없음");
+      await expect.poll(async () => {
+        const nextBox = await movingMark.boundingBox();
+        return nextBox ? Math.abs(effect === "fog" ? nextBox.x - initialBox.x : nextBox.y - initialBox.y) : 0;
+      }).toBeGreaterThan(5);
+      // 글씨·조작부를 포함한 콘텐츠가 날씨 효과보다 앞에 있는지 실제 브라우저의 계산된 스타일로 확인한다.
+      await expect(page.locator(".sketchbook-root-page-turn-sheet > .relative").last()).toHaveCSS("z-index", "1");
+      await startButton.click();
+      await expect(page.getByRole("button", { name: "집중 일시정지", exact: true })).toBeVisible();
+      const gesture = page.locator(".todo-item-card__gesture-zone").first();
+      const box = await gesture.boundingBox();
+      if (!box) throw new Error("할 일 그리기 영역이 표시되지 않음");
+      await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.3);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.9, { steps: 8 });
+      await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.12, { steps: 12 });
+      await page.mouse.up();
+      await expect(page.getByRole("button", { name: "완료된 할 일", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "건너뛰기", exact: true }).click();
+      await closeToasts();
+      await expect.poll(() => weatherLayer.locator("img").evaluateAll((images) =>
+        images.every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
+      )).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`paper-${effect}-tasks.png`) });
+      await setWeather(null);
+      await expect(page.locator(".paper-weather-layer")).toHaveCount(0);
+
+      await page.goto("/#/calendar");
+      const todayCell = page.locator(`[data-calendar-date-key="${todayKey}"]`);
+      await expect(todayCell).toBeVisible();
+      await setWeather(effect);
+      const calendarWeather = page.locator(".sketchbook-page--calendar > .paper-weather-layer");
+      if (effect === "fog") await expect(calendarWeather.locator("img")).toHaveCount(3);
+      else await expect.poll(() => calendarWeather.locator(".paper-falling-mark").count()).toBeGreaterThanOrEqual(10);
+      await expect(calendarWeather).toHaveCSS("z-index", "0");
+      await closeToasts();
+      await page.screenshot({ path: testInfo.outputPath(`paper-${effect}-calendar.png`) });
+      await todayCell.click();
+      await expect(page).toHaveURL(/#\/date-tasks\/calendar\?date=/);
+      await expect(page.getByRole("button", { name: "완료된 할 일", exact: true }).last()).toBeVisible();
+    });
+  }
+
   test("로그인 상태에서 캘린더 메인 화면이 렌더링됨", async ({ page }) => {
     await setupAuthenticatedMockedApp(page);
 
