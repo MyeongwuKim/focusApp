@@ -606,6 +606,8 @@
     border-radius: 0 !important;
     background: transparent !important;
     padding: 0.62rem 3.65rem 0.54rem 0.18rem;
+    /* 오른쪽 빠른 동작 영역의 여백은 공통 좌우 패딩보다 우선해 시간 표시와 겹치지 않게 한다. */
+    padding-right: 3.65rem !important;
     color: var(--sketchbook-ink);
     box-shadow: none;
   }
@@ -4402,18 +4404,50 @@
   }
 
   .time-picker-sheet__button {
-    border: 0 !important;
-    border-bottom: 2px solid rgba(72, 69, 62, 0.34) !important;
-    background: transparent !important;
+    position: relative;
+    display: flex;
+    min-height: 2.8rem;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid rgba(72, 69, 62, 0.4) !important;
+    border-radius: 7px 11px 8px 10px;
+    background: rgba(255, 250, 227, 0.58) !important;
+    padding: 0.5rem 0.85rem;
     color: var(--sketchbook-ink, #3f3b32) !important;
-    box-shadow: none !important;
+    box-shadow: 0 2px 0 rgba(79, 57, 28, 0.1) !important;
     font-family: "Gaegu", "Noto Sans KR", sans-serif;
-    font-size: 1rem !important;
+    font-size: 1.14rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 160ms ease, transform 120ms ease;
+  }
+
+  .time-picker-sheet__button::after {
+    content: "";
+    position: absolute;
+    inset: 3px 4px 4px 3px;
+    border: 1px solid currentColor;
+    border-radius: 8px 7px 10px 6px;
+    opacity: 0.12;
+    pointer-events: none;
+    transform: rotate(-0.4deg);
   }
 
   .time-picker-sheet__button--apply {
-    border-bottom-color: rgba(87, 126, 91, 0.7) !important;
-    color: var(--sketchbook-green, #68836b) !important;
+    border-color: rgba(87, 126, 91, 0.65) !important;
+    border-radius: 10px 7px 11px 8px;
+    background: rgba(121, 157, 106, 0.18) !important;
+    color: #536d57 !important;
+  }
+
+  .time-picker-sheet__button:active {
+    transform: translateY(1px);
+  }
+
+  .time-picker-sheet__button:focus-visible {
+    outline: 2px solid var(--sketchbook-green, #68836b);
+    outline-offset: 3px;
   }
 
   .time-picker-wheel-option,

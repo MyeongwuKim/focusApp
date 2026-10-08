@@ -13,7 +13,7 @@ function withFixture(run) {
   const ios = path.join(root, "ios");
   mkdirSync(path.join(ios, "Pods"), { recursive: true });
   mkdirSync(path.join(root, "scripts"));
-  for (const file of ["sync-native-config.js", "sync-xcode-build-env.js", "run-expo-with-mobile-env.js"]) {
+  for (const file of ["sync-native-config.js", "sync-xcode-build-env.js", "sync-ios-project-name.js", "run-expo-with-mobile-env.js"]) {
     copyFileSync(path.join(__dirname, file), path.join(root, "scripts", file));
   }
   for (const [file, value] of [[".env", "local"], [".env.development", "development"], [".env.production", "production"]]) {

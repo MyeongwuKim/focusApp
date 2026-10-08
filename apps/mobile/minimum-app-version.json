@@ -13,8 +13,8 @@
   },
   "prod": {
     "ios": {
-      "enabled": false,
-      "minimumVersion": "1.0.0",
+      "enabled": true,
+      "minimumVersion": "1.1.0",
       "storeUrl": null
     },
     "android": {

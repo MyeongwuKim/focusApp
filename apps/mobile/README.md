@@ -90,9 +90,10 @@ pnpm native:sync:web
 | 1 | `pnpm native:ios:local` | iOS 시뮬레이터 | Mac에서 실행 중인 로컬 API 주소 |
 | 2 | `pnpm native:ios:device` | 현재 연결된 iPhone과 Metro | iPhone에서 접근할 수 있는 Mac의 로컬 API 주소 |
 | 3 | `pnpm native:ios:dev` | 로컬 Xcode archive와 수동 TestFlight 업로드 | Cloud Run API 주소 |
-| 4 | `pnpm native:prod` | Expo EAS production 원격 빌드 및 App Store Connect 자동 제출 | EAS production 환경변수 |
+| 4 | `pnpm native:ios:prod` | prod 환경 로컬 Xcode archive와 IPA | 로컬 production 환경 파일의 API 주소 |
+| 5 | `pnpm native:ios:prod:expo` | Expo EAS production 원격 빌드 및 App Store Connect 자동 제출 | EAS production 환경변수 |
 
-`native:ios:local`과 `native:ios:device`는 `apps/mobile/.env`를, `native:ios:dev`는 `apps/mobile/.env.development`를 사용합니다. `EXPO_PUBLIC_API_ORIGIN`에는 `/graphql`을 붙이지 않고 API origin만 입력합니다.
+`native:ios:local`과 `native:ios:device`는 `apps/mobile/.env`를, `native:ios:dev`는 `apps/mobile/.env.development`를 사용합니다. `native:ios:prod`는 `apps/mobile/.env.production` 또는 `.env.prod`를 사용합니다. `EXPO_PUBLIC_API_ORIGIN`에는 `/graphql`을 붙이지 않고 API origin만 입력합니다.
 
 ### 1. 시뮬레이터 테스트: `native:ios:local`
 
@@ -155,17 +156,31 @@ pnpm native:ios:dev
 
 Expo/EAS에는 업로드하지 않으므로 TestFlight 배포는 생성된 archive를 Xcode Organizer에서 열어 App Store Connect에 직접 업로드합니다.
 
-### 4. Expo production 빌드 및 제출: `native:prod`
+### 4. prod 환경 로컬 Xcode 빌드: `native:ios:prod`
+
+dev 빌드와 같은 로컬 Xcode archive·IPA 생성 과정을 prod 환경으로 실행합니다.
+
+```bash
+pnpm native:ios:prod
+```
+
+prod 버전·앱 식별자와 Web UI를 반영하고, `.env.production` 또는 `.env.prod`를 읽어 Release 빌드를 진행합니다. archive는 `apps/mobile/dist/ios-prod-<빌드 시각>.xcarchive`, IPA는 `apps/mobile/dist/ios-prod-<빌드 시각>/`에 생성됩니다. IPA 내보내기는 dev와 같은 기기 설치용 방식(`debugging`)을 사용합니다.
+
+이 명령은 Xcode 프로젝트·앱 타깃·스킴·워크스페이스도 `dailo`로 동기화하며, `apps/mobile/ios/dailo.xcworkspace`를 사용합니다. dev로 다시 동기화하면 `dailoT`로 돌아갑니다. 이름이 바뀔 때는 CocoaPods 참조도 다시 생성하므로, 열려 있던 Xcode 창을 닫고 해당 환경의 워크스페이스를 다시 엽니다.
+
+이 명령으로 동기화한 뒤에는 Xcode에서 직접 Archive할 때도 prod 환경을 사용합니다. Expo/EAS 빌드나 App Store Connect 자동 제출은 실행하지 않습니다. `native:prod`는 이 로컬 prod 빌드의 별칭입니다.
+
+### 5. Expo production 빌드 및 제출: `native:ios:prod:expo`
 
 최종 production 배포 단계에서는 프로젝트를 Expo EAS에 업로드하고 production profile로 원격 빌드를 진행한 뒤 App Store Connect로 자동 제출합니다.
 
 ```bash
-pnpm native:prod
+pnpm native:ios:prod:expo
 ```
 
 `eas.json`의 `production` profile이 `APP_VARIANT=prod`와 EAS의 `production` environment를 사용합니다. `EXPO_PUBLIC_API_ORIGIN`을 포함한 production 값은 Expo에 설정된 환경변수에서 읽으므로 로컬 `.env`를 production 값으로 바꿀 필요가 없습니다.
 
-`native:prod`는 기존 `native:ios:prod`의 별칭입니다. `ios:prod` 스크립트가 `production` 제출 프로필과 `ascAppId`를 사용해 원격 빌드 완료 후 App Store Connect/TestFlight 제출까지 이어서 실행합니다. App Store 심사 제출과 공개 출시는 App Store Connect에서 별도로 진행합니다.
+`ios:prod:expo` 스크립트가 `production` 제출 프로필과 `ascAppId`를 사용해 원격 빌드 완료 후 App Store Connect/TestFlight 제출까지 이어서 실행합니다. App Store 심사 제출과 공개 출시는 App Store Connect에서 별도로 진행합니다.
 
 ## 환경변수 로드 방식
 
@@ -225,7 +240,7 @@ pnpm native:prod
 
 `minimum-app-version.json`은 dev/prod 환경별 iOS·Android 최소 앱 버전 정책을 한곳에서 관리합니다. 각 플랫폼은 `enabled`, `minimumVersion`, `storeUrl`을 가지며, `enabled`가 `true`일 때만 강제 업데이트를 적용합니다. `develop`에서는 `dev` 항목만 개발용 R2로, `master`에서는 `prod` 항목만 운영용 R2의 `native/latest.json`으로 업로드됩니다. 이전 앱이 기존 경로를 계속 조회하므로 동일한 정책을 `native/minimum-app-version.json`에도 함께 업로드합니다. develop에서 prod 항목을 수정해도 운영용 R2에는 반영되지 않으며 해당 변경이 master에 병합된 뒤 배포됩니다.
 
-`native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 Android versionCode 설정을 관리합니다. dev iOS 프로젝트는 Xcode에서 `dailoT`로 표시되고, 기기 홈 화면에서는 테스트 앱을 구분할 수 있도록 `데일로(T)`를 사용합니다. 로컬 iOS 빌드 번호는 Xcode 프로젝트의 Build 값을 사용하며, 설정 동기화 시 덮어쓰지 않습니다.
+`native.config.json`은 test/prod Xcode·Android 내부 프로젝트명, 앱 표시 이름, 앱 식별자와 Android versionCode 설정을 관리합니다. iOS 설정 동기화 시 Xcode 프로젝트·타깃·스킴 이름은 dev에서 `dailoT`, prod에서 `dailo`로 변경됩니다. dev 앱은 기기 홈 화면에서 `데일로(T)`를 사용합니다. 로컬 iOS 빌드 번호는 Xcode 프로젝트의 Build 값을 사용하며, 설정 동기화 시 덮어쓰지 않습니다.
 
 네이티브 빌드 명령을 실행하면 Web UI 빌드나 네이티브 설정 변경 전에 환경, 플랫폼, 앱 버전을 확인합니다. `y` 또는 `yes`를 입력해야 계속 진행하며, 그 외 입력은 전체 명령을 중단합니다.
 
@@ -338,7 +353,7 @@ EXPO_PUBLIC_WEBUI_MANIFEST_URL=https://<prod-r2-public-base-url>/latest/manifest
 EXPO_PUBLIC_MINIMUM_APP_VERSION_URL=https://<prod-r2-public-base-url>/native/latest.json
 ```
 
-위 값은 Expo EAS의 `production` environment에서 관리합니다. `native:prod` 실행 전 로컬 환경변수 파일을 수정할 필요는 없습니다.
+위 값은 Expo EAS의 `production` environment에서 관리합니다. `native:ios:prod:expo` 실행 전 로컬 환경변수 파일을 수정할 필요는 없습니다.
 
 ## 주요 스크립트
 
@@ -352,8 +367,9 @@ EXPO_PUBLIC_MINIMUM_APP_VERSION_URL=https://<prod-r2-public-base-url>/native/lat
 | `pnpm native:ios:install` | test 앱을 빌드해 iOS 시뮬레이터에 설치합니다. |
 | `pnpm native:ios:device` | 연결된 iPhone에 test 앱을 빌드·설치하고 Metro에 연결합니다. |
 | `pnpm native:ios:dev` | Xcode 프로젝트로 archive와 IPA를 생성해 수동 TestFlight 테스트를 준비합니다. |
-| `pnpm native:prod` | EAS production 환경변수로 원격 iOS 빌드 후 App Store Connect에 자동 제출합니다. |
-| `pnpm native:ios:prod` | `native:prod`와 같은 production 빌드 및 자동 제출을 실행합니다. |
+| `pnpm native:prod` | `native:ios:prod`의 별칭으로 로컬 prod 빌드를 실행합니다. |
+| `pnpm native:ios:prod` | prod 환경으로 로컬 Xcode archive와 기기 설치용 IPA를 생성합니다. |
+| `pnpm native:ios:prod:expo` | EAS production 환경변수로 원격 iOS 빌드 후 App Store Connect에 자동 제출합니다. |
 | `pnpm native:android:local` | Android 로컬 기기 또는 에뮬레이터에서 test 앱을 실행합니다. |
 | `pnpm -C apps/mobile web` | Expo web 실행을 시작합니다. |
 | `pnpm -C apps/mobile lint` | Expo lint를 실행합니다. |
@@ -363,7 +379,7 @@ EXPO_PUBLIC_MINIMUM_APP_VERSION_URL=https://<prod-r2-public-base-url>/native/lat
 
 ## 검증
 
-현재 `apps/mobile`에는 별도 단위 테스트 스크립트가 없습니다. 정적 확인 후 iOS 환경을 `local → device → dev → prod` 순서로 검증합니다.
+현재 `apps/mobile`에는 별도 단위 테스트 스크립트가 없습니다. 정적 확인 후 iOS 환경을 `local → device → dev → prod` 순서로 검증하고, EAS 배포는 별도 명령으로 실행합니다.
 
 ```bash
 pnpm -C apps/mobile lint
@@ -371,4 +387,5 @@ pnpm native:ios:local
 pnpm native:ios:device
 pnpm native:ios:dev
 pnpm native:prod
+pnpm native:ios:prod:expo
 ```

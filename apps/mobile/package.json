@@ -11,8 +11,9 @@
     "ios:device": "expo run:ios --device",
     "ios:local": "expo start --ios --dev-client --host lan --port 8081",
     "ios:install": "expo run:ios",
-    "ios:dev": "bash ./scripts/build-ios-dev.sh",
-    "ios:prod": "APP_VARIANT=prod APP_PLATFORM=ios eas build --platform ios --profile production --auto-submit-with-profile production",
+    "ios:dev": "bash ./scripts/build-ios.sh dev",
+    "ios:prod": "bash ./scripts/build-ios.sh prod",
+    "ios:prod:expo": "APP_VARIANT=prod APP_PLATFORM=ios eas build --platform ios --profile production --auto-submit-with-profile production",
     "web": "expo start --web",
     "lint": "expo lint",
     "ios": "expo run:ios"

@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline/promises");
 const { syncXcodeBuildEnv } = require("./sync-xcode-build-env");
+const { syncIosProjectName, syncIosProjectPods } = require("./sync-ios-project-name");
 
 const appRoot = path.resolve(__dirname, "..");
 const variant = (process.argv[2] || process.env.APP_VARIANT || "test").trim().toLowerCase();
@@ -448,13 +449,17 @@ function resolveProviderIdentity() {
   };
 }
 
-/** 앱 버전·식별자·로그인 설정을 iOS 프로젝트에 반영하며, Xcode의 빌드 번호는 변경하지 않는다. */
+/** 환경별 프로젝트 이름·앱 버전·식별자·로그인 설정을 iOS에 반영하고 필요한 Pods 참조를 재생성한다. Xcode 빌드 번호는 유지한다. */
 function syncIos(input) {
-  const iosProjectFiles = resolveIosProjectFiles();
+  let iosProjectFiles = resolveIosProjectFiles();
   if (!iosProjectFiles) {
     console.log("[native-sync] iOS project not found. Skipped.");
     return;
   }
+
+  const iosRoot = path.join(appRoot, "ios");
+  const didRenameProject = syncIosProjectName(iosRoot, iosProjectFiles, input.projectName);
+  if (didRenameProject) iosProjectFiles = resolveIosProjectFiles();
 
   let projectContent = fs.readFileSync(iosProjectFiles.projectPath, "utf8");
   projectContent = replaceRequired(
@@ -545,9 +550,11 @@ function syncIos(input) {
     iosProjectFiles.widgetEntitlementsPath,
     appGroup
   );
+  syncIosProjectPods(iosRoot, input.projectName, variant);
 
   console.log(
     `[native-sync] iOS ${
+      didRenameProject ||
       didUpdateProject ||
       didUpdateBuildEnv ||
       didUpdateWidgetTargetMembership ||
@@ -656,6 +663,7 @@ async function main() {
 
   if (!targetPlatform || targetPlatform === "ios") {
     syncIos({
+      projectName: readConfigString(variantConfig.projectName),
       version: iosVersion,
       appName: identity.appName,
       appScheme: identity.appScheme,

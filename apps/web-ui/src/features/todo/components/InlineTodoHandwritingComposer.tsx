@@ -18,9 +18,12 @@ type InlineTodoHandwritingComposerProps = {
 
 type ComposerMode = "text" | "handwriting";
 
+/** 인식 품질을 확인할 때까지 손글씨 전환 버튼과 입력판을 숨기고 키보드 입력만 제공한다. */
+const HANDWRITING_INPUT_VISIBLE = false;
+
 /**
- * 할 일 목록 끝에서 키보드 입력을 먼저 열고, 연필 버튼을 선택한 경우에만 손글씨 입력판을 표시한다.
- * 등록이 끝나면 같은 위치에서 다음 항목을 바로 적을 수 있으며 손글씨 인식 결과도 제출 전에 텍스트로 수정할 수 있다.
+ * 할 일 목록 끝에서 키보드로 새 항목을 추가하며 등록 후 같은 위치에서 다음 항목을 이어서 적을 수 있다.
+ * 손글씨 인식 구현은 유지하되 HANDWRITING_INPUT_VISIBLE이 true일 때만 입력 전환과 인식 결과 수정을 제공한다.
  */
 export function InlineTodoHandwritingComposer({ onAdd }: InlineTodoHandwritingComposerProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -34,6 +37,7 @@ export function InlineTodoHandwritingComposer({ onAdd }: InlineTodoHandwritingCo
   const [recognitionError, setRecognitionError] = useState("");
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const isHandwritingMode = HANDWRITING_INPUT_VISIBLE && mode === "handwriting";
 
   const focusTextInput = () => {
     window.requestAnimationFrame(() => inputRef.current?.focus());
@@ -122,7 +126,7 @@ export function InlineTodoHandwritingComposer({ onAdd }: InlineTodoHandwritingCo
       ref={sectionRef}
       className="inline-todo-handwriting"
       data-expanded={isExpanded}
-      data-mode={mode}
+      data-mode={isHandwritingMode ? "handwriting" : "text"}
       data-disable-date-sheet-swipe="true"
       aria-label="할 일 바로 추가"
     >
@@ -131,7 +135,7 @@ export function InlineTodoHandwritingComposer({ onAdd }: InlineTodoHandwritingCo
           <span aria-hidden="true">＋</span>
           <span>새 할 일 쓰기</span>
         </button>
-      ) : mode === "text" ? (
+      ) : !isHandwritingMode ? (
         <form className="inline-todo-handwriting__text-entry" onSubmit={(event) => void handleAdd(event)}>
           <input
             ref={inputRef}
@@ -147,18 +151,20 @@ export function InlineTodoHandwritingComposer({ onAdd }: InlineTodoHandwritingCo
               }
             }}
           />
-          <button
-            type="button"
-            className="inline-todo-handwriting__mode-button"
-            aria-label="손글씨로 입력"
-            disabled={isAdding}
-            onClick={() => {
-              setMode("handwriting");
-              setRecognitionError("");
-            }}
-          >
-            <FiEdit3 size={15} />
-          </button>
+          {HANDWRITING_INPUT_VISIBLE ? (
+            <button
+              type="button"
+              className="inline-todo-handwriting__mode-button"
+              aria-label="손글씨로 입력"
+              disabled={isAdding}
+              onClick={() => {
+                setMode("handwriting");
+                setRecognitionError("");
+              }}
+            >
+              <FiEdit3 size={15} />
+            </button>
+          ) : null}
           <button
             type="submit"
             className="inline-todo-handwriting__submit"

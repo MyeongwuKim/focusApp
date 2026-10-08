@@ -11,7 +11,7 @@ function withFixture(run) {
   const appRoot = mkdtempSync(path.join(tmpdir(), "mobile-build-env-"));
   const scriptsRoot = path.join(appRoot, "scripts");
   mkdirSync(scriptsRoot);
-  for (const file of ["sync-native-config.js", "sync-xcode-build-env.js", "run-with-mobile-env.js"]) {
+  for (const file of ["sync-native-config.js", "sync-xcode-build-env.js", "sync-ios-project-name.js", "run-with-mobile-env.js"]) {
     copyFileSync(path.join(__dirname, file), path.join(scriptsRoot, file));
   }
   const files = {
