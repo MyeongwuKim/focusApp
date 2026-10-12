@@ -15,7 +15,7 @@
     "ios": {
       "enabled": true,
       "minimumVersion": "1.1.0",
-      "storeUrl": null
+      "storeUrl": "https://apps.apple.com/app/id6767450370"
     },
     "android": {
       "enabled": false,
