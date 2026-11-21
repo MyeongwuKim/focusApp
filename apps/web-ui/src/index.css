@@ -381,11 +381,6 @@
     color: var(--sketchbook-ink);
   }
 
-  .sketchbook-login-page__description,
-  .sketchbook-login-page__note {
-    color: rgba(63, 59, 50, 0.68);
-  }
-
   .sketchbook-login-button {
     min-height: 2.9rem;
     border: 1.5px solid rgba(72, 69, 62, 0.3);

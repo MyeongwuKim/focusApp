@@ -90,8 +90,8 @@ export function StatsAiCommentaryCard({
       >
         <span className="stats-ai-note__icon"><FiCpu size={16} /></span>
         <span>
-          <strong>이번 기록에서 발견한 점</strong>
-          <small>{canUseCommentary ? "AI 한마디 펼쳐보기" : "하루 이상 기록하면 볼 수 있어요"}</small>
+          <strong>AI 한마디</strong>
+          <small>{canUseCommentary ? "집중 기록 요약" : "하루 이상 기록하면 볼 수 있어요"}</small>
         </span>
         <FiChevronDown className="stats-ai-note__chevron" size={17} aria-hidden="true" />
       </button>
@@ -99,7 +99,7 @@ export function StatsAiCommentaryCard({
       {isExpanded ? (
         <div className="stats-ai-note__body">
           {!canUseCommentary ? (
-            <p className="m-0 text-sm text-base-content/70">기록이 쌓이면 이곳에서 짧게 정리해드려요.</p>
+            <p className="m-0 text-sm text-base-content/70">기록이 있는 기간을 선택해 주세요.</p>
           ) : isDataFetching || commentaryQuery.isLoading ? (
             <AiCommentaryLoading />
           ) : commentaryQuery.isError ? (

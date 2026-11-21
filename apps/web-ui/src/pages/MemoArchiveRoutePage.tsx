@@ -313,9 +313,9 @@ export function MemoArchiveRoutePage() {
           {!memoQuery.isLoading && !memoQuery.isError && !isFilteredView && !hasAnyMemo ? (
             <div className="flex h-full min-h-[18rem] flex-col items-center justify-center rounded-xl border border-dashed border-base-300 bg-base-200/35 px-5 text-center">
               <RobotCharacter className="h-24 w-24" ariaLabel="메모 빈 상태 캐릭터" mood="sad" badgeText="?" />
-              <p className="m-0 mt-3 text-sm font-semibold text-base-content/78">아직 작성한 메모가 없어요.</p>
+              <p className="m-0 mt-3 text-sm font-semibold text-base-content/78">저장한 메모가 없어요.</p>
               <p className="m-0 mt-1 text-xs leading-5 text-base-content/55">
-                캘린더에서 날짜를 선택해 하루 기록을 남겨보세요.
+                캘린더에서 날짜를 골라 메모를 쓰세요.
               </p>
             </div>
           ) : null}
@@ -325,7 +325,7 @@ export function MemoArchiveRoutePage() {
               <RobotCharacter className="h-24 w-24" ariaLabel="검색 결과 없음 캐릭터" mood="sad" badgeText="?" />
               <p className="m-0 mt-3 text-sm font-semibold text-base-content/78">검색 결과가 없어요.</p>
               <p className="m-0 mt-1 text-xs leading-5 text-base-content/55">
-                다른 단어나 월 필터로 다시 찾아보세요.
+                검색어나 선택한 월을 바꿔 보세요.
               </p>
             </div>
           ) : null}

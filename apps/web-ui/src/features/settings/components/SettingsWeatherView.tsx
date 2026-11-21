@@ -109,7 +109,7 @@ export function SettingsWeatherView() {
   const disabledClassName = isWeatherOptionsDisabled ? "opacity-45 pointer-events-none select-none" : "";
 
   return (
-    <SettingsDetailShell description="날씨 표시와 파티클 분위기를 설정합니다.">
+    <SettingsDetailShell description="날씨 표시와 배경 효과를 설정해요.">
       <div className="space-y-2 rounded-xl border border-base-300/80 bg-base-100/75 p-3">
         <div className="flex items-center justify-between gap-3 rounded-lg border border-base-300/70 bg-base-200/40 px-3 py-2">
           <p className="m-0 text-sm font-medium text-base-content/85">위치 권한</p>

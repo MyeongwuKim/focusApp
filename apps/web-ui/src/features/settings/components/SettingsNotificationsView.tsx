@@ -325,7 +325,7 @@ export function SettingsNotificationsView() {
   };
 
   return (
-    <SettingsDetailShell description="리마인드 푸시 알림 옵션을 설정합니다.">
+    <SettingsDetailShell description="알림 시간, 간격, 말투를 설정해요.">
       <div className="space-y-3 rounded-xl border border-base-300/80 bg-base-100/75 p-3">
         <div className="flex items-center justify-between gap-3 rounded-lg border border-base-300/70 bg-base-200/40 px-3 py-2">
           <p className="m-0 text-sm font-medium text-base-content/85">푸쉬알림</p>
@@ -405,7 +405,7 @@ export function SettingsNotificationsView() {
 
         <div className={`space-y-2 rounded-lg border border-base-300/60 bg-base-200/20 p-3 ${disabledClassName}`}>
           <p className="m-0 text-sm font-medium text-base-content/90">알림 톤 미리보기</p>
-          <p className="m-0 text-xs text-base-content/60">원하는 분위기를 고르면 아래 문구가 바로 바뀌어요.</p>
+          <p className="m-0 text-xs text-base-content/60">말투를 고르면 알림 예시가 바뀌어요.</p>
           <div className="mt-2">
             <SegmentedToggle
               value={previewTone}

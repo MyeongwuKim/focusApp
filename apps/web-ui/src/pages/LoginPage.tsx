@@ -302,12 +302,7 @@ export function LoginPage() {
 
           <section className="sketchbook-login-page__body flex min-h-0 flex-1 items-center justify-center">
             <div className="sketchbook-login-page__content w-full max-w-sm">
-              <p className="sketchbook-login-page__eyebrow m-0 text-center">오늘의 페이지를 이어가요</p>
-              <p className="sketchbook-login-page__description mt-2 text-center text-sm">
-                {isAppleNativeLoginAvailable
-                  ? "Apple, 카카오 또는 네이버 계정으로 시작할 수 있어요."
-                  : "카카오 또는 네이버 계정으로 시작할 수 있어요."}
-              </p>
+              <p className="sketchbook-login-page__eyebrow m-0 text-center">계정을 선택해 주세요</p>
 
               <div className="sketchbook-login-page__actions mt-7 flex flex-col gap-3">
                 {isAppleNativeLoginAvailable ? (
@@ -346,9 +341,6 @@ export function LoginPage() {
                   {isNativeNaverLoading ? "네이버 로그인 중..." : "네이버로 로그인"}
                 </a>
               </div>
-              <p className="sketchbook-login-page__note mt-6 text-center text-xs">
-                로그인하면 작성한 할 일과 기록을 이어서 볼 수 있어요.
-              </p>
             </div>
           </section>
         </div>

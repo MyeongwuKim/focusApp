@@ -47,9 +47,9 @@ export function DateTodosEmptyState({
       {isPastDate ? (
         <>
           <div className="date-todos-empty-state__copy space-y-1">
-            <p className="date-todos-empty-state__title m-0 text-base font-semibold tracking-tight text-base-content/85">이 날짜에 기록된 할 일이 없어요</p>
+            <p className="date-todos-empty-state__title m-0 text-base font-semibold tracking-tight text-base-content/85">이날의 할 일 기록이 없어요</p>
             <p className="m-0 text-xs text-base-content/60">
-              지난 날짜는 기록만 확인할 수 있어요.
+              지난 할 일은 조회만 할 수 있어요.
             </p>
           </div>
           <div className="flex w-full max-w-xs gap-2" data-disable-date-sheet-swipe="true">
@@ -105,14 +105,12 @@ export function DateTodosEmptyState({
         <>
           <div className="date-todos-empty-state__copy space-y-1">
             <p className="date-todos-empty-state__title m-0 text-base font-semibold tracking-tight text-base-content/85">
-              {isFutureDate ? "이 날짜에 예정된 할 일이 없어요" : "오늘 할 일이 비어 있어요"}
+              {isFutureDate ? "예정된 할 일이 없어요" : "오늘 할 일이 없어요"}
             </p>
             <p className="m-0 text-xs text-base-content/60">
               {isToday && yesterdayIncompleteCount > 0
-                ? `어제 미완료 ${yesterdayIncompleteCount}개를 먼저 가져오거나 묶음을 불러올 수 있어요.`
-                : isFutureDate
-                  ? "이 날짜에 맞는 할 일 묶음을 불러와 보세요."
-                  : "오늘 묶음을 불러와 할 일을 채워보세요."}
+                ? `어제 끝내지 못한 할 일 ${yesterdayIncompleteCount}개가 있어요.`
+                : "할 일 묶음을 불러올 수 있어요."}
             </p>
           </div>
           <div className="date-todos-empty-state__actions grid w-full max-w-xs grid-cols-1 gap-2 sm:grid-cols-2" data-disable-date-sheet-swipe="true">

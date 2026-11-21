@@ -34,14 +34,12 @@ function buildInsight(
   averageFocusSegmentMinutes: number | null
 ) {
   if (averageResumesPerTask === null || averageFocusSegmentMinutes === null) {
-    return "집중 기록이 쌓이면 집중시간 대비 재개 빈도를 확인할 수 있어요.";
+    return "선택한 기간에 집중 기록이 없어요.";
   }
   if (resumeCount === 0) {
-    return `재개 없이 집중을 이어갔고, 한 집중 구간은 평균 ${formatMinutes(averageFocusSegmentMinutes)}이었어요.`;
+    return `재개 0회 · 평균 집중 구간 ${formatMinutes(averageFocusSegmentMinutes)}`;
   }
-  return `작업 1회당 평균 ${averageResumesPerTask.toFixed(
-    1
-  )}회 다시 시작했어요. 한 집중 구간은 평균 ${formatMinutes(averageFocusSegmentMinutes)}이었어요.`;
+  return `작업당 재개 ${averageResumesPerTask.toFixed(1)}회 · 평균 집중 구간 ${formatMinutes(averageFocusSegmentMinutes)}`;
 }
 
 export function FocusResumeRelationCard({

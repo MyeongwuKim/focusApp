@@ -360,7 +360,7 @@ export function useAuthSessionGuard({ activeRoute, mainRoutePath }: UseAuthSessi
       }
 
       clearAuth();
-      toast.error("세션이 만료되어 로그아웃되었어요. 다시 로그인해 주세요.", "세션 만료");
+      toast.error("다시 로그인해 주세요.", "로그인 정보가 만료됐어요");
     });
   }, []);
 

@@ -15,7 +15,7 @@ export function AchievementNextGoalCard({ badge }: AchievementNextGoalCardProps)
       <article className="rounded-xl border border-emerald-400/50 bg-emerald-400/10 p-3">
         <p className="m-0 text-xs font-semibold text-emerald-700">모든 영구 업적 달성</p>
         <p className="m-0 mt-1 text-[11px] text-base-content/65">
-          이번 주 도전을 이어가며 연속 기록을 쌓아보세요.
+          주간 도전을 달성하면 연속 기록이 이어져요.
         </p>
       </article>
     );

@@ -11,16 +11,16 @@ export function AchievementHistoryEmptyState({ variant }: AchievementHistoryEmpt
     variant === "all"
       ? {
           title: "아직 업적 히스토리가 없어요.",
-          description: "첫 달성 기록이 쌓이면 여기서 시간순으로 확인할 수 있어요.",
+          description: "달성한 업적이 시간순으로 표시돼요.",
         }
       : variant === "permanent"
         ? {
             title: "누적 기록이 없어요.",
-            description: "누적/연속 배지를 달성하면 누적 기록 히스토리에 남아요.",
+            description: "달성한 누적·연속 배지를 볼 수 있어요.",
           }
         : {
             title: "완료한 주간 도전 기록이 없어요.",
-            description: "이번 주 도전 달성 시 주간 히스토리에 쌓여요.",
+            description: "달성한 주간 도전을 볼 수 있어요.",
           };
 
   return (
