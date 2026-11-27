@@ -528,6 +528,61 @@ async function setupAuthenticatedMockedApp(page: Page, options?: SetupOptions) {
 }
 
 test.describe("core app flow", () => {
+  test("오늘 하단의 집중 시간에서 일시정지 구간을 제외함", async ({ page }) => {
+    const { todayKey, state } = await setupAuthenticatedMockedApp(page);
+    const log = getOrCreateLog(state, todayKey);
+    const startMs = new Date(`${todayKey}T12:00:00`).getTime();
+    const atMinute = (minute: number) => new Date(startMs + minute * 60_000);
+    const pausedTodo = {
+      ...log.todos[0],
+      startedAt: atMinute(0).toISOString(),
+      pausedAt: atMinute(2).toISOString(),
+    };
+    const resumedTodo = { ...pausedTodo, pausedAt: null, deviationSeconds: 180 };
+    const completedTodo = {
+      ...resumedTodo, done: true, completedAt: atMinute(7).toISOString(), actualFocusSeconds: 240,
+    };
+    state.logsByDate.set(todayKey, { ...log, todos: [pausedTodo] });
+    await page.route("**/api/motivation/message**", (route) => route.fulfill({
+      json: { message: "테스트 안내", ttlSeconds: 60 },
+    }));
+    await page.route("**/graphql", async (route) => {
+      const query = String(route.request().postDataJSON()?.query ?? "");
+      const operation = query.includes("mutation ResumeTodo") ? "resumeTodo"
+        : query.includes("mutation CompleteTodo") ? "completeTodo" : null;
+      if (!operation) {
+        await route.fallback();
+        return;
+      }
+      const todo = operation === "resumeTodo" ? resumedTodo : completedTodo;
+      const updatedLog = { ...log, todos: [todo] };
+      state.logsByDate.set(todayKey, updatedLog);
+      await route.fulfill({ json: { data: { [operation]: updatedLog } } });
+    });
+
+    await page.clock.install({ time: atMinute(5) });
+    await page.goto(`/#/date-tasks?date=${todayKey}`);
+    const focusMetric = page.locator(".session-progress-card__metric")
+      .filter({ has: page.getByText("집중", { exact: true }) });
+    await expect(focusMetric.getByText("2분", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "집중 재개", exact: true }).click();
+    await expect(page.getByRole("button", { name: "집중 일시정지", exact: true })).toBeVisible();
+    await page.clock.fastForward("02:00");
+    await expect(focusMetric.getByText("4분", { exact: true })).toBeVisible();
+
+    const gesture = page.locator(".todo-item-card__gesture-zone").first();
+    const box = await gesture.boundingBox();
+    if (!box) throw new Error("할 일 그리기 영역이 표시되지 않음");
+    await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.3);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.9, { steps: 8 });
+    await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.12, { steps: 12 });
+    await page.mouse.up();
+    await expect(page.getByRole("button", { name: "완료된 할 일", exact: true })).toBeVisible();
+    await expect(focusMetric.getByText("4분", { exact: true })).toBeVisible();
+  });
+
   for (const [effect, label] of [["fog", "안개"], ["rain", "비"], ["snow", "눈"]] as const) {
     test(`배경 ${label} 효과를 켜도 할일과 캘린더를 조작할 수 있고 끄면 제거됨`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width: 390, height: 844 });

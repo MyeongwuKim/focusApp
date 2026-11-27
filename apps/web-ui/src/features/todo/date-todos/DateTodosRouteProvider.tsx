@@ -167,16 +167,20 @@ function toEpochMillis(value: string | null) {
   return Number.isFinite(epoch) ? epoch : null;
 }
 
-function getTodoActualFocusSecondsNow(todo: {
-  startedAt: string | null;
-  pausedAt: string | null;
-  deviationSeconds: number;
-}) {
+/** 시작부터 일시정지 시각 또는 현재까지의 경과 시간에서 누적 일시정지 시간을 뺀다. */
+function getTodoActualFocusSecondsNow(
+  todo: {
+    startedAt: string | null;
+    pausedAt: string | null;
+    deviationSeconds: number;
+  },
+  nowMs = Date.now()
+) {
   const startedAtMs = toEpochMillis(todo.startedAt);
   if (!startedAtMs) {
     return null;
   }
-  const endMs = toEpochMillis(todo.pausedAt) ?? Date.now();
+  const endMs = toEpochMillis(todo.pausedAt) ?? nowMs;
   const deviationSeconds =
     typeof todo.deviationSeconds === "number" && Number.isFinite(todo.deviationSeconds)
       ? Math.max(Math.floor(todo.deviationSeconds), 0)
@@ -1335,15 +1339,7 @@ export function DateTodosRouteProvider({
         return acc + Math.max(todo.actualFocusSeconds ?? 0, 0);
       }
 
-      const startedAt = toEpochMillis(todo.startedAt);
-      if (!startedAt) {
-        return acc;
-      }
-
-      const pausedAt = toEpochMillis(todo.pausedAt);
-      const endMs = pausedAt ?? nowMs;
-      const elapsedSeconds = Math.max(Math.floor((endMs - startedAt) / 1000), 0);
-      return acc + elapsedSeconds;
+      return acc + (getTodoActualFocusSecondsNow(todo, nowMs) ?? 0);
     }, 0);
 
     const restAccumulatedSeconds = Math.max(dailyLogQuery.data?.restAccumulatedSeconds ?? 0, 0);
