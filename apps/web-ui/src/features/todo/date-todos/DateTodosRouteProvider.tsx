@@ -18,7 +18,6 @@ import {
 } from "../../../queries";
 import { confirm, toast, useAppStore } from "../../../stores";
 import { formatDateKey } from "../../../utils/holidays";
-import { ackNativeFocusLiveActivityControlEvent } from "../../../utils/nativeBridge";
 import {
   cancelNativeRestNotification,
   cancelNativeTodoStartNotification,
@@ -67,11 +66,6 @@ type DailyLogWithTodos = {
     actualFocusSeconds: number | null;
   }>;
 } | null;
-
-type NativeBridgeEventDetail = {
-  type?: string;
-  payload?: unknown;
-};
 
 type DateTodosRouteContextValue = {
   items: TaskItem[];
@@ -142,22 +136,6 @@ type DateTodosRouteContextValue = {
 
 const DateTodosRouteContext = createContext<DateTodosRouteContextValue | null>(null);
 const handledFocusTargetPromptKeySet = new Set<string>();
-const FOCUS_LIVE_ACTIVITY_CONTROL_EVENT_TYPE = "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT";
-
-function readUnknownRecord(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function isExternalDailyLogWithTodos(
-  value: unknown
-): value is NonNullable<DailyLogWithTodos> & { dateKey: string } {
-  const record = readUnknownRecord(value);
-  return Boolean(record && typeof record.dateKey === "string" && Array.isArray(record.todos));
-}
 
 function toEpochMillis(value: string | null) {
   if (!value) {
@@ -765,39 +743,6 @@ export function DateTodosRouteProvider({
     setDateTasksRouteItems(applyTargetFocusBaselines(mappedItems, todos));
     setHydratedDateKey(dateKey);
   }, [applyTargetFocusBaselines, dateKey]);
-
-  useEffect(() => {
-    const handleNativeFocusLiveActivityControlEvent = (event: Event) => {
-      const detail = (event as CustomEvent<NativeBridgeEventDetail>).detail;
-      if (detail?.type !== FOCUS_LIVE_ACTIVITY_CONTROL_EVENT_TYPE) {
-        return;
-      }
-
-      const payload = readUnknownRecord(detail.payload);
-      const dailyLog = isExternalDailyLogWithTodos(payload?.dailyLog) ? payload.dailyLog : null;
-      if (!dailyLog || dailyLog.dateKey !== dateKey) {
-        return;
-      }
-
-      applyDailyLog(dailyLog);
-      const eventId = typeof payload?.id === "string" ? payload.id.trim() : "";
-      if (eventId) {
-        ackNativeFocusLiveActivityControlEvent(eventId);
-      }
-    };
-
-    window.addEventListener(
-      "focus-hybrid-native-bridge",
-      handleNativeFocusLiveActivityControlEvent as EventListener
-    );
-
-    return () => {
-      window.removeEventListener(
-        "focus-hybrid-native-bridge",
-        handleNativeFocusLiveActivityControlEvent as EventListener
-      );
-    };
-  }, [applyDailyLog, dateKey]);
 
   const clearTodoTargetFocus = useCallback(
     async (todoId: string) => {

@@ -487,6 +487,23 @@ function restoreDailyLogMutationSnapshot(queryClient: QueryClient, context: Dail
   });
 }
 
+async function cancelDailyLogQueries(queryClient: QueryClient, dateKey: string, syncMonthCache: boolean) {
+  await queryClient.cancelQueries({
+    queryKey: dailyLogByDateQueryKey(dateKey),
+    exact: true,
+  });
+  await queryClient.cancelQueries({
+    queryKey: statsDailyDetailQueryKey(dateKey),
+    exact: true,
+  });
+  if (syncMonthCache) {
+    await queryClient.cancelQueries({
+      queryKey: dailyLogsByMonthQueryKey(dateKey.slice(0, 7)),
+      exact: false,
+    });
+  }
+}
+
 async function applyOptimisticDailyLogMutation<TInput extends DailyLogMutationInputBase>(
   queryClient: QueryClient,
   input: TInput,
@@ -495,21 +512,7 @@ async function applyOptimisticDailyLogMutation<TInput extends DailyLogMutationIn
     optimisticUpdater?: (payload: DailyLogDetail, input: TInput) => DailyLogDetail;
   }
 ): Promise<DailyLogMutationContext> {
-  const monthKey = input.dateKey.slice(0, 7);
-  await queryClient.cancelQueries({
-    queryKey: dailyLogByDateQueryKey(input.dateKey),
-    exact: true,
-  });
-  await queryClient.cancelQueries({
-    queryKey: statsDailyDetailQueryKey(input.dateKey),
-    exact: true,
-  });
-  if (options.syncMonthCache) {
-    await queryClient.cancelQueries({
-      queryKey: dailyLogsByMonthQueryKey(monthKey),
-      exact: false,
-    });
-  }
+  await cancelDailyLogQueries(queryClient, input.dateKey, options.syncMonthCache);
 
   const snapshot = captureDailyLogMutationSnapshot(queryClient, input.dateKey, options.syncMonthCache);
   const basePayload = snapshot.dailyLogByDate ?? snapshot.statsDailyDetail;
@@ -599,14 +602,15 @@ function applyDailyLogMutationCacheSync(
   }
 }
 
-export function syncExternalDailyLogPayload(
+/** 앞서 시작된 조회를 취소한 뒤 네이티브가 받은 서버 응답을 할일 캐시에 반영한다. */
+export async function syncExternalDailyLogPayload(
   queryClient: QueryClient,
   payload: DailyLogDetailPayload,
   options?: { syncMonthCache?: boolean }
 ) {
-  applyDailyLogMutationCacheSync(queryClient, payload, {
-    syncMonthCache: options?.syncMonthCache ?? true,
-  });
+  const syncMonthCache = options?.syncMonthCache ?? true;
+  await cancelDailyLogQueries(queryClient, payload.dateKey, syncMonthCache);
+  applyDailyLogMutationCacheSync(queryClient, payload, { syncMonthCache });
 }
 
 export function useUpsertDailyLogMemoMutation(dateKey: string) {

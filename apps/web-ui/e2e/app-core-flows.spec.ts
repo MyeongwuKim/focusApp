@@ -699,6 +699,86 @@ test.describe("core app flow", () => {
     await expect(page.getByText("완료됨")).toBeVisible();
   });
 
+  test("Live Activity 결과를 반영한 뒤 늦은 복귀 조회가 할일을 진행 중으로 되돌리지 않음", async ({ page }) => {
+    const { todayKey, state } = await setupAuthenticatedMockedApp(page);
+    const runningLog = applyStartTodo(state, todayKey, "todo-e2e-1");
+    await page.route("**/api/motivation/message**", (route) => route.fulfill({
+      json: { message: "테스트 안내", ttlSeconds: 60 },
+    }));
+    await page.goto(`/#/date-tasks?date=${todayKey}`);
+    await expect(page.getByRole("button", { name: "집중 일시정지", exact: true })).toBeVisible();
+
+    let releaseRefetch!: () => void;
+    const refetchGate = new Promise<void>((resolve) => { releaseRefetch = resolve; });
+    let interceptedRefetch = false;
+    await page.route("**/graphql", async (route) => {
+      const query = String(route.request().postDataJSON()?.query ?? "");
+      if (interceptedRefetch || !query.includes("query DailyLogByDate")) {
+        await route.fallback();
+        return;
+      }
+
+      interceptedRefetch = true;
+      await refetchGate;
+      await route.fulfill({ json: { data: { dailyLog: runningLog } } });
+    });
+
+    try {
+      const refetchStarted = page.waitForRequest((request) =>
+        request.url().endsWith("/graphql") &&
+        String(request.postDataJSON()?.query ?? "").includes("query DailyLogByDate")
+      );
+      await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent("focus-hybrid-native-bridge", {
+          detail: { type: "RN_APP_STATE_CHANGED", payload: { isActive: true } },
+        }));
+      });
+      await refetchStarted;
+
+      const pausedLog = cloneLog(runningLog);
+      pausedLog.todos[0].pausedAt = new Date().toISOString();
+      state.logsByDate.set(todayKey, pausedLog);
+      await page.evaluate((dailyLog) => {
+        const bridgeWindow = window as Window & { ReactNativeWebView?: { postMessage: (serialized: string) => void } };
+        bridgeWindow.ReactNativeWebView = {
+          postMessage(serialized) {
+            const message = JSON.parse(serialized);
+            if (message.type === "REST_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT_ACK") {
+              const data = document.documentElement.dataset;
+              data.focusControlAcknowledged = message.payload.eventId;
+              data.focusControlAckCount = String(Number(data.focusControlAckCount ?? 0) + 1);
+            }
+          },
+        };
+        window.dispatchEvent(new CustomEvent("focus-hybrid-native-bridge", {
+          detail: {
+            type: "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT",
+            payload: { id: "pause-e2e", dateKey: dailyLog.dateKey, dailyLog },
+          },
+        }));
+      }, pausedLog);
+
+      const resumeButton = page.getByRole("button", { name: "집중 재개", exact: true });
+      await expect(resumeButton).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute("data-focus-control-acknowledged", "pause-e2e");
+
+      const staleResponse = page.waitForResponse((response) =>
+        response.url().endsWith("/graphql") &&
+        String(response.request().postDataJSON()?.query ?? "").includes("query DailyLogByDate")
+      );
+      releaseRefetch();
+      await (await staleResponse).finished();
+      // 조회 응답으로 예약된 React 업데이트까지 반영된 후 화면을 확인한다.
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+      await expect(resumeButton).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute("data-focus-control-ack-count", "1");
+    } finally {
+      releaseRefetch();
+    }
+  });
+
   test("지난 날짜에서 오늘로 이동 버튼으로 날짜를 복귀함", async ({ page }) => {
     const { todayKey } = await setupAuthenticatedMockedApp(page);
     const previousDateKey = shiftDateKey(todayKey, -1);

@@ -406,12 +406,15 @@ function App() {
       const eventId = readUnknownString(payload.id);
       const dailyLog = payload.dailyLog;
       if (isNativeDailyLogPayload(dailyLog)) {
-        syncExternalDailyLogPayload(queryClient, dailyLog, {
-          syncMonthCache: true,
-        });
-        if (eventId) {
-          ackNativeFocusLiveActivityControlEvent(eventId);
-        }
+        void syncExternalDailyLogPayload(queryClient, dailyLog, { syncMonthCache: true })
+          .then(() => {
+            if (eventId) {
+              ackNativeFocusLiveActivityControlEvent(eventId);
+            }
+          })
+          .catch((error: unknown) => {
+            console.error("Live Activity 할일 상태 동기화 실패", error);
+          });
         return;
       }
 
