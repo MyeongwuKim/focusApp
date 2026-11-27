@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Response } from "@playwright/test";
 
 type MockTodo = {
   id: string;
@@ -697,6 +697,46 @@ test.describe("core app flow", () => {
 
     await page.reload();
     await expect(page.getByText("완료됨")).toBeVisible();
+  });
+
+  test("Live Activity 재개 스냅샷만 도착해도 서버 상태를 다시 조회함", async ({ page }) => {
+    const { todayKey, state } = await setupAuthenticatedMockedApp(page);
+    const pausedLog = applyStartTodo(state, todayKey, "todo-e2e-1");
+    const todo = pausedLog.todos[0];
+    todo.pausedAt = new Date().toISOString();
+    state.logsByDate.set(todayKey, pausedLog);
+    await page.route("**/api/motivation/message**", (route) => route.fulfill({
+      json: { message: "테스트 안내", ttlSeconds: 60 },
+    }));
+    await page.goto(`/#/date-tasks?date=${todayKey}`);
+    const recoverButton = page.getByRole("button", { name: "집중 재개", exact: true });
+    await expect(recoverButton).toBeVisible();
+
+    const sendRunningSnapshot = () => page.evaluate(({ dateKey, todoId }) => {
+      window.dispatchEvent(new CustomEvent("focus-hybrid-native-bridge", {
+        detail: {
+          type: "RN_FOCUS_LIVE_ACTIVITY_SNAPSHOT",
+          payload: { dateKey, todoId, isPaused: false },
+        },
+      }));
+    }, { dateKey: todayKey, todoId: todo.id });
+    const isDailyLogResponse = (response: Response) =>
+      response.url().endsWith("/graphql") &&
+      String(response.request().postDataJSON()?.query ?? "").includes("query DailyLogByDate");
+
+    // 위젯은 서버 응답 전에 재생 상태를 표시하므로 스냅샷만으로 화면 상태를 바꾸지 않는다.
+    const pausedResponse = page.waitForResponse(isDailyLogResponse, { timeout: 3000 });
+    await sendRunningSnapshot();
+    await (await pausedResponse).finished();
+    await expect(recoverButton).toBeVisible();
+
+    const resumedLog = cloneLog(pausedLog);
+    resumedLog.todos[0].pausedAt = null;
+    state.logsByDate.set(todayKey, resumedLog);
+    const resumedResponse = page.waitForResponse(isDailyLogResponse, { timeout: 3000 });
+    await sendRunningSnapshot();
+    await resumedResponse;
+    await expect(page.getByRole("button", { name: "집중 일시정지", exact: true })).toBeVisible();
   });
 
   test("Live Activity 결과를 반영한 뒤 늦은 복귀 조회가 할일을 진행 중으로 되돌리지 않음", async ({ page }) => {

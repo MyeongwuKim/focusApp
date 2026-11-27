@@ -388,18 +388,38 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleNativeFocusLiveActivityControlEvent = (event: Event) => {
+    const handleNativeFocusLiveActivityEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{
         type?: string;
         payload?: unknown;
       }>;
       const detail = customEvent.detail;
-      if (detail?.type !== "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT") {
+      if (
+        detail?.type !== "RN_FOCUS_LIVE_ACTIVITY_CONTROL_EVENT" &&
+        detail?.type !== "RN_FOCUS_LIVE_ACTIVITY_SNAPSHOT"
+      ) {
         return;
       }
 
       const payload = readUnknownRecord(detail.payload);
       if (!payload) {
+        return;
+      }
+
+      const dateKey = readUnknownString(payload.dateKey);
+      if (detail.type === "RN_FOCUS_LIVE_ACTIVITY_SNAPSHOT") {
+        const todoId = readUnknownString(payload.todoId);
+        if (!dateKey || !todoId || typeof payload.isPaused !== "boolean") {
+          return;
+        }
+
+        const queryKey = dailyLogByDateQueryKey(dateKey);
+        const log = queryClient.getQueryData<DailyLogDetailPayload | null>(queryKey);
+        const todo = log?.todos.find((item) => item.id === todoId);
+        if (todo?.startedAt && !todo.done && Boolean(todo.pausedAt) !== payload.isPaused) {
+          // 위젯은 서버 응답 전에 상태를 바꿀 수 있어 조회 결과로 화면을 갱신한다.
+          void queryClient.invalidateQueries({ queryKey, exact: true }, { cancelRefetch: false });
+        }
         return;
       }
 
@@ -418,7 +438,6 @@ function App() {
         return;
       }
 
-      const dateKey = readUnknownString(payload.dateKey);
       if (!dateKey) {
         return;
       }
@@ -445,13 +464,13 @@ function App() {
 
     window.addEventListener(
       "focus-hybrid-native-bridge",
-      handleNativeFocusLiveActivityControlEvent as EventListener
+      handleNativeFocusLiveActivityEvent as EventListener
     );
 
     return () => {
       window.removeEventListener(
         "focus-hybrid-native-bridge",
-        handleNativeFocusLiveActivityControlEvent as EventListener
+        handleNativeFocusLiveActivityEvent as EventListener
       );
     };
   }, []);
